@@ -71,7 +71,15 @@ CREATE TABLE IF NOT EXISTS provider_limits (
 MIGRATIONS = ["ALTER TABLE calls ADD COLUMN provider TEXT",
               "ALTER TABLE calls ADD COLUMN unpriced INTEGER NOT NULL DEFAULT 0",
               "ALTER TABLE calls ADD COLUMN session_fp TEXT",   # 0.4: hash of X-Session-Id / user, never the id
-              "ALTER TABLE calls ADD COLUMN client TEXT"]       # 0.4: the calling tool's name (X-Trioditis-Client, User-Agent)
+              "ALTER TABLE calls ADD COLUMN client TEXT",       # 0.4: the calling tool's name (X-Trioditis-Client, User-Agent)
+              "ALTER TABLE calls ADD COLUMN finish_reason TEXT",  # 0.6: stop | length | tool_calls | ... as the provider said
+              "ALTER TABLE calls ADD COLUMN error TEXT",          # 0.6: why no model answered (rate_limited, budget_exceeded, ...)
+              "ALTER TABLE calls ADD COLUMN prompt_fp TEXT",      # 0.6: hash of the conversation text, to spot a repeated request
+              "ALTER TABLE calls ADD COLUMN cached_tokens INTEGER"]  # 0.6: prompt tokens read from the provider's cache, if reported
+
+# A successful call followed this soon by the same conversation from the same session and tool
+# counts as "retried": the caller asked again, so the first answer probably didn't serve.
+RETRY_WINDOW_S = 120
 
 # What `usage()` can group by; a column an older database lacks reads as NULL.
 GROUPS = {
@@ -101,6 +109,7 @@ class MetricsDB:
                 if stmt.split("ADD COLUMN ")[1].split()[0] not in have:
                     self._conn.execute(stmt)
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_session ON calls(session_fp)")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_prompt ON calls(prompt_fp)")
         if os.name == "posix":
             os.chmod(self.path, 0o600)
 
@@ -111,8 +120,9 @@ class MetricsDB:
         with self._conn:
             cur = self._conn.execute(
                 "INSERT INTO calls (ts, route, model, local, status, latency_ms, "
-                "tokens_in, tokens_out, cost, fallbacks, sensitive, provider, unpriced, session_fp, client) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "tokens_in, tokens_out, cost, fallbacks, sensitive, provider, unpriced, session_fp, client, "
+                "finish_reason, error, prompt_fp, cached_tokens) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     ts if ts is not None else time.time(),
                     str(decision.get("route") or "?")[:40],
@@ -129,6 +139,10 @@ class MetricsDB:
                     1 if decision.get("unpriced") else 0,
                     str(decision["session_fp"])[:32] if decision.get("session_fp") else None,
                     str(decision["client"])[:40] if decision.get("client") else None,
+                    str(decision["finish_reason"])[:20] if decision.get("finish_reason") else None,
+                    str(decision["error"])[:40] if decision.get("error") else None,
+                    str(decision["prompt_fp"])[:32] if decision.get("prompt_fp") else None,
+                    usage["cached_tokens"] if isinstance(usage.get("cached_tokens"), int) else None,
                 ),
             )
             return cur.lastrowid
@@ -215,7 +229,10 @@ def latency_p50(conn: sqlite3.Connection, model: str, since: float, sample: int 
 def usage(conn: sqlite3.Connection, since: float, until: float | None = None, by: str = "model",
           session_fp: str | None = None) -> list[dict]:
     """Calls, errors, tokens and cost per group between `since` and `until` (epoch seconds),
-    most expensive first. Works on databases from before 0.4 (no session or client yet)."""
+    most expensive first, with the counts behind the outcome rates: answers cut off at the
+    length limit (of those that reported a finish reason), answers asked again within
+    RETRY_WINDOW_S (of those recorded with a prompt fingerprint), and prompt tokens read from cache (of those whose provider reports it).
+    Works on databases from before 0.4 and 0.6 (the missing columns count as unknown)."""
     if by not in GROUPS:
         raise ValueError(f"cannot group by {by!r}; choose from {', '.join(GROUPS)}")
     have = {r[1] for r in conn.execute("PRAGMA table_info(calls)")}
@@ -232,14 +249,29 @@ def usage(conn: sqlite3.Connection, since: float, until: float | None = None, by
         where += " AND session_fp = ?"
         args.append(session_fp)
     unpriced = "SUM(unpriced)" if "unpriced" in have else "0"
+    finished, truncated, fingerprinted, retried, cached, cache_base = "0", "0", "0", "0", "0", "0"
+    if "finish_reason" in have:
+        finished = "SUM(CASE WHEN finish_reason IS NOT NULL THEN 1 ELSE 0 END)"
+        truncated = "SUM(CASE WHEN finish_reason = 'length' THEN 1 ELSE 0 END)"
+    if "prompt_fp" in have:
+        fingerprinted = "SUM(CASE WHEN status < 400 AND prompt_fp IS NOT NULL THEN 1 ELSE 0 END)"
+        retried = ("SUM(CASE WHEN c.status < 400 AND c.prompt_fp IS NOT NULL AND EXISTS (SELECT 1 FROM calls n "
+                   "WHERE n.prompt_fp = c.prompt_fp AND n.ts > c.ts AND n.ts <= c.ts + ? "
+                   "AND n.session_fp IS c.session_fp AND n.client IS c.client) THEN 1 ELSE 0 END)")
+        args.insert(0, RETRY_WINDOW_S)  # its placeholder comes before the WHERE clause's
+    if "cached_tokens" in have:
+        cached = "COALESCE(SUM(cached_tokens), 0)"
+        cache_base = "COALESCE(SUM(CASE WHEN cached_tokens IS NOT NULL THEN tokens_in END), 0)"
     # The column comes from GROUPS and the filters are fixed text; every value is a bound parameter.
     rows = conn.execute(
         f"SELECT {key} AS key, COUNT(*) AS calls, "  # noqa: S608
         "SUM(CASE WHEN status IS NULL OR status >= 400 THEN 1 ELSE 0 END) AS errors, "
         "COALESCE(SUM(tokens_in), 0) AS tokens_in, COALESCE(SUM(tokens_out), 0) AS tokens_out, "
         f"ROUND(COALESCE(SUM(cost), 0), 6) AS cost, {unpriced} AS unpriced, SUM(fallbacks) AS fallbacks, "
-        "SUM(local) AS local_calls, MIN(ts) AS first_ts, MAX(ts) AS last_ts "
-        f"FROM calls WHERE {where} GROUP BY 1 ORDER BY cost DESC, calls DESC, key",
+        "SUM(local) AS local_calls, MIN(ts) AS first_ts, MAX(ts) AS last_ts, "
+        f"{finished} AS finished, {truncated} AS truncated, {fingerprinted} AS fingerprinted, {retried} AS retried, "
+        f"{cached} AS cached_tokens, {cache_base} AS cache_base_tokens "
+        f"FROM calls c WHERE {where} GROUP BY 1 ORDER BY cost DESC, calls DESC, key",
         args,
     ).fetchall()
     return [dict(r) for r in rows]

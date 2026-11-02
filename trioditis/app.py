@@ -376,13 +376,15 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                     content = resp.content
                     await resp.aclose()
                     _log(log, metrics, prices, d, body, model, resp.status_code, attempts, started, sid, caller,
-                         local=local, usage=_usage_from_json(content), provider=m.provider)
+                         local=local, usage=_usage_from_json(content), provider=m.provider,
+                         finish=_finish_from_json(content))
                     return _passthrough(resp, content, route_headers)
 
-                def done(usage, _model=model, _status=resp.status_code, _local=local, _prov=m.provider, _held=held):
+                def done(usage, finish, _model=model, _status=resp.status_code, _local=local, _prov=m.provider,
+                         _held=held):
                     try:
                         _log(log, metrics, prices, d, body, _model, _status, attempts, started, sid, caller,
-                             local=_local, usage=usage, provider=_prov)
+                             local=_local, usage=usage, provider=_prov, finish=finish)
                     finally:
                         budget.release(_held)  # after the record: the cost moves from pending to spent, no gap
 
@@ -436,12 +438,44 @@ def _usage_from_json(content: bytes) -> dict | None:
 
 
 def _clean_usage(u) -> dict | None:
-    """Keep only the token counters (numbers), nothing else from the upstream."""
+    """Keep only the token counters (numbers), nothing else from the upstream. Cached prompt
+    tokens come in the OpenAI field, which OpenRouter fills too; Anthropic's OpenAI-compatible
+    endpoint leaves it empty (it has no prompt caching), so there the count stays unknown."""
     if not isinstance(u, dict):
         return None
     out = {k: u[k] for k in ("prompt_tokens", "completion_tokens", "total_tokens")
            if isinstance(u.get(k), int)}
+    details = u.get("prompt_tokens_details")
+    if isinstance(details, dict) and isinstance(details.get("cached_tokens"), int):
+        out["cached_tokens"] = details["cached_tokens"]
     return out or None
+
+
+def _clean_finish(reason) -> str | None:
+    return reason[:20] if isinstance(reason, str) and reason else None
+
+
+def _finish_from_json(content: bytes) -> str | None:
+    """Why the answer ended: stop, length (cut at max_tokens), tool_calls, content_filter, ..."""
+    try:
+        return _clean_finish(json.loads(content)["choices"][0].get("finish_reason"))
+    except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+        return None
+
+
+def _finish_from_sse(tail: bytes) -> str | None:
+    """Streaming: the finish reason rides on the last content event, before the usage one."""
+    for line in reversed(tail.decode("utf-8", "replace").splitlines()):
+        line = line.strip()
+        if not line.startswith("data:") or '"finish_reason"' not in line:
+            continue
+        try:
+            reason = _clean_finish(json.loads(line[5:].strip())["choices"][0].get("finish_reason"))
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError):
+            continue
+        if reason:
+            return reason
+    return None
 
 
 def _usage_from_sse(tail: bytes) -> dict | None:
@@ -470,7 +504,7 @@ async def _relay(resp: httpx.Response, on_done=None):
     finally:
         await resp.aclose()
         if on_done:
-            on_done(_usage_from_sse(tail))
+            on_done(_usage_from_sse(tail), _finish_from_sse(tail))
 
 
 def _remember_limits(metrics: MetricsDB, provider: str, headers, cooldowns: Cooldowns | None = None) -> None:
@@ -507,7 +541,8 @@ def _latency_cache(metrics: MetricsDB, ttl_s: float = 60.0, window_s: float = 7 
 
 def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body: dict, model,
          status, attempts, started, sid, caller: str | None = None, local: bool | None = None,
-         usage: dict | None = None, provider: str | None = None, error: str | None = None) -> None:
+         usage: dict | None = None, provider: str | None = None, error: str | None = None,
+         finish: str | None = None) -> None:
     text = all_text(body.get("messages") or [])
     rec = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -527,6 +562,8 @@ def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body
     }
     if error:
         rec["error"] = error  # why no model answered: rate_limited | budget_exceeded | upstream_error
+    if finish:
+        rec["finish_reason"] = finish
     cut = _prompt_cut(text, body, usage)
     if cut:
         rec["prompt_truncated"] = True

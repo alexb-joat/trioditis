@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Usage reports**
+- `trioditis usage --outcomes`: per model, route, tool or day, the share of calls that failed, of answers cut off at the length limit, of answers asked again within 2 minutes, and of prompt tokens served from cache. Every call-based rate has a 95% interval, and `-` means no data, never zero. `--json` always includes the rates.
+- Each call now records why its answer ended (`finish_reason`, for streams too), why no model answered (`error`), a fingerprint of the conversation and cached prompt tokens where the provider reports them. Older databases gain the columns on open; reports on them show the new rates as unknown.
+
 ## 0.5.0 (2026-10-31)
 
 Local and cheap first, coding agents recognised, rate limits stepped around; installable as a package.

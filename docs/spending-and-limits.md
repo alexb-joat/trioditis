@@ -72,6 +72,20 @@ python -m trioditis usage --session eval/run-7 --json
 
 **Per session.** Requests that carry `X-Session-Id` (or the OpenAI `user` field) are stored under a hash of it, the same hash `logs/decisions.jsonl` holds; `--session ID` hashes the id you give and matches on that. A batch job that sends `X-Session-Id: myjob/<run id>` can therefore read back exactly what one run cost.
 
+**Outcomes.** `--outcomes` swaps spend for how the answers went, each rate with a 95% interval (Wilson), so 1 error in 3 calls doesn't read like a finding:
+
+```
+model          calls        errors        cut off  asked again  cache hit
+claude-sonnet     21   5% (1%-23%)              -            -          -
+```
+
+- **errors**: calls no model answered, or answered with an error status.
+- **cut off**: answers that stopped at the length limit (`finish_reason: length`), out of those whose provider said why they ended. Raise `max_tokens` for that model or route.
+- **asked again**: answers followed within 2 minutes by the same conversation from the same session and tool, which usually means a regenerate or a retry. Out of the answers recorded with a prompt fingerprint (from 0.6 on).
+- **cache hit**: prompt tokens served from the provider's cache, out of the tokens of calls whose provider reports it (OpenAI and OpenRouter do; Anthropic's OpenAI-compatible endpoint has no prompt caching, so its calls show `-`). A token ratio, so it has no interval.
+
+`-` means no data, never zero. `--json` always includes these rates, with the counts behind them.
+
 ## What providers report about your account
 
 There is no universal API for balances and limits, so Trioditis collects what each one offers and writes it to `~/.hlidskjalv/accounts.json` every 5 minutes (also `GET /v1/accounts`), for Hlidskjalv to show:

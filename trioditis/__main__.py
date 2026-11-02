@@ -75,7 +75,10 @@ def main(argv: list[str] | None = None) -> None:
     u.add_argument("--by", default="model", choices=["model", "route", "provider", "client", "session", "day"])
     u.add_argument("--session", default=None, help="only this X-Session-Id (matched by its hash)")
     u.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
-    u.add_argument("--json", action="store_true", help="machine-readable output")
+    u.add_argument("--outcomes", action="store_true",
+                   help="rates with 95%% intervals instead of spend: errors, answers cut off at the length "
+                        "limit, answers asked again within 2 minutes, prompt tokens served from cache")
+    u.add_argument("--json", action="store_true", help="machine-readable output (always includes the rates)")
 
     pr = sub.add_parser("prices", help="manage ~/.hlidskjalv/prices.json")
     pr_sub = pr.add_subparsers(dest="prices_cmd", required=True)
@@ -286,8 +289,11 @@ def usage_report(args) -> int:
     except sqlite3.Error:
         rows = None  # no database yet (Trioditis has not served a call), or not one of ours
     total = {k: sum((r[k] or 0) for r in rows or []) for k in
-             ("calls", "errors", "tokens_in", "tokens_out", "cost", "unpriced", "fallbacks", "local_calls")}
+             ("calls", "errors", "tokens_in", "tokens_out", "cost", "unpriced", "fallbacks", "local_calls",
+              "finished", "truncated", "fingerprinted", "retried", "cached_tokens", "cache_base_tokens")}
     total["cost"] = round(total["cost"], 6)
+    for r in [*(rows or []), total]:
+        r["rates"] = _rates(r)
     stamp = lambda ts: time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts)) if ts else None  # noqa: E731
     if args.json:
         for r in rows or []:
@@ -303,11 +309,58 @@ def usage_report(args) -> int:
     if not rows:
         print("no calls in this window")
         return 0
+    if args.outcomes:
+        return _print_outcomes(args.by, rows, total)
     head = (args.by, "calls", "errors", "tokens in", "tokens out", "cost USD", "unpriced")
     table = [head] + [(str(r["key"]) if r["key"] is not None else "-", r["calls"], r["errors"], r["tokens_in"],
                        r["tokens_out"], f"{r['cost']:.4f}", r["unpriced"]) for r in rows]
     table.append(("total", total["calls"], total["errors"], total["tokens_in"], total["tokens_out"],
                   f"{total['cost']:.4f}", total["unpriced"]))
+    _print_table(table)
+    if total["unpriced"]:
+        print(f"{total['unpriced']} cloud call(s) had no price: add them to ~/.hlidskjalv/prices.json")
+    return 0
+
+
+def _rates(r: dict) -> dict:
+    """Outcome rates of one usage row. Calls are the trials, so errors, cut-off and retried answers
+    get a 95% interval; cache hits are a token ratio (tokens of one call aren't independent), so none."""
+    from trioditis_metrics.stats import wilson
+
+    def rate(k, n):
+        ci = wilson(k, n)
+        return {"value": k / n if n else None, "lo": ci[0] if ci else None, "hi": ci[1] if ci else None,
+                "k": k, "n": n}
+    base = r["cache_base_tokens"]
+    return {"error": rate(r["errors"], r["calls"]), "truncated": rate(r["truncated"], r["finished"]),
+            "retried": rate(r["retried"], r["fingerprinted"]),
+            "cache_hit": {"value": r["cached_tokens"] / base if base else None, "tokens": base}}
+
+
+def _pct(rate: dict) -> str:
+    if rate["value"] is None:
+        return "-"
+    if "lo" not in rate:
+        return f"{rate['value']:.0%}"
+    return f"{rate['value']:.0%} ({rate['lo']:.0%}-{rate['hi']:.0%})"
+
+
+def _print_outcomes(by: str, rows: list[dict], total: dict) -> int:
+    head = (by, "calls", "errors", "cut off", "asked again", "cache hit")
+    table = [head]
+    for r in [*rows, {**total, "key": "total"}]:
+        x = r["rates"]
+        table.append((str(r["key"]) if r["key"] is not None else "-", r["calls"], _pct(x["error"]),
+                      _pct(x["truncated"]), _pct(x["retried"]), _pct(x["cache_hit"])))
+    _print_table(table)
+    print("rates with 95% intervals; '-' means no data. 'cut off': of the answers whose provider said why they "
+          "ended.\n'cache hit': of the prompt tokens whose provider reports cache use (Anthropic's "
+          "OpenAI-compatible endpoint has no prompt caching).")
+    return 0
+
+
+def _print_table(table: list[tuple]) -> None:
+    head = table[0]
     widths = [max(len(f"{row[i]:,}" if isinstance(row[i], int) else str(row[i])) for row in table)
               for i in range(len(head))]
     for n, row in enumerate(table):
@@ -315,9 +368,6 @@ def usage_report(args) -> int:
         print("  ".join(c.ljust(widths[i]) if i == 0 else c.rjust(widths[i]) for i, c in enumerate(cells)))
         if n == 0 or n == len(table) - 2:
             print("  ".join("-" * w for w in widths))
-    if total["unpriced"]:
-        print(f"{total['unpriced']} cloud call(s) had no price: add them to ~/.hlidskjalv/prices.json")
-    return 0
 
 
 if __name__ == "__main__":

@@ -167,6 +167,44 @@ class UsageTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             db.usage(0, by="prompt")
 
+    def test_outcomes_are_stored_and_counted(self):
+        db = mk_db()
+        now = time.time()
+        db.record({**CLOUD_CALL, "finish_reason": "stop", "prompt_fp": "p1",
+                   "usage": {"prompt_tokens": 1000, "completion_tokens": 10, "cached_tokens": 800}}, ts=now)
+        db.record({**CLOUD_CALL, "finish_reason": "length", "prompt_fp": "p2"}, ts=now)
+        db.record({**CLOUD_CALL, "status": 429, "usage": None, "error": "rate_limited", "prompt_fp": "p3"}, ts=now)
+        db.record(LOCAL_CALL, ts=now)  # no finish reason, no cache report: unknown, not zero
+        stored = db.recent(10)[-1]
+        self.assertEqual((stored["finish_reason"], stored["prompt_fp"], stored["cached_tokens"]), ("stop", "p1", 800))
+        self.assertEqual(db.recent(10)[1]["error"], "rate_limited")
+        rows = {r["key"]: r for r in db.usage(now - 60)}
+        sonnet = rows["claude-sonnet"]
+        self.assertEqual((sonnet["finished"], sonnet["truncated"]), (2, 1))
+        self.assertEqual((sonnet["cached_tokens"], sonnet["cache_base_tokens"]), (800, 1000))
+        self.assertEqual((rows["qwen2.5-coder:7b"]["finished"], rows["qwen2.5-coder:7b"]["cache_base_tokens"]), (0, 0))
+
+    def test_an_answer_asked_again_soon_counts_as_retried(self):
+        db = mk_db()
+        now = time.time()
+        same = {**CLOUD_CALL, "prompt_fp": "p", "session_fp": "s", "client": "cline"}
+        db.record(same, ts=now - 100)
+        db.record(same, ts=now - 70)              # asked again 30 s later: the first one is "retried"
+        db.record({**same, "client": "curl"}, ts=now - 60)  # another tool: not a retry of the cline call
+        db.record(same, ts=now - 70 + 600)        # 10 minutes on: too late to count
+        db.record({**same, "prompt_fp": "q", "status": 500, "usage": None}, ts=now - 50)
+        db.record({**same, "prompt_fp": "q"}, ts=now - 40)  # a retry after an error is not a vote on an answer
+        db.record(CLOUD_CALL, ts=now - 30)  # recorded before 0.6: no fingerprint, so not judged either way
+        rows = db.usage(now - 3600, until=now + 3600)
+        self.assertEqual((rows[0]["retried"], rows[0]["fingerprinted"]), (1, 5))
+
+    def test_old_database_reads_outcomes_as_unknown(self):
+        con = open_readonly(old_db())
+        row = usage(con, 0)[0]
+        con.close()
+        self.assertEqual((row["finished"], row["truncated"], row["fingerprinted"], row["retried"],
+                          row["cache_base_tokens"]), (0, 0, 0, 0, 0))
+
     def test_readonly_never_creates_a_database(self):
         missing = Path(tempfile.mkdtemp()) / "metrics.db"
         with self.assertRaises(sqlite3.OperationalError):

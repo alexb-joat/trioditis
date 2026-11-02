@@ -870,6 +870,56 @@ def test_usage_cli_reads_the_database_without_a_config(capsys, tmp_path):
     assert "total" in table and "0.0200" in table
 
 
+def test_outcomes_are_recorded_for_answers_and_streams(tmp_path):
+    db = MetricsDB(tmp_path / "metrics.db")
+    sse = (b'data: {"choices":[{"index":0,"delta":{"content":"x"},"finish_reason":null}]}\n\n'
+           b'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}\n\n'
+           b'data: {"choices":[],"usage":{"prompt_tokens":40,"completion_tokens":2,"total_tokens":42,'
+           b'"prompt_tokens_details":{"cached_tokens":32}}}\n\ndata: [DONE]\n\n')
+
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield sse
+
+    def handler(req):
+        if json.loads(req.content).get("stream"):
+            return httpx.Response(200, stream=Chunks(), headers={"content-type": "text/event-stream"})
+        r = ok("x").json()
+        r["choices"][0]["finish_reason"] = "length"
+        r["usage"] = {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7,
+                      "prompt_tokens_details": {}}  # Anthropic's compatible endpoint: always empty
+        return httpx.Response(200, json=r)
+
+    c = make_client(handler, cfg(logging={"path": str(tmp_path / "decisions.jsonl")}), metrics=db)
+    c.post("/v1/chat/completions", json=body("hello there"))
+    c.post("/v1/chat/completions", json=body("hello again", stream=True))
+    plain, streamed = sorted(db.recent(10), key=lambda r: r["id"])
+    assert (plain["finish_reason"], plain["cached_tokens"]) == ("length", None)
+    assert (streamed["finish_reason"], streamed["cached_tokens"]) == ("tool_calls", 32)
+    assert plain["prompt_fp"] and plain["prompt_fp"] != streamed["prompt_fp"]
+    logged = [json.loads(line) for line in (tmp_path / "decisions.jsonl").read_text().splitlines()]
+    assert [r.get("finish_reason") for r in logged] == ["length", "tool_calls"]
+
+
+def test_usage_cli_shows_outcome_rates(capsys, tmp_path):
+    from trioditis.__main__ import main
+    db = MetricsDB(tmp_path / "metrics.db")
+    for reason in ("stop", "stop", "stop", "length"):
+        db.record({"route": "quick", "model": "small", "local": True, "status": 200, "cost": 0.0,
+                   "usage": {"prompt_tokens": 50, "completion_tokens": 10}, "finish_reason": reason})
+    db.close()
+    args = ["usage", "--db", str(tmp_path / "metrics.db")]
+    with pytest.raises(SystemExit):
+        main(args + ["--json"])
+    cut = json.loads(capsys.readouterr().out)["rows"][0]["rates"]["truncated"]
+    assert (cut["k"], cut["n"], cut["value"]) == (1, 4, 0.25) and 0 < cut["lo"] < 0.25 < cut["hi"] < 1
+    with pytest.raises(SystemExit) as e:
+        main(args + ["--outcomes"])
+    assert e.value.code == 0
+    table = capsys.readouterr().out
+    assert "cut off" in table and "25% (" in table and "cache hit" in table
+
+
 def test_usage_cli_without_a_database(capsys, tmp_path):
     from trioditis.__main__ import main
     with pytest.raises(SystemExit) as e:
