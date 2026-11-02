@@ -6,6 +6,11 @@
 - `trioditis usage --outcomes`: per model, route, tool or day, the share of calls that failed, of answers cut off at the length limit, of answers asked again within 2 minutes, and of prompt tokens served from cache. Every call-based rate has a 95% interval, and `-` means no data, never zero. `--json` always includes the rates.
 - Each call now records why its answer ended (`finish_reason`, for streams too), why no model answered (`error`), a fingerprint of the conversation and cached prompt tokens where the provider reports them. Older databases gain the columns on open; reports on them show the new rates as unknown.
 
+**Staying current**
+- `trioditis refit` (daily through the Linux user timer): per model over 28 days, error, cut-off, asked-again and cache-hit rates with 95% intervals, p50/p95 latency and an EWMA control chart of the daily error rate. Writes `~/.hlidskjalv/trioditis-fitted.json` (each number with its count, window and method) and appends only new findings to `trioditis-notebook.jsonl`. It changes nothing the router uses.
+- `facts:` in the config names a provider-facts file. `check`, the startup log and `refit` then name configured models that are deprecated, retired or retiring within 30 days, quoting the source page and its note, say when a model isn't in the facts, and list active models of your providers as candidates to test. Price differences become proposals that `prices import` applies.
+- Found while checking: Anthropic's OpenAI-compatible endpoint has no prompt caching, so `cache hit` stays `-` for Claude models.
+
 ## 0.5.0 (2026-10-31)
 
 Local and cheap first, coding agents recognised, rate limits stepped around; installable as a package.

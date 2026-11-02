@@ -131,3 +131,9 @@ limits:
 logging:
   path: logs/decisions.jsonl
   log_prompts: false               # keep false: logs then hold metadata only
+
+# Model facts (optional): a provider-facts.v1 file, for example Euboulia's catalog
+# (src/catalog/provider-facts.json). `check`, the startup log and the daily `refit`
+# then name configured models that are deprecated or about to retire, quoting the
+# provider's page, and list active models you don't use yet as candidates to test.
+# facts: ~/euboulia/src/catalog/provider-facts.json

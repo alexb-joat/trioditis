@@ -277,6 +277,46 @@ def usage(conn: sqlite3.Connection, since: float, until: float | None = None, by
     return [dict(r) for r in rows]
 
 
+def outcome_rates(row: dict) -> dict:
+    """Outcome rates of one `usage()` row. Calls are the trials, so errors, cut-off and retried
+    answers get a 95% interval; cache hits are a token ratio (one call's tokens aren't
+    independent trials), so they get none. A rate with no data is None, never zero."""
+    from .stats import wilson
+
+    def rate(k, n):
+        ci = wilson(k, n)
+        return {"value": k / n if n else None, "lo": ci[0] if ci else None, "hi": ci[1] if ci else None,
+                "k": k, "n": n}
+    base = row["cache_base_tokens"]
+    return {"error": rate(row["errors"], row["calls"]), "truncated": rate(row["truncated"], row["finished"]),
+            "retried": rate(row["retried"], row["fingerprinted"]),
+            "cache_hit": {"value": row["cached_tokens"] / base if base else None, "tokens": base}}
+
+
+def daily_outcomes(conn: sqlite3.Connection, since: float, until: float | None = None) -> list[dict]:
+    """Calls and errors per model and local day, oldest first: the series a refit charts."""
+    where, args = "ts >= ?", [since]
+    if until is not None:
+        where += " AND ts < ?"
+        args.append(until)
+    return [dict(r) for r in conn.execute(
+        "SELECT model, date(ts, 'unixepoch', 'localtime') AS day, COUNT(*) AS calls, "  # noqa: S608
+        "SUM(CASE WHEN status IS NULL OR status >= 400 THEN 1 ELSE 0 END) AS errors "
+        f"FROM calls WHERE {where} GROUP BY model, day ORDER BY model, day", args)]
+
+
+def latencies(conn: sqlite3.Connection, since: float, until: float | None = None) -> dict[str, list[int]]:
+    """Latency (ms) of every successful call per model in the window."""
+    where, args = "ts >= ? AND status < 400 AND latency_ms IS NOT NULL", [since]
+    if until is not None:
+        where += " AND ts < ?"
+        args.append(until)
+    out: dict[str, list[int]] = {}
+    for model, ms in conn.execute(f"SELECT model, latency_ms FROM calls WHERE {where}", args):  # noqa: S608
+        out.setdefault(model, []).append(ms)
+    return out
+
+
 def _start_of_day(now: float | None = None) -> float:
     t = time.localtime(now)
     return time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))

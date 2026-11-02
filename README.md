@@ -102,6 +102,10 @@ Trioditis speaks the OpenAI chat-completions format, which most tools support. C
 
 Every cloud call is checked against your daily and monthly caps first (defaults: $1 a day, $15 a month). Over a cap, the route's local model answers instead, so you get an answer, not a bill. `trioditis usage --since 7d --by client` shows what each tool spent. Per-provider caps, provider rate-limit and balance readouts, and call history are in [docs/spending-and-limits.md](docs/spending-and-limits.md). `trioditis hardware` suggests which local models fit your computer ([docs/hardware.md](docs/hardware.md)).
 
+## Staying current
+
+Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](docs/staying-current.md).
+
 ## Security at a glance
 
 | Risk | Control |

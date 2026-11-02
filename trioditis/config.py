@@ -116,6 +116,7 @@ class Config:
     privacy: Privacy = field(default_factory=Privacy)
     limits: Limits = field(default_factory=Limits)
     logging: Logging = field(default_factory=Logging)
+    facts: str | None = None  # a provider-facts.v1 file: model status and retirement dates, prices
 
     def provider_of(self, model: str) -> Provider:
         return self.providers[self.models[model].provider]
@@ -257,7 +258,12 @@ def parse_config(raw: dict) -> Config:
     lg = raw.get("logging") or {}
     logging = Logging(path=lg.get("path", Logging.path), log_prompts=bool(lg.get("log_prompts", False)))
 
-    return Config(providers, models, routes, default_route, emb, privacy, limits, logging)
+    facts = raw.get("facts")
+    if facts is not None and not isinstance(facts, str):
+        raise ConfigError("facts must be the path of a provider-facts file")
+    facts = str(Path(facts).expanduser()) if facts else None
+
+    return Config(providers, models, routes, default_route, emb, privacy, limits, logging, facts)
 
 
 def load_config(path: str | Path) -> Config:

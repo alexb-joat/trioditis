@@ -1,4 +1,4 @@
-"""Command line entry point: python -m trioditis [init|serve|check|explain|hardware|usage|prices]."""
+"""Command line entry point: python -m trioditis [init|serve|check|explain|hardware|usage|prices|refit]."""
 
 from __future__ import annotations
 
@@ -87,6 +87,16 @@ def main(argv: list[str] | None = None) -> None:
     imp.add_argument("--prices", default=None, help="prices file to update (default ~/.hlidskjalv/prices.json)")
     imp.add_argument("--dry-run", action="store_true", help="show the changes, write nothing")
 
+    rf = sub.add_parser("refit", help="refit rates, latency and drift charts from the call record, and check the "
+                                      "model facts (changes nothing the router uses)")
+    rf.add_argument("--days", type=int, default=28, help="window to fit, in days (default 28)")
+    rf.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
+    rf.add_argument("--out", default=None, help="fitted file (default ~/.hlidskjalv/trioditis-fitted.json)")
+    rf.add_argument("--notebook", default=None, help="findings log (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
+    rf.add_argument("--prices", default=None, help="prices file to compare (default ~/.hlidskjalv/prices.json)")
+    rf.add_argument("--json", action="store_true", help="print the fitted document")
+    rf.add_argument("--dry-run", action="store_true", help="show the result, write nothing")
+
     args = ap.parse_args(argv)
     if args.cmd == "usage":  # reads the metrics database only: works without a config
         sys.exit(usage_report(args))
@@ -104,7 +114,13 @@ def main(argv: list[str] | None = None) -> None:
             state = "ready" if p.available() else f"missing ${p.api_key_env}"
             where = "local" if p.local else "cloud"
             print(f"  {name:<24} {where:<6} {state}")
+        for line in _facts_lines(cfg):
+            print(line)
         return
+
+    if args.cmd == "refit":
+        from .refit import run
+        sys.exit(run(cfg, args))
 
     if args.cmd == "prices":
         sys.exit(prices_import(cfg, args))
@@ -147,6 +163,9 @@ def main(argv: list[str] | None = None) -> None:
         stream = os.fdopen(fd, "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = stream
 
+    for line in _facts_lines(cfg):
+        print(f"warning: {line}", file=sys.stderr)
+
     import uvicorn
 
     from .app import create_app
@@ -160,6 +179,15 @@ def main(argv: list[str] | None = None) -> None:
         proxy_headers=False,
         log_level="info",
     )
+
+
+def _facts_lines(cfg) -> list[str]:
+    """What the model facts say about the configured cloud models; nothing when `facts:` is unset."""
+    if not cfg.facts:
+        return []
+    from .pricefacts import check_lines
+    cloud = {name: m.upstream_id for name, m in cfg.models.items() if not cfg.providers[m.provider].local}
+    return check_lines(cfg.facts, cloud)
 
 
 _AGO = re.compile(r"^(\d+)([mhdw])$")
@@ -268,7 +296,7 @@ def prices_import(cfg, args) -> int:
 def usage_report(args) -> int:
     import sqlite3
 
-    from trioditis_metrics.db import DEFAULT_PATH, open_readonly, usage
+    from trioditis_metrics.db import DEFAULT_PATH, open_readonly, outcome_rates, usage
 
     from .security import fingerprint
 
@@ -293,7 +321,7 @@ def usage_report(args) -> int:
               "finished", "truncated", "fingerprinted", "retried", "cached_tokens", "cache_base_tokens")}
     total["cost"] = round(total["cost"], 6)
     for r in [*(rows or []), total]:
-        r["rates"] = _rates(r)
+        r["rates"] = outcome_rates(r)
     stamp = lambda ts: time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts)) if ts else None  # noqa: E731
     if args.json:
         for r in rows or []:
@@ -320,21 +348,6 @@ def usage_report(args) -> int:
     if total["unpriced"]:
         print(f"{total['unpriced']} cloud call(s) had no price: add them to ~/.hlidskjalv/prices.json")
     return 0
-
-
-def _rates(r: dict) -> dict:
-    """Outcome rates of one usage row. Calls are the trials, so errors, cut-off and retried answers
-    get a 95% interval; cache hits are a token ratio (tokens of one call aren't independent), so none."""
-    from trioditis_metrics.stats import wilson
-
-    def rate(k, n):
-        ci = wilson(k, n)
-        return {"value": k / n if n else None, "lo": ci[0] if ci else None, "hi": ci[1] if ci else None,
-                "k": k, "n": n}
-    base = r["cache_base_tokens"]
-    return {"error": rate(r["errors"], r["calls"]), "truncated": rate(r["truncated"], r["finished"]),
-            "retried": rate(r["retried"], r["fingerprinted"]),
-            "cache_hit": {"value": r["cached_tokens"] / base if base else None, "tokens": base}}
 
 
 def _pct(rate: dict) -> str:
