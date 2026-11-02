@@ -24,7 +24,7 @@ Thanks for helping. Trioditis sits between people and every model they use, so t
 - **Dependencies.** A new package needs a justification in the PR. Regenerate both lockfiles with [uv](https://docs.astral.sh/uv/):
   ```bash
   uv pip compile requirements.in --universal --generate-hashes --python-version 3.11 -o requirements.txt
-  uv pip compile requirements-dev.in requirements.in --universal --generate-hashes --python-version 3.11 -o requirements-dev.txt
+  uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.11 -o requirements-dev.txt
   ```
 - **Network.** No new outbound calls (telemetry, update checks, remote config) without a discussion first.
 - **Logging.** Never log prompt text, response text or keys by default.
