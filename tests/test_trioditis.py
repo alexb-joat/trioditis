@@ -1246,7 +1246,8 @@ def test_init_writes_a_working_folder_and_never_overwrites(tmp_path, capsys):
     assert e.value.code == 0
     assert (folder / "config.yaml").exists() and (folder / ".env").exists()
     if os.name == "posix":
-        assert stat.S_IMODE((folder / ".env").stat().st_mode) == 0o600
+        for f in (".env", "config.yaml"):
+            assert stat.S_IMODE((folder / f).stat().st_mode) == 0o600, f
     (folder / "config.yaml").write_text("# mine\n" + (folder / "config.yaml").read_text())
     with pytest.raises(SystemExit):
         main(["init", "--dir", str(folder)])

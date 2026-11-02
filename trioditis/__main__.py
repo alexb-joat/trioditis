@@ -170,13 +170,14 @@ def init_folder(folder: Path) -> int:
     folder.mkdir(parents=True, exist_ok=True)
     tpl = resources.files("trioditis") / "templates"
     wrote = []
-    for name, target, private in (("config.example.yaml", "config.yaml", False), ("env.example", ".env", True)):
+    # Both files are private: .env holds keys, and config.yaml names your providers and local addresses.
+    for name, target in (("config.example.yaml", "config.yaml"), ("env.example", ".env")):
         dest = folder / target
         if dest.exists():
             print(f"kept {dest} (already there)")
             continue
         data = tpl.joinpath(name).read_text(encoding="utf-8")
-        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600 if private else 0o644)
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(data)
         wrote.append(target)
