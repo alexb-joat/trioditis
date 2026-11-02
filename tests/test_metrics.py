@@ -52,7 +52,7 @@ class MetricsDBTest(unittest.TestCase):
 
     def test_spend_this_month_includes_whole_month(self):
         db = mk_db()
-        now = time.time()
+        now = time.mktime((2026, 10, 20, 12, 0, 0, 0, 0, -1))  # mid-month: "5 days ago" is the same month
         earlier_this_month = now - 5 * 24 * 3600
         db.record(CLOUD_CALL, ts=earlier_this_month)
         db.record(CLOUD_CALL, ts=now)
