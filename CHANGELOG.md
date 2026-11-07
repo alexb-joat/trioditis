@@ -11,6 +11,9 @@
 - `facts:` in the config names a provider-facts file. `check`, the startup log and `refit` then name configured models that are deprecated, retired or retiring within 30 days, quoting the source page and its note, say when a model isn't in the facts, and list active models of your providers as candidates to test. Price differences become proposals that `prices import` applies.
 - Found while checking: Anthropic's OpenAI-compatible endpoint has no prompt caching, so `cache hit` stays `-` for Claude models.
 
+**Fixed**
+- `trioditis init` writes `config.yaml` readable by you only, like `.env`. In 0.5.0 other accounts on the computer could read it, and it names your providers and local addresses. A `config.yaml` written by 0.5.0 keeps its mode: `chmod 600 config.yaml`.
+
 ## 0.5.0 (2026-10-31)
 
 Local and cheap first, coding agents recognised, rate limits stepped around; installable as a package.
