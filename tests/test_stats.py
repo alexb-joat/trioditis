@@ -59,3 +59,32 @@ def test_beta_mean_shrinks_small_samples_towards_the_prior():
     assert beta_mean(0, 0, 0.2) == 0.2
     assert beta_mean(5, 10, 0.2, strength=10) == pytest.approx(0.35)
     assert beta_mean(500, 1000, 0.2, strength=10) == pytest.approx(0.497, abs=1e-3)
+
+
+def test_ratio_interval_recovers_a_known_ratio():
+    import math
+    import random
+
+    from trioditis_metrics.stats import ratio_interval
+    rng = random.Random(7)  # noqa: S311
+    pairs = []
+    for _ in range(40):
+        b = rng.uniform(1_000, 20_000)
+        pairs.append((b * 2.5 * math.exp(rng.gauss(0, 0.2)), b))
+    r = ratio_interval(pairs)
+    assert r["n"] == 40 and r["lo"] < 2.5 < r["hi"]
+    assert r["ratio"] == pytest.approx(2.5, rel=0.1)
+
+
+def test_ratio_interval_small_samples_and_bad_pairs():
+    from trioditis_metrics.stats import ratio_interval, t95
+    assert ratio_interval([]) is None
+    one = ratio_interval([(30, 10), (5, 0)])
+    assert one["ratio"] == pytest.approx(3.0) and one["lo"] is None and one["skipped"] == 1
+    # Geometric, not arithmetic: 2x and 0.5x average to 1x.
+    assert ratio_interval([(2, 1), (1, 2)])["ratio"] == pytest.approx(1.0)
+    # The five ratios from a worked example: exp(mean(log r)) with t(4) = 2.776.
+    r = ratio_interval([(1.3, 1), (1.9, 1), (1.5, 1), (2.6, 1), (1.4, 1)])
+    assert r["ratio"] == pytest.approx(1.6826, abs=1e-3)
+    assert r["lo"] == pytest.approx(1.1859, abs=1e-3) and r["hi"] == pytest.approx(2.3874, abs=1e-3)
+    assert t95(4) == 2.776 and t95(500) == pytest.approx(1.96, abs=1e-3)

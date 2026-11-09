@@ -90,3 +90,39 @@ def beta_mean(k: int, n: int, prior_mean: float, strength: float = 10.0) -> floa
     if n + strength == 0:
         return prior_mean
     return (k + prior_mean * strength) / (n + strength)
+
+
+# Two-sided 95% Student t quantiles for 1-30 degrees of freedom (standard tables); above 30, Z95.
+_T95 = (12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.160, 2.145,
+        2.131, 2.120, 2.110, 2.101, 2.093, 2.086, 2.080, 2.074, 2.069, 2.064, 2.060, 2.056, 2.052, 2.048,
+        2.045, 2.042)
+
+
+def t95(df: int) -> float:
+    """Two-sided 95% t quantile; the normal value once df passes the table."""
+    if df < 1:
+        raise ValueError(f"need df >= 1, got {df}")
+    return _T95[df - 1] if df <= len(_T95) else Z95
+
+
+def ratio_interval(pairs) -> dict | None:
+    """How many times larger `a` is than `b`, over paired measurements [(a, b), ...]: the geometric
+    mean of a/b with a 95% t-interval on the log scale. Ratios multiply, so logs make them additive
+    and a 2x and a 0.5x cancel out. Pairs with a zero or negative side are skipped and counted.
+    With one usable pair there is a ratio but no interval (lo and hi are None)."""
+    logs, skipped = [], 0
+    for a, b in pairs:
+        if a is None or b is None or a <= 0 or b <= 0:
+            skipped += 1
+            continue
+        logs.append(math.log(a / b))
+    n = len(logs)
+    if n == 0:
+        return None
+    mean = statistics.fmean(logs)
+    out = {"ratio": math.exp(mean), "lo": None, "hi": None, "n": n, "skipped": skipped,
+           "ratios": [math.exp(x) for x in logs]}
+    if n >= 2:
+        half = t95(n - 1) * statistics.stdev(logs) / math.sqrt(n)
+        out["lo"], out["hi"] = math.exp(mean - half), math.exp(mean + half)
+    return out

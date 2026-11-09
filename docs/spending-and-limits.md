@@ -116,6 +116,21 @@ Without arguments, `plan import` imports what the config's `plan:` section names
 
 **Meter readings** come as `{"format": "plan-meter.v1", "readings": [{"at": …, "meter": "weekly_all", "model": null, "percent": 17, "resets_at": …}]}`, or as snapshots, `{"history": [{"at": …, "limits": [{"kind": "weekly_all", "model": null, "percent": 17, "resets_at": …}]}]}`. `usage --plan` adds up how far each meter rose in the window. Meters show whole percents, and a reset (the percent drops or the reset time moves) counts the new window from zero.
 
+### Measure your own effort weights
+How much heavier is the top effort than the one below it? Providers don't publish a figure, so measure it on your own prompts:
+
+```
+python scripts/effort_trial.py run --prompts prompts.json --out ~/trial --meter-file METER_FILE
+python scripts/effort_trial.py report --out ~/trial
+python scripts/effort_trial.py blind --out ~/trial --prompts prompts.json
+```
+
+- `prompts.json` is `{"prompts": [{"id": "code", "text": "..."}]}`. Use prompts with nothing private in them.
+- Each prompt runs once per effort (default `medium,high,xhigh,max`) through `claude -p`: tools off, no user or project settings, a short neutral system prompt. It bills to whatever Claude Code is signed in with. `--bare` is never used, because it switches to API-key billing.
+- Runs go one at a time, one effort per batch, with a pause between batches (`--gap`, 360 s) so the meter file gets a fresh reading. The run stops if the weekly meter rises more than `--max-weekly-rise` points (3).
+- `report` gives output tokens per prompt (thinking included), the geometric mean ratio of each effort against the top one with a 95% t-interval on the log scale, and the meter rise per batch. The meter is in whole percents and counts everything else using the plan at the same time, so treat it as a rough check.
+- Answers stay in the output folder, readable by you only. `blind` writes them under shuffled letters, with the key in `key.json`.
+
 ## What providers report about your account
 
 There is no universal API for balances and limits, so Trioditis collects what each one offers and writes it to `~/.hlidskjalv/accounts.json` every 5 minutes (also `GET /v1/accounts`), for Hlidskjalv to show:
