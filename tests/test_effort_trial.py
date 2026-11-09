@@ -100,7 +100,9 @@ def test_ledger_check_matches_runs_by_salted_session_and_model(tmp_path):
     fp = lambda sid: _hash("salt", "session\0" + sid, 16)  # noqa: E731
     merge_events(db.conn, [
         {"id": "1", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "m", "tokens_out": 300, "thread_fp": fp("s-max")},
-        {"id": "2", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "haiku", "tokens_out": 7, "thread_fp": fp("s-max")},  # side call: left out
+        # side call: left out
+        {"id": "2", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "haiku",
+         "tokens_out": 7, "thread_fp": fp("s-max")},
         {"id": "3", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "m", "tokens_out": 90, "thread_fp": fp("s-high")}])
     run = lambda e, sid, out: {"prompt": "a", "effort": e, "model": "m", "session_id": sid,  # noqa: E731
                                "error": None, "usage": {"output_tokens": out}}
