@@ -90,3 +90,30 @@ def test_a_failed_run_is_kept_as_an_error_and_redone(tmp_path):
     assert "timed out" in json.loads((Path(a.out) / "runs" / "high-a.json").read_text())["error"]
     t.cmd_run(a, runner=_fake_runner({"high": 7}), sleep=lambda s: None)
     assert json.loads((Path(a.out) / "runs" / "high-a.json").read_text())["error"] is None
+
+
+def test_ledger_check_matches_runs_by_salted_session_and_model(tmp_path):
+    from trioditis.plan import _hash
+    from trioditis_metrics.db import MetricsDB
+    from trioditis_metrics.plan import merge_events
+    db = MetricsDB(tmp_path / "m.db")
+    fp = lambda sid: _hash("salt", "session\0" + sid, 16)  # noqa: E731
+    merge_events(db.conn, [
+        {"id": "1", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "m", "tokens_out": 300, "thread_fp": fp("s-max")},
+        {"id": "2", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "haiku", "tokens_out": 7, "thread_fp": fp("s-max")},  # side call: left out
+        {"id": "3", "at": 1.0, "source": "claude-code", "tokens_measured": 1, "agent": 0, "model": "m", "tokens_out": 90, "thread_fp": fp("s-high")}])
+    run = lambda e, sid, out: {"prompt": "a", "effort": e, "model": "m", "session_id": sid,  # noqa: E731
+                               "error": None, "usage": {"output_tokens": out}}
+    res = t.ledger_check([run("max", "s-max", 300), run("high", "s-high", 100), run("xhigh", "s-x", 5),
+                          {**run("low", "s-low", 1), "error": "timed out"}], db.conn, "salt")
+    assert res["matched"] == 1 and res["missing"] == ["xhigh-a"]
+    assert res["differ"] == [{"run": "high-a", "run_out": 100, "ledger_out": 90}]
+    db.close()
+
+
+def test_a_meter_reading_older_than_the_last_batch_is_flagged():
+    b = lambda e, start, end, at: {"effort": e, "start": start, "end": end,  # noqa: E731
+                                   "meter_before": {"session": {"at": at, "percent": 1.0}}}
+    s = t.summarise([], [b("high", 100, 200, 90), b("xhigh", 300, 400, 150), b("max", 500, 600, 450)])
+    assert [m["stale"] for m in s["meter"]] == [False, True, False]
+    assert s["meter"][1]["reading_age_min"] == 2.5

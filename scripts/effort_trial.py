@@ -132,6 +132,27 @@ def load_runs(out: Path) -> list[dict]:
     return [json.loads(p.read_text()) for p in sorted((out / "runs").glob("*.json"))]
 
 
+def ledger_check(runs: list[dict], conn, salt: str) -> dict:
+    """Each run's output tokens against the plan-usage ledger (`trioditis plan import --claude-code`),
+    matched by the salted session id and the run's model; Claude Code's small side calls on another
+    model are left out. Read-only."""
+    from trioditis.plan import _hash
+    out: dict = {"matched": 0, "missing": [], "differ": []}
+    for r in runs:
+        if r.get("error") or not r.get("session_id") or r["usage"].get("output_tokens") is None:
+            continue
+        n, tok = conn.execute("SELECT COUNT(*), SUM(tokens_out) FROM plan_usage WHERE thread_fp = ? AND model = ?",
+                              (_hash(salt, "session\0" + r["session_id"], 16), r["model"])).fetchone()
+        if not n:
+            out["missing"].append(f"{r['effort']}-{r['prompt']}")
+        elif tok != r["usage"]["output_tokens"]:
+            out["differ"].append({"run": f"{r['effort']}-{r['prompt']}", "run_out": r["usage"]["output_tokens"],
+                                  "ledger_out": tok})
+        else:
+            out["matched"] += 1
+    return out
+
+
 def summarise(runs: list[dict], batches: list[dict], top: str = "max") -> dict:
     ok = [r for r in runs if not r.get("error") and r["usage"].get("output_tokens") is not None]
     efforts = [e for e in EFFORTS if any(r["effort"] == e for r in ok)]
@@ -157,6 +178,10 @@ def summarise(runs: list[dict], batches: list[dict], top: str = "max") -> dict:
         for k in ("session", "weekly_all"):
             x, y = (b["meter_before"].get(k) or {}).get("percent"), (after.get(k) or {}).get("percent")
             row[k] = None if x is None or y is None else y - x
+        # A reading older than the previous batch's end blurs the split between the two batches.
+        at = (b["meter_before"].get("session") or {}).get("at")
+        row["reading_age_min"] = None if at is None else round((b["start"] - at) / 60, 1)
+        row["stale"] = bool(at is not None and i and at < batches[i - 1]["end"])
         meter.append(row)
     return {"prompts": prompts, "efforts": efforts, "output_tokens": table, "ratios": ratios, "totals": totals,
             "meter": meter, "errors": [(r["prompt"], r["effort"], r["error"]) for r in runs if r.get("error")]}
@@ -165,7 +190,20 @@ def summarise(runs: list[dict], batches: list[dict], top: str = "max") -> dict:
 def cmd_report(a) -> int:
     out = Path(a.out).expanduser()
     batches_path = out / "batches.json"
-    s = summarise(load_runs(out), json.loads(batches_path.read_text()) if batches_path.exists() else [])
+    runs = load_runs(out)
+    s = summarise(runs, json.loads(batches_path.read_text()) if batches_path.exists() else [])
+    s["ledger"] = None
+    if not a.no_ledger:
+        from trioditis.plan import load_salt
+        from trioditis_metrics.db import DEFAULT_PATH, open_readonly
+        db = Path(a.db).expanduser() if a.db else DEFAULT_PATH
+        salt = load_salt(create=False)
+        if db.exists() and salt != "dry-run":
+            conn = open_readonly(db)
+            try:
+                s["ledger"] = ledger_check(runs, conn, salt)
+            finally:
+                conn.close()
     (out / "report.json").write_text(json.dumps(s, indent=1))
     if a.json:
         print(json.dumps(s, indent=1))
@@ -179,7 +217,18 @@ def cmd_report(a) -> int:
         print(f"{k:<12} {r['ratio']:.2f}x  ({ci}, n={r['n']})")
     print("meter rise per batch (whole percents, shared with anything else using the plan)")
     for m in s["meter"]:
-        print(f"  {m['effort']:<6} {m['minutes']:>5} min  session {m['session']}  weekly {m['weekly_all']}")
+        print(f"  {m['effort']:<6} {m['minutes']:>5} min  session {m['session']}  weekly {m['weekly_all']}"
+              + (f"  (reading {m['reading_age_min']} min old at start, before the last batch ended)"
+                 if m.get("stale") else ""))
+    lg = s["ledger"]
+    if lg is None:
+        print("ledger: not checked (no database or salt; run `trioditis plan import --claude-code` first)"
+              if not a.no_ledger else "ledger: not checked (--no-ledger)")
+    else:
+        print(f"ledger: {lg['matched']} run(s) match the plan-usage ledger"
+              + (f"; not in it yet: {', '.join(lg['missing'])} (run `trioditis plan import --claude-code`)"
+                 if lg["missing"] else "")
+              + "".join(f"; {d['run']} differs: run {d['run_out']:,}, ledger {d['ledger_out']:,}" for d in lg["differ"]))
     for e in s["errors"]:
         print("error:", *e)
     return 0
@@ -222,6 +271,8 @@ def main(argv=None) -> int:
     rp = sub.add_parser("report", help="tokens, ratios with 95%% intervals, meter rise")
     rp.add_argument("--out", required=True)
     rp.add_argument("--json", action="store_true")
+    rp.add_argument("--db", help="the metrics database with the plan-usage ledger (default: Trioditis's)")
+    rp.add_argument("--no-ledger", action="store_true", help="skip the check against the ledger")
     b = sub.add_parser("blind", help="shuffled answers for rating; the key stays local")
     b.add_argument("--out", required=True)
     b.add_argument("--prompts", required=True)
