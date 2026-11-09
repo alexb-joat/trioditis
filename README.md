@@ -104,7 +104,7 @@ Every cloud call is checked against your daily and monthly caps first (defaults:
 
 ## Staying current
 
-Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](docs/staying-current.md).
+Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](docs/staying-current.md). On a subscription, `trioditis plan import --claude-code` and `usage --plan` show tokens per model and effort next to how far the plan's meters rose, from counts only, never text ([Plan usage](docs/spending-and-limits.md#plan-usage)).
 
 ## Security at a glance
 

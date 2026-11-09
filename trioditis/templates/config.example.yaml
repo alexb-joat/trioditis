@@ -137,3 +137,11 @@ logging:
 # then name configured models that are deprecated or about to retire, quoting the
 # provider's page, and list active models you don't use yet as candidates to test.
 # facts: ~/euboulia/src/catalog/provider-facts.json
+
+# Plan usage (optional): what `trioditis plan import` reads when run without arguments, as the
+# daily refit timer does. Token counts, model, effort and hashes only, never any text; spend and
+# caps never count it. See docs/spending-and-limits.md, "Plan usage".
+# plan:
+#   claude_code: true                  # token counts from Claude Code's transcripts
+#   meter_file: ~/plan-meter.json      # plan meter readings (plan-meter.v1)
+#   person: alex                       # a label on imported events

@@ -86,6 +86,36 @@ claude-sonnet     21   5% (1%-23%)              -            -          -
 
 `-` means no data, never zero. `--json` always includes these rates, with the counts behind them.
 
+## Plan usage
+
+A subscription (Claude, ChatGPT) has usage meters instead of a bill. To learn how heavy each model and effort really is on those meters, Trioditis can keep a ledger of plan use beside its API calls: `plan_usage` (one row per message) and `plan_meter` (meter readings over time), in the same metrics database. Spend, caps and `trioditis usage` without `--plan` never read them.
+
+```bash
+python -m trioditis plan import --claude-code --dry-run   # what would be imported, nothing written
+python -m trioditis plan import --claude-code             # token counts from Claude Code's transcripts
+python -m trioditis plan import events.json               # a plan-usage.v1 file (Euboulia exports one)
+python -m trioditis plan import --meter meter.json        # plan meter readings
+python -m trioditis usage --plan --since 7d               # messages and tokens per model and effort, meter rise
+```
+
+Without arguments, `plan import` imports what the config's `plan:` section names (`claude_code: true`, `meter_file: PATH`, `person: LABEL`); the Linux daily timer runs it that way before `refit`. Every import can run again: rows are keyed by id, a repeat adds nothing, and a message seen half-written is completed with its final counts. Unchanged transcripts are skipped.
+
+**What is kept, and what never is.** From Claude Code's transcripts (`~/.claude/projects`, or `$CLAUDE_CONFIG_DIR`): each assistant message's token counts (uncached in, cache read, cache write, out), model, effort, speed, whether a subagent sent it, its time, its position and context size in its conversation, and salted hashes of the message and session ids. Message content, folder names, paths, branches, titles and URLs are never written. The salt is a random secret in `~/.hlidskjalv/plan-salt` (owner-only), made on the first import. Claude Code deletes old transcripts after a while, so the daily import is what keeps the history. Effort uses the API names: `low`, `medium`, `high`, `xhigh`, `max`.
+
+**`plan-usage.v1`**, one event per message sent, never any text:
+
+```json
+{"format": "plan-usage.v1", "events": [
+  {"id": "e-1", "at": "2026-11-08T09:00:00Z", "source": "euboulia", "service": "claude",
+   "model": "Opus 5.5", "effort": "max", "task": "code", "tokens_in_est": 300, "tokens_out_est": 900,
+   "tokens_measured": false, "thread_turns": 4, "thread_tokens_est": 5200, "thread_fp": "3f9a0c1d",
+   "suggested": "Sonnet 5.5", "followed": false, "regenerated": false, "asked_again": false, "vote": 0}]}
+```
+
+`id`, `at` (ISO time, or epoch seconds or milliseconds) and `model` are required; an event without them is rejected. Other fields are dropped, and so is any string longer than three short words or 40 characters, so free text can't reach the database even if an exporter sends it. The import prints how many events and fields it rejected.
+
+**Meter readings** come as `{"format": "plan-meter.v1", "readings": [{"at": …, "meter": "weekly_all", "model": null, "percent": 17, "resets_at": …}]}`, or as snapshots, `{"history": [{"at": …, "limits": [{"kind": "weekly_all", "model": null, "percent": 17, "resets_at": …}]}]}`. `usage --plan` adds up how far each meter rose in the window. Meters show whole percents, and a reset (the percent drops or the reset time moves) counts the new window from zero.
+
 ## What providers report about your account
 
 There is no universal API for balances and limits, so Trioditis collects what each one offers and writes it to `~/.hlidskjalv/accounts.json` every 5 minutes (also `GET /v1/accounts`), for Hlidskjalv to show:

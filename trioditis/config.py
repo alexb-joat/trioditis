@@ -107,6 +107,14 @@ class Logging:
 
 
 @dataclass(frozen=True)
+class PlanSettings:
+    """What `trioditis plan import` reads when run without arguments (the daily timer does that)."""
+    claude_code: bool = False      # import token counts from Claude Code's transcripts
+    meter_file: str | None = None  # a file of plan meter readings
+    person: str | None = None      # a label put on imported events, e.g. a first name
+
+
+@dataclass(frozen=True)
 class Config:
     providers: dict[str, Provider]
     models: dict[str, Model]
@@ -117,6 +125,7 @@ class Config:
     limits: Limits = field(default_factory=Limits)
     logging: Logging = field(default_factory=Logging)
     facts: str | None = None  # a provider-facts.v1 file: model status and retirement dates, prices
+    plan: PlanSettings = field(default_factory=PlanSettings)
 
     def provider_of(self, model: str) -> Provider:
         return self.providers[self.models[model].provider]
@@ -263,7 +272,38 @@ def parse_config(raw: dict) -> Config:
         raise ConfigError("facts must be the path of a provider-facts file")
     facts = str(Path(facts).expanduser()) if facts else None
 
-    return Config(providers, models, routes, default_route, emb, privacy, limits, logging, facts)
+    return Config(providers, models, routes, default_route, emb, privacy, limits, logging, facts,
+                  parse_plan(raw.get("plan")))
+
+
+_LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
+
+
+def parse_plan(raw) -> PlanSettings:
+    if raw is None:
+        return PlanSettings()
+    if not isinstance(raw, dict):
+        raise ConfigError("plan must be a mapping with claude_code, meter_file and person")
+    unknown = set(raw) - {"claude_code", "meter_file", "person"}
+    if unknown:
+        raise ConfigError(f"plan: unknown key(s) {', '.join(sorted(unknown))}; use claude_code, meter_file, person")
+    meter = raw.get("meter_file")
+    if meter is not None and not isinstance(meter, str):
+        raise ConfigError("plan.meter_file must be the path of a meter readings file")
+    person = raw.get("person")
+    if person is not None and not (isinstance(person, str) and _LABEL.match(person)):
+        raise ConfigError("plan.person must be a short label (letters, digits, . _ -), not a sentence")
+    return PlanSettings(claude_code=bool(raw.get("claude_code", False)),
+                        meter_file=str(Path(meter).expanduser()) if meter else None, person=person)
+
+
+def load_plan_settings(path: str | Path) -> PlanSettings:
+    """Only the `plan:` section, so `plan import` works with a config that has other problems."""
+    p = Path(path)
+    if not p.is_file():
+        return PlanSettings()
+    raw = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    return parse_plan(raw.get("plan") if isinstance(raw, dict) else None)
 
 
 def load_config(path: str | Path) -> Config:

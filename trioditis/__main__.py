@@ -1,4 +1,4 @@
-"""Command line entry point: python -m trioditis [init|serve|check|explain|hardware|usage|prices|refit]."""
+"""Command line entry point: python -m trioditis [init|serve|check|explain|hardware|usage|plan|prices|refit]."""
 
 from __future__ import annotations
 
@@ -72,13 +72,31 @@ def main(argv: list[str] | None = None) -> None:
     u = sub.add_parser("usage", help="calls, tokens and spend from the metrics database (no config needed)")
     u.add_argument("--since", default="24h", help="30m, 24h, 7d, today, month or YYYY-MM-DD (default 24h)")
     u.add_argument("--until", default=None, help="same forms as --since; default now")
-    u.add_argument("--by", default="model", choices=["model", "route", "provider", "client", "session", "day"])
+    u.add_argument("--by", default=None, help="model, route, provider, client, session or day (default model); "
+                                               "with --plan: model-effort (default), model, effort, day, source, "
+                                               "person or agent")
     u.add_argument("--session", default=None, help="only this X-Session-Id (matched by its hash)")
     u.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
     u.add_argument("--outcomes", action="store_true",
                    help="rates with 95%% intervals instead of spend: errors, answers cut off at the length "
                         "limit, answers asked again within 2 minutes, prompt tokens served from cache")
+    u.add_argument("--plan", action="store_true",
+                   help="plan usage instead of API calls: messages and tokens per model and effort, and how far "
+                        "each plan meter rose (fill it with `trioditis plan import`)")
     u.add_argument("--json", action="store_true", help="machine-readable output (always includes the rates)")
+
+    pl = sub.add_parser("plan", help="plan usage: what a subscription's chats and agents used (no config needed)")
+    pl_sub = pl.add_subparsers(dest="plan_cmd", required=True)
+    pi = pl_sub.add_parser("import", help="import token counts and meter readings; with no arguments, what the "
+                                          "config's plan: section names (the daily timer runs it that way)")
+    pi.add_argument("file", nargs="?", help="a plan-usage.v1 events file (Euboulia exports one)")
+    pi.add_argument("--claude-code", action="store_true",
+                    help="token counts from Claude Code's transcripts (~/.claude, or $CLAUDE_CONFIG_DIR); no text is kept")
+    pi.add_argument("--claude-home", default=None, help=argparse.SUPPRESS)
+    pi.add_argument("--meter", nargs="?", const="", default=None, metavar="FILE",
+                    help="plan meter readings (plan-meter.v1 or snapshots); without FILE, plan.meter_file")
+    pi.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
+    pi.add_argument("--dry-run", action="store_true", help="show what would be imported, write nothing")
 
     pr = sub.add_parser("prices", help="manage ~/.hlidskjalv/prices.json")
     pr_sub = pr.add_subparsers(dest="prices_cmd", required=True)
@@ -99,7 +117,15 @@ def main(argv: list[str] | None = None) -> None:
 
     args = ap.parse_args(argv)
     if args.cmd == "usage":  # reads the metrics database only: works without a config
-        sys.exit(usage_report(args))
+        sys.exit(plan_report(args) if args.plan else usage_report(args))
+    if args.cmd == "plan":  # reads only the config's plan: section, and only when it needs it
+        from .config import load_plan_settings
+        from .plan import run as plan_run
+        try:
+            settings = load_plan_settings(args.config)
+        except (OSError, ConfigError, ValueError) as err:
+            sys.exit(f"config error in {args.config}: {err}")
+        sys.exit(plan_run(args, settings))
     if args.cmd == "init":  # creates the config: obviously works without one
         sys.exit(init_folder(Path(args.dir)))
     try:
@@ -296,7 +322,7 @@ def prices_import(cfg, args) -> int:
 def usage_report(args) -> int:
     import sqlite3
 
-    from trioditis_metrics.db import DEFAULT_PATH, open_readonly, outcome_rates, usage
+    from trioditis_metrics.db import DEFAULT_PATH, GROUPS, open_readonly, outcome_rates, usage
 
     from .security import fingerprint
 
@@ -305,6 +331,10 @@ def usage_report(args) -> int:
         until = parse_when(args.until) if args.until else None
     except ValueError as err:
         print(f"usage: {err}", file=sys.stderr)
+        return 2
+    args.by = args.by or "model"
+    if args.by not in GROUPS:
+        print(f"usage: cannot group calls by {args.by!r}; choose from {', '.join(GROUPS)}", file=sys.stderr)
         return 2
     path = Path(args.db).expanduser() if args.db else DEFAULT_PATH
     sfp = fingerprint(args.session) if args.session else None
@@ -347,6 +377,64 @@ def usage_report(args) -> int:
     _print_table(table)
     if total["unpriced"]:
         print(f"{total['unpriced']} cloud call(s) had no price: add them to ~/.hlidskjalv/prices.json")
+    return 0
+
+
+def plan_report(args) -> int:
+    import sqlite3
+
+    from trioditis_metrics.db import DEFAULT_PATH, open_readonly
+    from trioditis_metrics.plan import GROUPS, meter_rise, plan_usage
+
+    by = args.by or "model-effort"
+    if by not in GROUPS:
+        print(f"usage --plan: cannot group by {by!r}; choose from {', '.join(GROUPS)}", file=sys.stderr)
+        return 2
+    try:
+        since = parse_when(args.since)
+        until = parse_when(args.until) if args.until else None
+    except ValueError as err:
+        print(f"usage: {err}", file=sys.stderr)
+        return 2
+    path = Path(args.db).expanduser() if args.db else DEFAULT_PATH
+    try:
+        conn = open_readonly(path)
+        try:
+            rows, meters = plan_usage(conn, since, until, by), meter_rise(conn, since, until)
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        rows, meters = [], []
+    keys = ("messages", "tokens_in", "cache_read", "cache_write", "tokens_out", "measured")
+    total = {k: sum(r[k] or 0 for r in rows) for k in keys}
+    stamp = lambda ts: time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(ts)) if ts else None  # noqa: E731
+    if args.json:
+        for r in rows:
+            r["first"], r["last"] = stamp(r.pop("first_ts")), stamp(r.pop("last_ts"))
+        print(json.dumps({"since": stamp(since), "until": stamp(until), "by": by, "database": str(path),
+                          "rows": rows, "total": total, "meters": meters}, indent=2))
+        return 0
+    span = f"since {stamp(since)}" + (f" until {stamp(until)}" if until else "")
+    print(f"plan usage by {by} {span}")
+    if not rows:
+        print("no plan usage in this window (import it with: trioditis plan import --claude-code)")
+    else:
+        head = (by, "messages", "in", "cache read", "cache write", "out", "measured")
+        table = [head] + [(str(r["key"]), r["messages"], r["tokens_in"], r["cache_read"], r["cache_write"],
+                           r["tokens_out"], f"{(r['measured'] or 0) / r['messages']:.0%}") for r in rows]
+        table.append(("total", total["messages"], total["tokens_in"], total["cache_read"], total["cache_write"],
+                      total["tokens_out"], f"{total['measured'] / total['messages']:.0%}"))
+        _print_table(table)
+        print("'in' is uncached prompt tokens; 'measured' is the share with real counts, the rest are estimates.")
+    if meters:
+        print("meters (whole percents; a reset counts the new window from zero):")
+        for m in meters:
+            name = m["meter"] + (f" ({m['model']})" if m["model"] else "")
+            resets = f", {m['resets']} reset(s)" if m["resets"] else ""
+            print(f"  {name:<28} +{m['rise']:g} points over {m['readings']:,} readings "
+                  f"({m['first']:g}% -> {m['last']:g}%{resets})")
+    else:
+        print("no meter readings in this window (import them with: trioditis plan import --meter FILE)")
     return 0
 
 

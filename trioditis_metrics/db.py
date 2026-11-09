@@ -66,6 +66,47 @@ CREATE TABLE IF NOT EXISTS provider_limits (
     seen        REAL NOT NULL,
     PRIMARY KEY (provider, name)
 );
+-- Plan usage (0.6): what a subscription's chats and agents used, kept apart from `calls` so spend
+-- and caps never count it. Counts, model names and hashes only: never any text (see plan.py).
+CREATE TABLE IF NOT EXISTS plan_usage (
+    id              TEXT PRIMARY KEY,   -- salted hash or the exporting tool's own event id
+    at              REAL NOT NULL,
+    source          TEXT NOT NULL,      -- claude-code | euboulia | ...
+    person          TEXT,
+    service         TEXT,
+    model           TEXT NOT NULL,
+    effort          TEXT,
+    task            TEXT,
+    tokens_in       INTEGER,            -- uncached prompt tokens
+    tokens_out      INTEGER,
+    cache_read      INTEGER,
+    cache_write     INTEGER,
+    tokens_measured INTEGER NOT NULL DEFAULT 0,  -- 1: real counts; 0: the tool's estimate
+    speed           TEXT,
+    agent           INTEGER,            -- 1: a subagent's message
+    thread_turns    INTEGER,
+    thread_tokens   INTEGER,
+    thread_fp       TEXT,
+    suggested       TEXT,
+    followed        INTEGER,
+    regenerated     INTEGER,
+    asked_again     INTEGER,
+    vote            INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_plan_usage_at ON plan_usage(at);
+CREATE TABLE IF NOT EXISTS plan_meter (
+    meter       TEXT NOT NULL,          -- session | weekly_all | weekly_scoped | ...
+    model       TEXT NOT NULL DEFAULT '',
+    at          REAL NOT NULL,
+    percent     REAL NOT NULL,
+    resets_at   REAL,
+    PRIMARY KEY (meter, model, at)
+);
+CREATE TABLE IF NOT EXISTS plan_files (
+    path_fp     TEXT PRIMARY KEY,       -- salted hash of a transcript's path, never the path
+    size        INTEGER NOT NULL,
+    mtime       REAL NOT NULL
+);
 """
 # Added after 0.2: older databases get them on open.
 MIGRATIONS = ["ALTER TABLE calls ADD COLUMN provider TEXT",
@@ -112,6 +153,10 @@ class MetricsDB:
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_calls_prompt ON calls(prompt_fp)")
         if os.name == "posix":
             os.chmod(self.path, 0o600)
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        return self._conn
 
     def record(self, decision: dict, ts: float | None = None) -> int:
         """Store one completed call. `ts` defaults to now; pass it explicitly

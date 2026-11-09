@@ -45,6 +45,8 @@ Description=Trioditis daily refit (reads the call record and model facts; writes
 [Service]
 Type=oneshot
 WorkingDirectory=$REPO
+# First what the config's plan: section names (does nothing without one); "-": a failed import never blocks the refit.
+ExecStartPre=-$REPO/.venv/bin/python -m trioditis --config config.yaml plan import
 ExecStart=$REPO/.venv/bin/python -m trioditis --config config.yaml refit
 UMask=0077
 NoNewPrivileges=true
