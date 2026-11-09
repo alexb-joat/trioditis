@@ -23,7 +23,7 @@ python -m trioditis refit --json        # the whole fitted document
 
 `refit` reads the metrics database (read-only), your config, `prices.json` and, if configured, the model facts. It writes two files to `~/.hlidskjalv/`:
 
-- **`trioditis-fitted.json`**: for each model over the last 28 days (`--days`), its error, cut-off, asked-again and cache-hit rates with 95% intervals, p50 and p95 latency, and a daily error chart. Every number carries its count, its window and its method (the `methods` block says which).
+- **`trioditis-fitted.json`**: for each model over the last 28 days (`--days`), its error, cut-off, asked-again and cache-hit rates with 95% intervals, p50 and p95 latency, and a daily error chart; with a plan ledger, the [plan weights](#plan-weights). Every number carries its count, its window and its method (the `methods` block says which).
 - **`trioditis-notebook.jsonl`**: one line for each finding that wasn't there at the last refit. Nothing new means nothing written, so the notebook reads as a history of changes, not a daily copy.
 
 The Linux installer (`deploy/linux/install-service.sh`) adds a user timer that runs `refit` once a day; `journalctl --user -u trioditis-refit` shows its output.
@@ -35,6 +35,21 @@ A rate that moves from 4% to 6% in a day is usually noise. The chart is an EWMA 
 - The first 10 days with at least 10 calls set the baseline.
 - After that, a day on which the average leaves its limits is a **drift alarm**, recorded once per excursion, not once per day it stays out.
 - With fewer days of data the chart says "not enough data" and how much it needs, instead of guessing.
+
+### Plan weights
+
+Given a plan-usage ledger ([`plan import`](spending-and-limits.md#plan-usage)), `refit` also fits how many meter points each model and effort costs: points per million tokens, with the number of stretches it rests on and a 95% interval. A plan meter is hard to read this way. It shows whole percents, and everyone on the account raises it (other people, the chat app, another computer), while the ledger holds only what was tracked here. So a weight comes only from stretches where the rise is plausibly yours:
+
+- **Stretches**: runs of consecutive meter readings in which one model and effort sent at least 90% of the tracked tokens, by every token measure. One idle reading right after a run joins it, because the meter can show the last messages a reading late. Rounding cancels inside a run, so a stretch is off by under one point however long it is.
+- **Quiet only**: a stretch counts only when the meter stood still in every idle reading within 30 minutes either side of it. Untracked use *during* a stretch can't be seen, and would make a weight look heavier; the output says how many points rose with nothing tracked, so you can judge.
+- **The weight**: sum of rises over sum of tokens across the quiet stretches, with a ratio-estimator interval that never assumes less noise than the rounding gives. Readings more than 15 minutes apart, or across a reset, are skipped.
+- **Token measure**: uncached (input + output + cache writes), output only, or all tokens including cache reads. Each meter uses the one under which each model's stretches agree best, and the fitted file lists how well each fitted.
+- **Relative weights**: each model and effort against the one with most stretches, with an interval on the log scale.
+- A weight needs 3 quiet stretches and 10 points of rise; until then it says "not enough data" and what it needs. Models that never ran alone (subagents running beside the main model, say) are listed but get no weight.
+
+The same section carries result-signal rates per model and effort, from events that record them (Euboulia's: suggestion followed, answer regenerated, asked again, up votes), with Wilson intervals. Claude Code's transcripts carry none.
+
+A measured weight is a proposal. Its `evidence` block (`kind: measured`, `status: proposed`) is shaped for the team rules file, and it goes there only after you review it. Nothing is applied, and the notebook gets one line when a weight first becomes measurable (and again if its token measure changes).
 
 ## Model facts
 

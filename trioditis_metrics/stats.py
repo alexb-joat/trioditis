@@ -126,3 +126,25 @@ def ratio_interval(pairs) -> dict | None:
         half = t95(n - 1) * statistics.stdev(logs) / math.sqrt(n)
         out["lo"], out["hi"] = math.exp(mean - half), math.exp(mean + half)
     return out
+
+
+def ratio_estimate(pairs, min_var: float = 0.0) -> dict | None:
+    """sum(y) / sum(x) over pairs [(y, x), ...], with a 95% t-interval: the ratio estimator of survey
+    sampling (Cochran, Sampling Techniques, 3rd ed., section 6.3), its standard error from the spread
+    of y - R·x. Unlike the mean of y/x it weighs each pair by its size, so a pair with a tiny x can't
+    dominate. None when sum(x) is not positive; with one pair there is a value but no interval. The
+    lower bound stops at 0, for quantities that can't be negative. `min_var` is a known floor on the
+    variance of each y around R·x (rounding, say), so a few pairs that happen to agree can't give a
+    narrower interval than the measurement allows."""
+    pairs = list(pairs)
+    n, sx, sy = len(pairs), sum(x for _, x in pairs), sum(y for y, _ in pairs)
+    if n == 0 or sx <= 0:
+        return None
+    r = sy / sx
+    out = {"value": r, "lo": None, "hi": None, "se": None, "n": n}
+    if n >= 2:
+        var = max(sum((y - r * x) ** 2 for y, x in pairs) / (n - 1), min_var)
+        se = math.sqrt(var / n) / (sx / n)
+        half = t95(n - 1) * se
+        out.update(lo=max(0.0, r - half), hi=r + half, se=se)
+    return out

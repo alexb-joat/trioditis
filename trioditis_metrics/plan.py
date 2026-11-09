@@ -32,7 +32,7 @@ GROUPS = {
 }
 
 # A reading whose reset time moved by more than this belongs to a new window.
-_NEW_WINDOW_S = 600
+NEW_WINDOW_S = 600
 
 
 def has_tables(conn: sqlite3.Connection) -> bool:
@@ -147,7 +147,7 @@ def meter_rise(conn: sqlite3.Connection, since: float, until: float | None = Non
                                    "rise": 0.0, "resets": 0, "_ra": resets_at}
             continue
         m["readings"] += 1
-        moved = resets_at is not None and m["_ra"] is not None and abs(resets_at - m["_ra"]) > _NEW_WINDOW_S
+        moved = resets_at is not None and m["_ra"] is not None and abs(resets_at - m["_ra"]) > NEW_WINDOW_S
         if pct < m["last"] or moved:
             m["rise"] += pct
             m["resets"] += 1
@@ -157,3 +157,52 @@ def meter_rise(conn: sqlite3.Connection, since: float, until: float | None = Non
     for m in out.values():
         del m["_ra"]
     return list(out.values())
+
+
+def _window(since: float, until: float | None) -> tuple[str, list]:
+    if until is None:
+        return "at >= ?", [since]
+    return "at >= ? AND at < ?", [since, until]
+
+
+def meter_readings(conn: sqlite3.Connection, since: float, until: float | None = None) -> dict[tuple, list[tuple]]:
+    """Every reading between `since` and `until`, as {(meter, model): [(at, percent, resets_at), ...]} in time
+    order. `model` is "" for a meter that counts every model."""
+    if not has_tables(conn):
+        return {}
+    where, args = _window(since, until)
+    out: dict[tuple, list[tuple]] = {}
+    for meter, model, at, pct, resets_at in conn.execute(
+            f"SELECT meter, model, at, percent, resets_at FROM plan_meter WHERE {where} "  # noqa: S608
+            "ORDER BY meter, model, at", args):
+        out.setdefault((meter, model), []).append((at, pct, resets_at))
+    return out
+
+
+def plan_messages(conn: sqlite3.Connection, since: float, until: float | None = None) -> list[dict]:
+    """Each message's time, model, effort and token counts (missing counts as 0), in time order."""
+    if not has_tables(conn):
+        return []
+    where, args = _window(since, until)
+    # The filter is fixed text from _window; values are bound parameters.
+    return [dict(r) for r in conn.execute(
+        "SELECT at, model, effort, COALESCE(tokens_in, 0) AS tokens_in, COALESCE(tokens_out, 0) AS tokens_out, "  # noqa: S608
+        "COALESCE(cache_read, 0) AS cache_read, COALESCE(cache_write, 0) AS cache_write "
+        f"FROM plan_usage WHERE {where} ORDER BY at", args)]
+
+
+def signal_counts(conn: sqlite3.Connection, since: float, until: float | None = None) -> list[dict]:
+    """Per model and effort, how often a send carried each result signal, and how often it was positive:
+    a suggestion followed, an answer regenerated, the question asked again, an up vote. A signal the
+    exporter didn't record (NULL) is left out of its count; a vote of 0 is no vote."""
+    if not has_tables(conn):
+        return []
+    where, args = _window(since, until)
+    return [dict(r) for r in conn.execute(
+        f"SELECT {GROUPS['model-effort']} AS key, COUNT(*) AS messages, "  # noqa: S608
+        "SUM(suggested IS NOT NULL AND followed IS NOT NULL) AS followed_n, "
+        "COALESCE(SUM(CASE WHEN suggested IS NOT NULL THEN followed = 1 END), 0) AS followed, "
+        "SUM(regenerated IS NOT NULL) AS regenerated_n, COALESCE(SUM(regenerated = 1), 0) AS regenerated, "
+        "SUM(asked_again IS NOT NULL) AS asked_again_n, COALESCE(SUM(asked_again = 1), 0) AS asked_again, "
+        "SUM(vote IS NOT NULL AND vote != 0) AS vote_n, COALESCE(SUM(vote > 0), 0) AS vote_up "
+        f"FROM plan_usage WHERE {where} GROUP BY 1 ORDER BY 1", args)]

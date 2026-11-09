@@ -1,6 +1,6 @@
 import pytest
 
-from trioditis_metrics.stats import beta_mean, ewma, ewma_chart, quantile, wilson
+from trioditis_metrics.stats import beta_mean, ewma, ewma_chart, quantile, ratio_estimate, wilson
 
 
 def test_wilson_matches_published_values():
@@ -88,3 +88,24 @@ def test_ratio_interval_small_samples_and_bad_pairs():
     assert r["ratio"] == pytest.approx(1.6826, abs=1e-3)
     assert r["lo"] == pytest.approx(1.1859, abs=1e-3) and r["hi"] == pytest.approx(2.3874, abs=1e-3)
     assert t95(4) == 2.776 and t95(500) == pytest.approx(1.96, abs=1e-3)
+
+
+def test_ratio_estimate_by_hand():
+    # sum y / sum x = 13/6; residuals -1/6, -1/3, 1/2 -> variance 0.3889/2; se = sqrt(0.19444/3) / 2
+    est = ratio_estimate([(2, 1), (4, 2), (7, 3)])
+    assert est["value"] == pytest.approx(13 / 6) and est["n"] == 3
+    assert est["se"] == pytest.approx(0.127294, abs=1e-6)
+    assert est["lo"] == pytest.approx(13 / 6 - 4.303 * 0.127294, abs=1e-5)
+    assert est["hi"] == pytest.approx(13 / 6 + 4.303 * 0.127294, abs=1e-5)
+
+
+def test_ratio_estimate_floor_edges_and_weighting():
+    # a variance floor widens an interval the pairs alone would make too narrow
+    assert ratio_estimate([(2, 1), (4, 2), (6, 3)])["se"] == 0
+    assert ratio_estimate([(2, 1), (4, 2), (6, 3)], min_var=1)["se"] == pytest.approx((1 / 3) ** 0.5 / 2)
+    one = ratio_estimate([(5, 2)])
+    assert one["value"] == 2.5 and one["lo"] is None and one["hi"] is None
+    assert ratio_estimate([]) is None and ratio_estimate([(1, 0)]) is None
+    # a pair with a tiny x doesn't dominate the way a mean of ratios would let it
+    assert ratio_estimate([(1, 0.01), (10, 10), (10, 10)])["value"] == pytest.approx(21 / 20.01)
+    assert ratio_estimate([(0, 1), (1, 1), (0, 1)])["lo"] == 0.0  # never below zero

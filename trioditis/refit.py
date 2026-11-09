@@ -5,8 +5,9 @@ names one, a provider-facts file. Writes:
 
 - ~/.hlidskjalv/trioditis-fitted.json: per model, its error, cut-off, asked-again and cache-hit
   rates with 95% intervals, p50/p95 latency and a daily error chart; what the facts say about the
-  configured models; price changes waiting to be applied. Every number carries its n, its window
-  and the method behind it.
+  configured models; price changes waiting to be applied; with a plan-usage ledger, meter points
+  per token for each model and effort (planfit.py). Every number carries its n, its window and
+  the method behind it.
 - ~/.hlidskjalv/trioditis-notebook.jsonl: one line per finding that wasn't there at the last refit
   (a drift alarm, a lifecycle warning, a price change, a model to try).
 
@@ -31,6 +32,8 @@ from trioditis_metrics.prices import DEFAULT_PRICES_PATH
 from trioditis_metrics.stats import ewma_chart, quantile
 
 from .config import Config
+from .planfit import METHOD as PLAN_METHOD
+from .planfit import fit_plan, summary_lines
 from .pricefacts import facts_by_api_id, lifecycle_lines, lifecycle_report, same_price, stale_warning
 
 SCHEMA = "trioditis-fitted.v1"
@@ -43,6 +46,9 @@ METHODS = {
     "latency_ms": "p50 and p95 of successful calls, linear interpolation",
     "daily_errors": f"EWMA control chart (alpha 0.2, L 3) of the daily error rate over days with at least "
                     f"{MIN_DAY_CALLS} calls; target and binomial spread from the first {WARMUP_DAYS} such days",
+    "plan_weights": PLAN_METHOD,
+    "plan_signals": "share of sends with each result signal recorded (suggestion followed, answer regenerated, asked "
+                    "again, up vote among votes), per model and effort; 95% Wilson score interval",
 }
 
 
@@ -72,7 +78,8 @@ def fit(conn: sqlite3.Connection, cfg: Config, facts: dict | None, prices: dict,
         }
     doc = {"$schema": SCHEMA, "fitted_at": _iso(now),
            "window": {"since": _iso(since), "until": _iso(now), "days": days},
-           "methods": METHODS, "models": models, "facts": None, "lifecycle": None, "proposals": []}
+           "methods": METHODS, "models": models, "plan": fit_plan(conn, since, now),
+           "facts": None, "lifecycle": None, "proposals": []}
     if facts is not None:
         cloud = {n: m.upstream_id for n, m in cfg.models.items() if not cfg.providers[m.provider].local}
         doc["facts"] = {"path": cfg.facts, "generated": facts.get("generatedAt"),
@@ -115,6 +122,16 @@ def findings(doc: dict) -> list[dict]:
         for day in m["daily_errors"].get("alarms", []):
             out.append({"key": f"drift:{name}:{day}", "kind": "drift", "subject": name, "decision": "alert",
                         "finding": f"{name}: the daily error rate left its control limits on {day}"})
+    for meter, m in ((doc.get("plan") or {}).get("meters") or {}).items():
+        for g, e in m["groups"].items():
+            if e["status"] == "measured":
+                w = e["per_mtok"]
+                ci = "" if w["lo"] is None else f" (95% {w['lo']:.3g}-{w['hi']:.3g})"
+                out.append({"key": f"plan-weight:{meter}:{g}:{e['basis']}", "kind": "plan-weight", "subject": g,
+                            "decision": "proposal",
+                            "finding": f"{g} on the {meter} meter: {w['value']:.3g} points per 1M {e['basis']} "
+                                       f"tokens{ci}, from {e['stretches']} quiet stretches; review it before it "
+                                       f"goes into the team rules file"})
     if doc.get("facts") and doc["facts"].get("stale"):
         out.append({"key": f"stale:{doc['facts']['generated']}", "kind": "facts", "subject": doc["facts"]["path"],
                     "decision": "alert", "finding": f"model facts: {doc['facts']['stale']}"})
@@ -204,8 +221,10 @@ def _print_summary(doc: dict, new: list[dict]) -> None:
         if chart["status"] == "not enough data":
             line += f" ({chart['days_with_data']} so far; needs {chart['needs']})"
         print(line)
+    for line in summary_lines(doc.get("plan")):
+        print(line)
     for f in findings(doc):
-        if f["kind"] != "drift":
+        if f["kind"] not in ("drift", "plan-weight"):
             print(f"  {'new: ' if f in new else ''}{f['finding']}")
 
 
