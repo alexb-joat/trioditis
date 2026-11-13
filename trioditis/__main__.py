@@ -1,4 +1,4 @@
-"""Command line entry point: python -m trioditis [init|serve|check|explain|hardware|usage|plan|prices|refit]."""
+"""Command line entry point: python -m trioditis [init|serve|check|explain|eval-routes|hardware|usage|plan|prices|refit]."""
 
 from __future__ import annotations
 
@@ -65,6 +65,22 @@ def main(argv: list[str] | None = None) -> None:
 
     e = sub.add_parser("explain", help="show which model a prompt would go to (no model call)")
     e.add_argument("prompt")
+
+    ev = sub.add_parser("eval-routes", help="how often the router picks the right route, against a labelled CSV "
+                                             "(no chat model is called)",
+                        description="Grade the router's route choice on a labelled CSV: columns prompt and expected_route "
+                                    "(UTF-8, header in row 1; other columns are ignored). Prints accuracy with a 95% interval, "
+                                    "accuracy per route and a confusion table, for keywords alone and, when the config has "
+                                    "embeddings and the local provider answers, keywords plus embeddings. With 20 or more rows it "
+                                    "then picks embeddings.threshold on half the rows, scores it against yours on the other "
+                                    "half (exact sign test) and records a proposal in the notebook only when the gain is "
+                                    "unlikely to be chance. Changes nothing in the config. The only network call is to the "
+                                    "configured local embeddings provider.")
+    ev.add_argument("--labels", required=True, metavar="FILE", help="the labelled prompts (CSV with prompt, expected_route)")
+    ev.add_argument("--config", default=argparse.SUPPRESS, metavar="FILE",
+                    help="the config to grade (default: TRIODITIS_CONFIG or config.yaml; same as the option before the command)")
+    ev.add_argument("--notebook", default=None, metavar="FILE", help="where a threshold proposal goes (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
+    ev.add_argument("--dry-run", action="store_true", help="show the proposal that would be recorded, write nothing")
 
     h = sub.add_parser("hardware", help="detect hardware and suggest local models (no config change)")
     h.add_argument("--json", action="store_true", help="machine-readable output")
@@ -161,6 +177,10 @@ def main(argv: list[str] | None = None) -> None:
         d = asyncio.run(decide(cfg, body, signals=Signals(prices=Prices(), latency=_readonly_latency())))
         print(json.dumps(d.as_dict(), indent=2))
         return
+
+    if args.cmd == "eval-routes":
+        from .evalroutes import run as eval_routes
+        sys.exit(eval_routes(cfg, args))
 
     if args.cmd == "hardware":
         import httpx

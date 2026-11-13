@@ -1,6 +1,6 @@
 import pytest
 
-from trioditis_metrics.stats import beta_mean, ewma, ewma_chart, quantile, ratio_estimate, wilson
+from trioditis_metrics.stats import beta_mean, ewma, ewma_chart, quantile, ratio_estimate, sign_test, wilson
 
 
 def test_wilson_matches_published_values():
@@ -109,3 +109,20 @@ def test_ratio_estimate_floor_edges_and_weighting():
     # a pair with a tiny x doesn't dominate the way a mean of ratios would let it
     assert ratio_estimate([(1, 0.01), (10, 10), (10, 10)])["value"] == pytest.approx(21 / 20.01)
     assert ratio_estimate([(0, 1), (1, 1), (0, 1)])["lo"] == 0.0  # never below zero
+
+
+def test_sign_test_matches_hand_computed_values():
+    assert sign_test(0, 0) == 1.0                          # never disagree: no evidence
+    assert sign_test(0, 4) == pytest.approx(2 / 16)        # 2 * P(0 of 4 heads)
+    assert sign_test(0, 5) == pytest.approx(2 / 32)        # 0.0625: five straight is still not below 0.05
+    assert sign_test(0, 6) == pytest.approx(2 / 64)        # 0.03125
+    assert sign_test(1, 5) == pytest.approx(14 / 64)       # 2 * (1 + 6) / 2**6
+    assert sign_test(2, 10) == pytest.approx(158 / 4096)   # 2 * (1 + 12 + 66) / 2**12
+    assert sign_test(5, 5) == 1.0                          # an even split: the doubled tail passes 1 and is capped
+    assert sign_test(3, 1) == sign_test(1, 3) == pytest.approx(2 * 5 / 16)  # symmetric in b and c
+    assert sign_test(0, 1) == 1.0                          # one disagreement says nothing
+
+
+def test_sign_test_refuses_negative_counts():
+    with pytest.raises(ValueError, match="b >= 0"):
+        sign_test(-1, 3)

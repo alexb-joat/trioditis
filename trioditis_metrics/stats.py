@@ -27,6 +27,22 @@ def wilson(k: int, n: int, z: float = Z95) -> tuple[float, float] | None:
     return (0.0 if k == 0 else max(0.0, centre - half)), (1.0 if k == n else min(1.0, centre + half))
 
 
+def sign_test(b: int, c: int) -> float:
+    """Two-sided exact p-value for two settings scored on the same rows (McNemar's exact test).
+
+    `b` rows went right under the first setting only, `c` under the second only; rows both got right or both
+    got wrong say nothing about which is better and are left out. Under "no difference" each of the b + c
+    disagreements is a fair coin, so the p-value is twice the chance of a split at least this lopsided, at
+    most 1. 1.0 when the settings never disagree."""
+    if b < 0 or c < 0:
+        raise ValueError(f"need b >= 0 and c >= 0, got b={b}, c={c}")
+    n = b + c
+    if n == 0:
+        return 1.0
+    tail = sum(math.comb(n, i) for i in range(min(b, c) + 1))
+    return min(1.0, 2 * tail / 2 ** n)
+
+
 def quantile(xs, q: float) -> float | None:
     """Quantile by linear interpolation between order statistics (R's and numpy's default)."""
     if not 0 <= q <= 1:

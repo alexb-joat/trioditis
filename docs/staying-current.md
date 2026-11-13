@@ -67,3 +67,30 @@ Then `trioditis check`, the startup log and `refit` report:
 - **Candidates to test**: active models of the providers you already use that aren't in your config. They are never added for you.
 - **Price changes**: when the facts and `prices.json` disagree, `refit` records a proposal and the command that applies it (`trioditis prices import <facts>`). Prices change only when you run it.
 - **Stale facts**: a facts file older than 30 days is reported, since prices and dates may have moved since.
+
+## Measuring the router
+
+`trioditis eval-routes` answers one question: how often does the router pick the route you meant? It runs each prompt of a labelled file through the same classifier a `model: auto` request uses (one user message, no session pin, no tools), compares the route with the label, and calls no chat model. It makes no routing decision for you either: it only reports.
+
+```
+trioditis eval-routes --labels labels.csv
+```
+
+The config is the usual one (`--config`, `TRIODITIS_CONFIG`, else `config.yaml`; the option works before or after the command).
+
+**The label file** is a UTF-8 CSV whose first row names the columns. Two are required, `prompt` and `expected_route`; any others (an id, a note) are ignored. `expected_route` must be a route in your config. Header names may differ in case and spacing (`Expected Route`). Row numbers in error messages count the header as row 1, and a prompt that appears twice is an error, because counting it twice makes the result look more certain than it is.
+
+```
+prompt,expected_route,note
+"Why does this Python function throw a KeyError?",code,
+"Draft a short follow-up email after a sales call",writing,
+"hi there",quick,greeting
+```
+
+**What it prints**: the number of prompts, then, for keywords only and (when the config has `embeddings:` and the local provider answers) keywords plus embeddings, the accuracy as `k/n` with its 95% Wilson interval, the same per route, and a confusion table (rows are the expected route, columns the predicted one). Without embeddings, or when the provider doesn't answer, it says so in one line and still prints the keyword row. The same files and config print the same text, apart from the date and the last paragraph: the first run that records a proposal says so, and a later run says it is already in the notebook.
+
+The result depends on the label set. Prompts you chose to test the router with are not a sample of what you will send it, and a small set gives a wide interval: read the interval, not the percentage. Label prompts from your own work, including the odd ones, and keep the set once you have started comparing numbers.
+
+**The threshold sweep** (only with the embeddings row, a config with at least two routes and at least 20 labelled prompts; otherwise one line says why it was skipped) tries `embeddings.threshold` from 0.40 to 0.80 in steps of 0.05, plus your own value if it is not on that grid. The prompts are sorted by a hash of their text and cut in two exact halves, the first half (rounded up) to pick and the rest to report, so the order of your file does not matter. The best threshold on the pick half (ties go to the one closest to yours, then the lower one) is scored against yours on the report half, so the figure you read was not the one the choice was tuned on. Both settings are scored on the same rows, so it counts the report-half rows where they disagree and runs an exact two-sided sign test on them: if the two were equally good, each disagreement would be a coin toss, and `p` is the chance of a split at least this lopsided. A proposal goes into the notebook (`--notebook`, default `~/.hlidskjalv/trioditis-notebook.jsonl`) only when the picked value scores higher on the report half and `p` is below 0.05; otherwise the output says why nothing is recorded (the picked value did not score higher, or the difference could be chance). A proposal is recorded once for the same labels (in any order), embeddings model, route keywords, patterns and examples, and pair of thresholds; change any of them and a new one can follow. `--dry-run` shows the line without writing it. **Nothing is applied**: your config is never changed, and you edit `embeddings.threshold` yourself if you agree.
+
+**The one network call**: embedding the prompts and each route's `examples` with the configured local embeddings provider (for example Ollama), the same call the router makes. Nothing else leaves your machine, and each prompt is embedded once however many thresholds are tried.
