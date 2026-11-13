@@ -1,0 +1,53 @@
+Route accuracy, 2026-11-13
+labels: tests/fixtures/routes-heldout.csv
+config: config.example.yaml
+n = 315 labelled prompts
+current embeddings.threshold: 0.45
+No chat model was called. Every number depends on this label set.
+
+Baseline: always the default route (quick)
+  accuracy 78/315 = 24.8%  (95% interval 20.3-29.8%)
+
+Keywords only
+  accuracy 116/315 = 36.8%  (95% interval 31.7-42.3%)
+  per route (of the rows labelled with it, how many it got right)
+    code       18/76 = 23.7%  (95% interval 15.5-34.4%)
+    reasoning  7/78 = 9.0%  (95% interval 4.4-17.4%)
+    writing    13/83 = 15.7%  (95% interval 9.4-25.0%)
+    quick      78/78 = 100.0%  (95% interval 95.3-100.0%)
+  per stratum (the `stratum` column of the labels)
+    indirect  40/160 = 25.0%  (95% interval 18.9-32.2%)
+    plain     76/155 = 49.0%  (95% interval 41.3-56.8%)
+  confusion (rows: expected route; columns: predicted route)
+             code  reasoning  writing  quick
+  code         18          0        1     57
+  reasoning     1          7        2     68
+  writing       1          0       13     69
+  quick         0          0        0     78
+
+Keywords + embeddings
+  accuracy 205/315 = 65.1%  (95% interval 59.7-70.1%)
+  per route (of the rows labelled with it, how many it got right)
+    code       31/76 = 40.8%  (95% interval 30.4-52.0%)
+    reasoning  45/78 = 57.7%  (95% interval 46.6-68.0%)
+    writing    65/83 = 78.3%  (95% interval 68.3-85.8%)
+    quick      64/78 = 82.1%  (95% interval 72.1-89.0%)
+  per stratum (the `stratum` column of the labels)
+    indirect  89/160 = 55.6%  (95% interval 47.9-63.1%)
+    plain     116/155 = 74.8%  (95% interval 67.5-81.0%)
+  confusion (rows: expected route; columns: predicted route)
+             code  reasoning  writing  quick
+  code         31          7        6     32
+  reasoning     5         45        7     21
+  writing       4          2       65     12
+  quick         1          6        7     64
+
+Threshold comparison (embeddings.threshold; both values on every row, no value is picked here)
+  current 0.45: 205/315 = 65.1%  (95% interval 59.7-70.1%)
+  other   0.55: 134/315 = 42.5%  (95% interval 37.2-48.1%)
+  The two settings disagree on 95 of the 315 rows: current 0.45 alone got 83 right, other 0.55 alone
+    got 12 right.
+  Exact sign test on those rows, two-sided: p < 0.001.
+  p < 0.05: a split this lopsided is unlikely to be chance.
+  This is a fair test only if the other value was chosen on different labels and is the only one
+    tried on these.

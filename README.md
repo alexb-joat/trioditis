@@ -144,7 +144,7 @@ Report a vulnerability privately via [SECURITY.md](SECURITY.md). The full design
 - On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](docs/security-model.md)).
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
 - CI does not build the Docker image.
-- Routing accuracy is not yet published.
+- The router picks the right route about two times in three. On 315 held-out prompts it chose the labelled route for 205 (65.1%, 95% interval 59.7–70.1%) on the example config with local embeddings on, and for 116 (36.8%) with keywords alone. Most misses (65 of 110) go to `quick`, the default route, and a miss still gets an answer. The prompts are synthetic and in English; measured 13 November 2026 ([method, data and limits](docs/route-accuracy.md)). Your own routes give a different number: `trioditis eval-routes` measures it.
 
 ## Platforms
 

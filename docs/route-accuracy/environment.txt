@@ -1,0 +1,6 @@
+# The model server and models behind docs/route-accuracy.md, read on 13 November 2026.
+$ curl -s localhost:11434/api/version
+{"version":"0.40.0"}
+$ curl -s localhost:11434/api/tags   (name, digest, parameter size, quantization)
+llama3.2:3b a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72 3.2B Q4_K_M
+nomic-embed-text:latest 0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f 137M F16

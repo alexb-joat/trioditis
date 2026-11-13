@@ -113,7 +113,7 @@ default_route: quick
 embeddings:
   provider: ollama
   model: nomic-embed-text
-  threshold: 0.55
+  threshold: 0.45
 
 privacy:
   enabled: true

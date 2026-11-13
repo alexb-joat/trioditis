@@ -1,0 +1,47 @@
+Route accuracy, 2026-11-13
+labels: tests/fixtures/routes.csv
+config: config.example.yaml
+n = 100 labelled prompts
+current embeddings.threshold: 0.55
+No chat model was called. Every number depends on this label set.
+
+Baseline: always the default route (quick)
+  accuracy 25/100 = 25.0%  (95% interval 17.5-34.3%)
+
+Keywords only
+  accuracy 40/100 = 40.0%  (95% interval 30.9-49.8%)
+  per route (of the rows labelled with it, how many it got right)
+    code       8/25 = 32.0%  (95% interval 17.2-51.6%)
+    reasoning  2/25 = 8.0%  (95% interval 2.2-25.0%)
+    writing    5/25 = 20.0%  (95% interval 8.9-39.1%)
+    quick      25/25 = 100.0%  (95% interval 86.7-100.0%)
+  confusion (rows: expected route; columns: predicted route)
+             code  reasoning  writing  quick
+  code          8          0        1     16
+  reasoning     0          2        0     23
+  writing       0          0        5     20
+  quick         0          0        0     25
+
+Keywords + embeddings
+  accuracy 46/100 = 46.0%  (95% interval 36.6-55.7%)
+  per route (of the rows labelled with it, how many it got right)
+    code       10/25 = 40.0%  (95% interval 23.4-59.3%)
+    reasoning  4/25 = 16.0%  (95% interval 6.4-34.7%)
+    writing    7/25 = 28.0%  (95% interval 14.3-47.6%)
+    quick      25/25 = 100.0%  (95% interval 86.7-100.0%)
+  confusion (rows: expected route; columns: predicted route)
+             code  reasoning  writing  quick
+  code         10          0        1     14
+  reasoning     0          4        0     21
+  writing       0          0        7     18
+  quick         0          0        0     25
+
+Threshold comparison (embeddings.threshold; both values on every row, no value is picked here)
+  current 0.55: 46/100 = 46.0%  (95% interval 36.6-55.7%)
+  other   0.45: 78/100 = 78.0%  (95% interval 68.9-85.0%)
+  The two settings disagree on 40 of the 100 rows: current 0.55 alone got 4 right, other 0.45 alone
+    got 36 right.
+  Exact sign test on those rows, two-sided: p < 0.001.
+  p < 0.05: a split this lopsided is unlikely to be chance.
+  This is a fair test only if the other value was chosen on different labels and is the only one
+    tried on these.

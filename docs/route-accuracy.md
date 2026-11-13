@@ -4,10 +4,13 @@ How often does the router pick the route a person would pick? This page holds th
 the results behind every accuracy number Trioditis publishes. The command is
 [`trioditis eval-routes`](staying-current.md#measuring-the-router).
 
-Status, 13 November 2026: the plan below was committed first (commit `bb6cf32`). The second set has since
-been written and labelled by two models; see [What has been done](#what-has-been-done). The maintainer
-still has to settle the rows where the labellers disagree, so the threshold test has not run and the
-router has not seen the second set.
+**Result, 13 November 2026.** On 315 held-out prompts the router picked the labelled route for 205
+(65.1%, 95% interval 59.7–70.1%), on the example config with `embeddings.threshold: 0.45`. With the
+earlier value, 0.55, it picked 134 (42.5%). The test that decided between the two was written down
+before the prompts existed and ran once. The numbers are in [Results](#results).
+
+The page keeps the order of the work: what was known, the plan (committed first, commit `bb6cf32`), what
+was done, the results.
 
 ## What is already known (first set, 100 prompts)
 
@@ -17,7 +20,7 @@ router has not seen the second set.
 | Setting | Right | 95% interval (Wilson) |
 |---|---|---|
 | Keywords only | 40/100 | 30.9–49.8% |
-| Keywords + embeddings, threshold 0.55 (the shipped value) | 46/100 | 36.6–55.7% |
+| Keywords + embeddings, threshold 0.55 (the value shipped up to 0.5.0) | 46/100 | 36.6–55.7% |
 
 A sweep over the threshold picked 0.45 on one half of this set. On the other half 0.45 got 34/50 right
 and 0.55 got 22/50 (the two disagreed on 18 rows, 15 of them in favour of 0.45; exact sign test, two-sided,
@@ -115,7 +118,8 @@ traffic.
 
 Both labels for every prompt are in [`labels.csv`](route-accuracy/labels.csv).
 
-**The local-model baseline.** `llama3.2:3b` (Q4_K_M, on a local Ollama, temperature 0, seed 0) was given
+**The local-model baseline.** `llama3.2:3b` (Q4_K_M, on a local Ollama, temperature 0, seed 0;
+versions in [`environment.txt`](route-accuracy/environment.txt)) was given
 the four route descriptions and asked for one word per prompt
 (`python scripts/route_study.py model-baseline docs/route-accuracy/labels.csv --model llama3.2:3b --label writer_route`).
 Every reply held a route name. Its answers are in
@@ -124,9 +128,109 @@ Every reply held a route name. Its answers are in
 | Set | Right | 95% interval (Wilson) |
 |---|---|---|
 | First, 100 prompts (final labels) | 48/100 | 38.5–57.7% |
-| Second, 315 prompts (writer's label; 7 rows not yet settled) | 205/315 | 59.7–70.1% |
+| Second, 315 prompts (writer's label, before the 7 rows were settled) | 205/315 | 59.7–70.1% |
 
 On the second set it got 103/155 plain and 102/160 indirect prompts right, and by route 58/80 code,
 59/79 reasoning, 63/80 writing and 25/76 quick: it rarely answers `quick` (39 of its 415 answers). The
-second-set row will be scored again on the final labels; at most 7 rows can change.
+second-set row is against the writer's label; [Results](#results) has the score on the final labels.
 
+**Settling.** The maintainer decided the seven second-set rows where the two labels differ
+([`settled.csv`](route-accuracy/settled.csv)): six decisions follow the second labeller, one follows the
+writer, and no row was dropped. `python scripts/route_study.py heldout` then wrote the test labels,
+[`tests/fixtures/routes-heldout.csv`](../tests/fixtures/routes-heldout.csv): 315 prompts, 76 code, 78
+reasoning, 83 writing and 78 quick. They were committed (`30d3080`) before the router was run on them.
+
+## Results
+
+All of it is from 13 November 2026, on `config.example.yaml`, with `nomic-embed-text` (137M, F16, digest
+`0a109f422b47`) on Ollama 0.40.0 ([`environment.txt`](route-accuracy/environment.txt)).
+
+### The test of the threshold
+
+The test ran once, with the config still at 0.55
+([`heldout-test.txt`](route-accuracy/heldout-test.txt) is its full output).
+
+| `embeddings.threshold` | Right, of 315 | 95% interval (Wilson) |
+|---|---|---|
+| 0.55 | 134 = 42.5% | 37.2–48.1% |
+| 0.45 | 205 = 65.1% | 59.7–70.1% |
+
+The two settings differ on 95 prompts: 0.45 alone was right on 83 and 0.55 alone on 12. Exact sign test,
+two-sided: p = 3 × 10⁻¹⁴. By the decision rule, **0.45 is now the value in `config.example.yaml`**, and
+in the config `trioditis init` writes. The plan expected the settings to differ on about 115 prompts; they
+differed on 95 (30%), and 87% of those favoured 0.45.
+
+### How often the router is right
+
+The same 315 prompts and labels for every row. Nothing was tuned on them.
+
+| Who picks the route | Right, of 315 | 95% interval (Wilson) |
+|---|---|---|
+| Always the default route (`quick`) | 78 = 24.8% | 20.3–29.8% |
+| The router, keywords only | 116 = 36.8% | 31.7–42.3% |
+| **The router, keywords + embeddings at 0.45** | **205 = 65.1%** | **59.7–70.1%** |
+| `llama3.2:3b`, choosing from the four descriptions | 202 = 64.1% | 58.7–69.2% |
+
+The router with embeddings is level with the small local model, without a chat-model call per request; the
+intervals overlap and no test was run on that difference. The two fail in different places. The model
+got 57/76 code, 57/78 reasoning, 64/83 writing and 24/78 quick: it answered `quick` for only 28 of the
+315 prompts. Its answers are not fully repeatable, even at temperature 0 with a fixed seed: this run
+([`baseline-llama3.2-3b-heldout.csv`](route-accuracy/baseline-llama3.2-3b-heldout.csv), output in
+[`baseline-llama3.2-3b-heldout.txt`](route-accuracy/baseline-llama3.2-3b-heldout.txt)) differs from the
+first run on 12 of the 315 prompts, and the first run's answers score 206/315 on the same labels.
+
+By route and by stratum, with the threshold at 0.45
+([`heldout-at-0.45.txt`](route-accuracy/heldout-at-0.45.txt)). These describe; no test was run on them.
+
+| Prompts | Right | 95% interval (Wilson) |
+|---|---|---|
+| Labelled code | 31/76 = 40.8% | 30.4–52.0% |
+| Labelled reasoning | 45/78 = 57.7% | 46.6–68.0% |
+| Labelled writing | 65/83 = 78.3% | 68.3–85.8% |
+| Labelled quick | 64/78 = 82.1% | 72.1–89.0% |
+| Plain wording | 116/155 = 74.8% | 67.5–81.0% |
+| Indirect wording | 89/160 = 55.6% | 47.9–63.1% |
+
+Where the misses go: of the 110 prompts routed wrongly at 0.45, 65 went to `quick`, the default route
+(32 code, 21 reasoning, 12 writing). At 0.55 that was 172 of 181. The lower threshold
+has a price on the other side: 14 quick prompts were pulled into another route, against 2 at 0.55. Code
+is the weakest route: 32 of its 76 prompts still fall to `quick`.
+
+### The development set
+
+The first 100 prompts, reported apart because 0.45 was picked on half of them: keywords only 40/100, with
+embeddings 46/100 at 0.55 and 78/100 (68.9–85.0%) at 0.45
+([`first-set-rehearsal.txt`](route-accuracy/first-set-rehearsal.txt)). The 78% flatters the setting; quote the
+held-out figure.
+
+### To reproduce
+
+```
+python scripts/route_study.py heldout docs/route-accuracy/labels.csv \
+    --settled docs/route-accuracy/settled.csv --out tests/fixtures/routes-heldout.csv
+trioditis eval-routes --labels tests/fixtures/routes-heldout.csv --config config.example.yaml \
+    --compare-threshold 0.55
+```
+
+The second command needs a local Ollama with `nomic-embed-text` and sends the prompts nowhere else. It
+prints both thresholds on every row and tries no other value. A newer build of the embedding model can
+move single prompts across the threshold.
+
+### What was run on the held-out prompts
+
+- The two labellers and the local-model baseline, before the labels were final. The router was not.
+- The test, once (`heldout-test.txt`). Before it, the same command was rehearsed on the first set only
+  (`first-set-rehearsal.txt`).
+- One more run after the config changed to 0.45, for the per-route and per-stratum figures
+  (`heldout-at-0.45.txt`). It used the same two thresholds.
+- The local-model baseline again, scored on the final labels.
+
+### Limits of the result
+
+The limits [known in advance](#limits-known-in-advance) all hold. Three more came with the data:
+
+- A person decided 7 of the 315 labels. The other 308 are labels two models agreed on.
+- 0.45 is a value for `nomic-embed-text` and the example config's `examples`. Another embedding model
+  has another scale; run the sweep on your own labels.
+- Half of the prompts were written to avoid the usual words. Traffic with a different mix of plain and
+  indirect prompts gives a different overall number; the per-stratum rows show the spread.
