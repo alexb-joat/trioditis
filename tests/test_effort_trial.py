@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -54,7 +55,8 @@ def test_run_report_and_blind(tmp_path):
     s = t.summarise(t.load_runs(out), json.loads((out / "batches.json").read_text()))
     assert s["output_tokens"] == {"a": {"high": 100, "max": 300}, "b": {"high": 200, "max": 600}}
     assert s["ratios"]["max/high"]["ratio"] == pytest.approx(3.0) and s["ratios"]["max/high"]["n"] == 2
-    assert (out / "runs" / "max-a.json").stat().st_mode & 0o077 == 0  # answers are private
+    if os.name == "posix":  # Windows has no mode bits; the folder's permissions apply there
+        assert (out / "runs" / "max-a.json").stat().st_mode & 0o077 == 0  # answers are private
     import argparse
     assert t.cmd_blind(argparse.Namespace(out=a.out, prompts=a.prompts, seed=1)) == 0
     blind = (out / "blind.json").read_text()

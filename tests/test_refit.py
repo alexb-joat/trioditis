@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -85,7 +86,8 @@ def config(facts=None):
 
 
 def test_config_takes_a_facts_path():
-    assert config("~/facts.json").facts.endswith("/facts.json") and "~" not in config("~/facts.json").facts
+    facts = config("~/facts.json").facts
+    assert Path(facts).name == "facts.json" and "~" not in facts  # the separator differs on Windows
     assert config().facts is None
     with pytest.raises(ConfigError, match="facts"):
         config(["not", "a", "path"])
@@ -135,12 +137,13 @@ def test_fit_says_when_there_is_too_little_data_to_chart(tmp_path):
 def test_fit_lists_lifecycle_and_price_proposals_without_applying_them(tmp_path):
     now = calls_db(tmp_path, days=1)
     prices = {"cheap": {"input": 3.0, "output": 15.0}, "dated": {"input": 0.9, "output": 4.0}}
-    doc = fit(open_readonly(tmp_path / "metrics.db"), config("/facts.json"), FACTS, prices, now, today=TODAY)
+    cfg = config("/facts.json")  # the path is printed as the system writes it
+    doc = fit(open_readonly(tmp_path / "metrics.db"), cfg, FACTS, prices, now, today=TODAY)
     assert [w["model"] for w in doc["lifecycle"]["warnings"]] == ["dated"]
     assert doc["proposals"] == [{"kind": "price", "model": "dated", "api_id": "old-1",
                                  "from": {"input": 0.9, "output": 4.0}, "to": {"input": 1.0, "output": 4.0},
                                  "source": "https://acme.example/pricing", "fetched": "2026-10-30",
-                                 "apply": "trioditis prices import /facts.json"}]
+                                 "apply": f"trioditis prices import {cfg.facts}"}]
     assert {f["kind"] for f in findings(doc)} == {"lifecycle", "challenger", "price"}
     assert new_findings(doc, doc) == []  # the next refit with nothing changed adds nothing
 
