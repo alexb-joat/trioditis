@@ -64,7 +64,7 @@ python -m trioditis init
 **3.** Check and run, the same on every system:
 
 ```bash
-python -m trioditis check     # which models are usable
+python -m trioditis check     # which local models answer, which cloud keys are set
 python -m trioditis serve     # http://127.0.0.1:8787/v1, localhost only
 ```
 

@@ -13,6 +13,7 @@ Trioditis sits between your apps and every LLM you use, so it sees all prompts a
 - **Clients are not trusted to choose destinations.** Upstream URLs come only from the config file. Plain `http` is only allowed for local hosts, URLs with embedded credentials are rejected, and HTTP redirects are not followed.
 - **Logs leak.** Decision logs and the metrics database contain metadata and a SHA-256 prefix of the prompt, never the prompt itself, unless `logging.log_prompts: true`. The session id (`X-Session-Id` or `user`) is stored only as a SHA-256 prefix too; the calling tool is stored by name only (`X-Trioditis-Client`, or the first word of `User-Agent`, kept only if it is a short lower-case name). Both files are created with mode `0600`.
 - **Upstream providers are separate trust zones.** Each provider receives only its own key; the client's `Authorization` header and the session id are never forwarded.
+- **Which outbound calls exist.** Requests you send go to the providers your config names. `trioditis check` makes one read-only `GET {base_url}/models` to each *local* provider (2-second timeout, no proxy, no redirects) and nothing to cloud providers; `trioditis hardware` asks local providers for `GET /api/tags`. No telemetry, update checks or remote config.
 
 ## Controls at a glance
 

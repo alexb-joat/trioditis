@@ -25,6 +25,7 @@ from .accounts import report as account_report
 from .config import Config
 from .envvars import env
 from .hardware import ReportCache
+from .localcheck import attempts_text, connection_hint
 from .router import Cooldowns, Decision, Embedder, RoutingError, SessionPins, Signals, all_text, decide
 from .security import check_bearer, fingerprint, host_header_is_local, origin_is_local, router_api_key
 
@@ -405,7 +406,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         if reached and all(a.get("status") == 429 for a in reached):
             waits = [a["retry_after"] for a in reached if "retry_after" in a]
             _log(log, metrics, prices, d, body, None, 429, attempts, started, sid, caller, error="rate_limited")
-            resp = _error(429, f"rate-limited by every candidate model: {attempts}", "rate_limited")
+            resp = _error(429, f"rate-limited by every candidate model: {attempts_text(attempts)}", "rate_limited")
             if waits:
                 resp.headers["Retry-After"] = str(min(waits))
             return resp
@@ -415,7 +416,9 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             return _error(429, f"cloud budget exceeded: {blocked}; no local model "
                                f"available for route {d.route}", "budget_exceeded")
         _log(log, metrics, prices, d, body, None, 502, attempts, started, sid, caller, error="upstream_error")
-        return _error(502, f"all candidate models failed: {attempts}", "upstream_error")
+        hint = connection_hint(cfg, attempts)
+        return _error(502, f"all candidate models failed: {attempts_text(attempts)}." + (f" {hint}" if hint else ""),
+                      "upstream_error")
 
     return app
 

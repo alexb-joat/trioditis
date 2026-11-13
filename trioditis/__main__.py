@@ -9,6 +9,7 @@ import os
 import re
 import stat
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -61,7 +62,7 @@ def main(argv: list[str] | None = None) -> None:
     s.add_argument("--host", default=env("HOST", "127.0.0.1"))
     s.add_argument("--port", type=int, default=int(env("PORT", "8787")))
 
-    sub.add_parser("check", help="validate the config and show which models are usable")
+    sub.add_parser("check", help="validate the config, ask local servers which models they have, show which cloud keys are set")
 
     e = sub.add_parser("explain", help="show which model a prompt would go to (no model call)")
     e.add_argument("prompt")
@@ -151,11 +152,26 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "check":
         print(f"config OK: {len(cfg.models)} models, {len(cfg.routes)} routes")
+        from .localcheck import local_states
+        # Local servers are asked once each (a model listing); cloud providers are never contacted.
+        # Exit code: 0 whatever the states, as for a missing key: `check` reports, `serve` decides.
+        states, notes = local_states(cfg)
+        confirmed = 0
         for name, m in cfg.models.items():
             p = cfg.providers[m.provider]
-            state = "ready" if p.available() else f"missing ${p.api_key_env}"
+            if not p.available():
+                state = f"missing ${p.api_key_env}"
+            elif p.local:
+                state = states[name]
+            else:
+                state = "key set (not tested)"
+            confirmed += state == "ready"
             where = "local" if p.local else "cloud"
             print(f"  {name:<24} {where:<6} {state}")
+        for note in notes:
+            print(textwrap.fill(note, width=98, initial_indent="  ", subsequent_indent="    ",
+                                break_long_words=False, break_on_hyphens=False))
+        print(f"{confirmed} of {len(cfg.models)} models confirmed ready; cloud providers are never contacted")
         for line in _facts_lines(cfg):
             print(line)
         return

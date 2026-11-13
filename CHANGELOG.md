@@ -19,6 +19,7 @@
 - `trioditis eval-routes --labels FILE`: measures how often the router picks the route you meant, against a CSV of prompts and expected routes. Prints accuracy with a 95% interval, per route and as a confusion table, for keywords alone and with embeddings. With 20 or more prompts it also tries other `embeddings.threshold` values on half the labels and checks the best on the other half with an exact sign test; only a gain that is unlikely to be chance (p < 0.05) becomes a notebook proposal. It calls no chat model, applies nothing, and its one network call is to your local embeddings provider.
 
 **Fixed**
+- `trioditis check` now asks each local model server (one `GET /models`, 2 seconds) and says per model whether it is `ready`, not on that server (for Ollama: `ollama pull <id>`) or the server is not answering (with its address); it used to print `ready` for every local model even with nothing running. A cloud model with its key set reads `key set (not tested)`: `check` never contacts cloud providers. When every model fails, the 502 message lists the attempts as text (`local-coder: ConnectError`) and, if a local server did not answer, names its address and the fix.
 - `trioditis init` writes `config.yaml` readable by you only, like `.env`. In 0.5.0 other accounts on the computer could read it, and it names your providers and local addresses. A `config.yaml` written by 0.5.0 keeps its mode: `chmod 600 config.yaml`.
 
 ## 0.5.0 (2026-10-31)
