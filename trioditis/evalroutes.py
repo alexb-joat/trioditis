@@ -60,6 +60,7 @@ class Row:
     number: int      # spreadsheet row: the header is row 1
     prompt: str
     expected: str
+    stratum: str = ""   # the optional `stratum` column: a group the report also scores on its own
 
 
 # ---------------------------------------------------------------- reading the labels
@@ -114,6 +115,7 @@ def read_labels(path: str | Path, routes) -> list[Row]:
     if missing:
         raise LabelsError(f"{shown} row 1: no column named {missing[0]!r} (found: {found}); add it to the header row")
     ip, ie = header.index("prompt"), header.index("expected_route")
+    istr = header.index("stratum") if "stratum" in header else None
     rows: list[Row] = []
     first_seen: dict[str, int] = {}
     unknown: list[tuple[int, str]] = []
@@ -136,7 +138,8 @@ def read_labels(path: str | Path, routes) -> list[Row]:
         first_seen[key] = number
         if expected not in routes:
             unknown.append((number, expected))
-        rows.append(Row(number, prompt, expected))
+        stratum = rec[istr].strip() if istr is not None and istr < len(rec) else ""
+        rows.append(Row(number, prompt, expected, stratum))
     if unknown:
         number, bad = unknown[0]
         near = difflib.get_close_matches(bad, list(routes), n=1)
@@ -190,6 +193,7 @@ class Score:
     label: str
     expected: list[str]
     predicted: list[str]
+    strata: list[str] = field(default_factory=list)   # per row, the labels' `stratum` cell; empty when there is no such column
 
     @property
     def n(self) -> int:
@@ -202,6 +206,13 @@ class Score:
     def per_route(self, route: str) -> tuple[int, int]:
         pairs = [(e, p) for e, p in zip(self.expected, self.predicted, strict=True) if e == route]
         return sum(e == p for e, p in pairs), len(pairs)
+
+    def stratum_names(self) -> list[str]:
+        return sorted({s for s in self.strata if s})
+
+    def per_stratum(self, stratum: str) -> tuple[int, int]:
+        hits = [e == p for e, p, s in zip(self.expected, self.predicted, self.strata, strict=True) if s == stratum]
+        return sum(hits), len(hits)
 
     def confusion(self, expected: str, predicted: str) -> int:
         return sum(e == expected and p == predicted for e, p in zip(self.expected, self.predicted, strict=True))
@@ -254,11 +265,33 @@ class Sweep:
 
 
 @dataclass
+class Compare:
+    """Two fixed thresholds on every row: the config's and one named on the command line (no value is picked here)."""
+    current: float
+    other: float
+    current_ok: list[bool]   # per row, right under the config's threshold
+    other_ok: list[bool]     # ... under the other one
+
+    @property
+    def only_current(self) -> int:
+        return sum(a and not b for a, b in zip(self.current_ok, self.other_ok, strict=True))
+
+    @property
+    def only_other(self) -> int:
+        return sum(b and not a for a, b in zip(self.current_ok, self.other_ok, strict=True))
+
+    @property
+    def p(self) -> float:
+        return sign_test(self.only_current, self.only_other)
+
+
+@dataclass
 class Evaluation:
     keywords: Score
     embeddings: Score | None = None
     embeddings_note: str | None = None   # why there is no second row
     sweep: Sweep | None = None
+    compare: Compare | None = None       # set instead of `sweep` when a threshold to compare was named
 
 
 def _order(prompt: str) -> bytes:
@@ -275,7 +308,7 @@ def split(rows: list[Row]) -> tuple[list[Row], list[Row]]:
 
 async def _score(cfg: Config, rows: list[Row], embedder: Similarities | None, label: str) -> Score:
     predicted = [await classify(cfg, r.prompt, embedder) for r in rows]
-    return Score(label, [r.expected for r in rows], predicted)
+    return Score(label, [r.expected for r in rows], predicted, [r.stratum for r in rows])
 
 
 def _skip_reason(cfg: Config, n: int) -> str | None:
@@ -318,8 +351,24 @@ async def _sweep(cfg: Config, rows: list[Row], memo: Memo) -> Sweep:
     return sw
 
 
-async def evaluate(cfg: Config, rows: list[Row], embedder: Similarities | None) -> Evaluation:
-    """Grade the keyword rule, then (when `embedder` answers) keywords plus embeddings and the sweep."""
+async def _compare(cfg: Config, rows: list[Row], memo: Memo, other: float) -> Compare:
+    emb = cfg.embeddings
+    if emb is None:
+        raise ValueError("the comparison needs an embeddings: block")
+
+    async def right(t: float) -> list[bool]:
+        c = dataclasses.replace(cfg, embeddings=dataclasses.replace(emb, threshold=t))
+        return [await classify(c, r.prompt, memo) == r.expected for r in rows]
+
+    return Compare(emb.threshold, other, await right(emb.threshold), await right(other))
+
+
+async def evaluate(cfg: Config, rows: list[Row], embedder: Similarities | None,
+                   compare_threshold: float | None = None) -> Evaluation:
+    """Grade the keyword rule, then (when `embedder` answers) keywords plus embeddings and the sweep.
+
+    With `compare_threshold` the sweep is left out and that one value is scored against the config's on every
+    row: the test for a value that was chosen on other labels, where trying further values would spoil it."""
     ev = Evaluation(keywords=await _score(cfg, rows, None, "Keywords only"))
     if cfg.embeddings is None:
         ev.embeddings_note = ("not graded: this config has no `embeddings:` block. To grade it, add one "
@@ -342,7 +391,10 @@ async def evaluate(cfg: Config, rows: list[Row], embedder: Similarities | None) 
                               "Add a few example prompts to each route and run again")
         return ev
     ev.embeddings = await _score(cfg, rows, memo, "Keywords + embeddings")
-    ev.sweep = await _sweep(cfg, rows, memo)
+    if compare_threshold is None:
+        ev.sweep = await _sweep(cfg, rows, memo)
+    else:
+        ev.compare = await _compare(cfg, rows, memo, compare_threshold)
     return ev
 
 
@@ -378,6 +430,12 @@ def _score_lines(routes: list[str], s: Score) -> list[str]:
     for r in routes:
         k, n = s.per_route(r)
         out.append(f"    {r:<{left}}  {_pct(k, n) if n else 'no rows labelled with this route'}")
+    names = s.stratum_names()
+    if names:
+        left = max(len(x) for x in names)
+        out.append("  per stratum (the `stratum` column of the labels)")
+        for x in names:
+            out.append(f"    {x:<{left}}  {_pct(*s.per_stratum(x))}")
     out.append("  confusion (rows: expected route; columns: predicted route)")
     out += _confusion(routes, s)
     return out
@@ -403,10 +461,35 @@ def _sweep_lines(sw: Sweep) -> list[str]:
     if a + b == 0:
         out.append("  They agree on every row, so the report half cannot tell them apart.")
     else:
-        out.append(f"  Exact sign test on those rows, two-sided: p = {sw.p:.3f}.")
+        out.append(f"  Exact sign test on those rows, two-sided: {_p(sw.p)}.")
         out.append(f"  p < {ALPHA}: a split this lopsided is unlikely to be chance." if sw.p < ALPHA
                    else f"  p >= {ALPHA}: the difference could be chance.")
     return out
+
+
+def _p(p: float) -> str:
+    return "p < 0.001" if p < 0.001 else f"p = {p:.3f}"
+
+
+def _compare_lines(c: Compare) -> list[str]:
+    n, a, b = len(c.current_ok), c.only_current, c.only_other
+    out = ["Threshold comparison (embeddings.threshold; both values on every row, no value is picked here)",
+           f"  current {c.current:.2f}: {_pct(sum(c.current_ok), n)}",
+           f"  other   {c.other:.2f}: {_pct(sum(c.other_ok), n)}",
+           f"  The two settings disagree on {a + b} of the {n} rows: current {c.current:.2f} alone got {a} right, "
+           f"other {c.other:.2f} alone got {b} right."]
+    if a + b == 0:
+        return out + ["  They agree on every row, so these labels cannot tell them apart."]
+    out.append(f"  Exact sign test on those rows, two-sided: {_p(c.p)}.")
+    out.append(f"  p < {ALPHA}: a split this lopsided is unlikely to be chance." if c.p < ALPHA
+               else f"  p >= {ALPHA}: the difference could be chance.")
+    out.append("  This is a fair test only if the other value was chosen on different labels and is the only one tried on these.")
+    return out
+
+
+def _baseline_lines(cfg: Config, s: Score) -> list[str]:
+    hits = sum(e == cfg.default_route for e in s.expected)
+    return [f"Baseline: always the default route ({cfg.default_route})", f"  accuracy {_pct(hits, s.n)}"]
 
 
 def _fit(line: str) -> list[str]:
@@ -422,13 +505,15 @@ def format_report(cfg: Config, ev: Evaluation, labels: str, n: int, config_path:
     out = [f"Route accuracy, {today}", f"labels: {labels}", f"config: {config_path}", f"n = {n} labelled prompts",
            f"current embeddings.threshold: {cfg.embeddings.threshold:.2f}" if cfg.embeddings else "embeddings: not configured",
            "No chat model was called. Every number depends on this label set."]
-    out += ["", *_score_lines(routes, ev.keywords), ""]
+    out += ["", *_baseline_lines(cfg, ev.keywords), "", *_score_lines(routes, ev.keywords), ""]
     if ev.embeddings:
         out += [*_score_lines(routes, ev.embeddings), ""]
     else:
         out += ["Keywords + embeddings", f"  {ev.embeddings_note}", ""]
     if ev.sweep:
         out += [*_sweep_lines(ev.sweep), ""]
+    if ev.compare:
+        out += [*_compare_lines(ev.compare), ""]
     return out
 
 
@@ -506,16 +591,29 @@ def run(cfg: Config, args, *, embedder: Similarities | None = None,
         rows = read_labels(args.labels, cfg.routes)
     except LabelsError as err:
         sys.exit(f"eval-routes: {err}")
+    other = getattr(args, "compare_threshold", None)
+    if other is not None:
+        if cfg.embeddings is None:
+            sys.exit("eval-routes: --compare-threshold needs an `embeddings:` block in the config (see config.example.yaml); "
+                     "add one or drop the option")
+        if not 0 <= other <= 1:
+            sys.exit(f"eval-routes: --compare-threshold {other} is outside 0 to 1; similarities are between 0 and 1, "
+                     f"the config's value is {cfg.embeddings.threshold:.2f}")
+        if abs(other - cfg.embeddings.threshold) < 1e-9:
+            sys.exit(f"eval-routes: --compare-threshold {other:.2f} is the config's own embeddings.threshold; "
+                     "name a different value to compare it with")
 
     async def go() -> Evaluation:
         if embedder is not None or cfg.embeddings is None:
-            return await evaluate(cfg, rows, embedder)
+            return await evaluate(cfg, rows, embedder, other)
         # Only the configured LOCAL embeddings provider is contacted: no redirects, no proxy.
         async with httpx.AsyncClient(follow_redirects=False, trust_env=False) as client:
-            return await evaluate(cfg, rows, Embedder(cfg, client))
+            return await evaluate(cfg, rows, Embedder(cfg, client), other)
 
     ev = asyncio.run(go())
     lines = format_report(cfg, ev, str(args.labels), len(rows), str(getattr(args, "config", "")), today())
+    if other is not None and ev.compare is None:
+        lines += ["Threshold comparison", "  not run: keywords + embeddings were not graded (see above)"]
     if ev.sweep is not None:
         book = Path(args.notebook).expanduser() if getattr(args, "notebook", None) else notebook_path()
         lines.append(propose(cfg, ev, rows, str(args.labels), book, bool(getattr(args, "dry_run", False))))

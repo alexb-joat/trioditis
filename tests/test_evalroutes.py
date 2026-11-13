@@ -519,6 +519,73 @@ def test_labels_are_required_and_help_goes_to_stdout(tmp_path, capsys):
     assert stop.value.code == 0 and "--labels" in out.out and "local embeddings provider" in out.out and out.err == ""
 
 
+# ------------------------------------------------------------------ strata, the baseline, a fixed comparison
+
+def test_a_stratum_column_is_scored_on_its_own_and_a_file_without_one_prints_no_such_block(tmp_path):
+    labels = write_csv(tmp_path / "s.csv", "prompt,expected_route,stratum\n"
+                       "fix my python script,code,plain\n"         # keyword: right
+                       "hello there,quick,plain\n"                 # default: right
+                       "make the loop faster,code,indirect\n"      # no keyword: wrong
+                       "a note to my landlord,writing,indirect\n"  # no keyword: wrong
+                       "python tips,writing,\n")                   # no stratum: counted in the total only
+    cfg = cfg_of(embeddings=None)
+    rows = read_labels(labels, cfg.routes)
+    assert [r.stratum for r in rows] == ["plain", "plain", "indirect", "indirect", ""]
+    ev = asyncio.run(evalroutes.evaluate(cfg, rows, None))
+    assert ev.keywords.stratum_names() == ["indirect", "plain"]
+    assert ev.keywords.per_stratum("plain") == (2, 2) and ev.keywords.per_stratum("indirect") == (0, 2)
+    text = "\n".join(evalroutes.format_report(cfg, ev, "s.csv", len(rows), "config.yaml", "2026-11-13"))
+    assert "per stratum" in text and "plain     2/2 = 100.0%" in text and "indirect  0/2 = 0.0%" in text
+    cfg, rows, ev = graded(tmp_path)
+    assert "per stratum" not in "\n".join(evalroutes.format_report(cfg, ev, "l.csv", len(rows), "c.yaml", "2026-11-13"))
+
+
+def test_the_baseline_is_the_share_of_rows_labelled_with_the_default_route(tmp_path):
+    cfg, rows, ev = graded(tmp_path)
+    lines = evalroutes.format_report(cfg, ev, "l.csv", len(rows), "c.yaml", "2026-11-13")
+    at = lines.index("Baseline: always the default route (quick)")
+    assert lines[at + 1].startswith("  accuracy 1/6 = 16.7%")   # one of the six hand-made rows is labelled quick
+    assert at < lines.index("Keywords only")
+
+
+def test_a_named_threshold_is_compared_on_every_row_and_replaces_the_sweep(tmp_path, capsys):
+    table, labels = sweep_set(tmp_path)   # 20 code prompts right only at 0.48 or lower, 10 quick ones always right
+    emb = FakeEmbedder(table)
+    assert evalroutes.run(cfg_of(), args_for(labels, tmp_path, compare_threshold=0.45), embedder=emb) == 0
+    out = capsys.readouterr().out
+    assert "Threshold comparison" in out and "Threshold sweep" not in out
+    assert "current 0.55: 10/30 = 33.3%" in out and "other   0.45: 30/30 = 100.0%" in out
+    assert "disagree on 20 of the 30 rows: current 0.55 alone got 0 right, other 0.45 alone got 20 right" in " ".join(out.split())
+    assert "p < 0.001" in out and "unlikely to be chance" in out
+    assert len(emb.calls) == 30                              # one question per prompt, both thresholds from memory
+    assert not (tmp_path / "notebook.jsonl").exists()        # a comparison proposes nothing
+
+
+def test_a_comparison_that_could_be_chance_says_so():
+    c = evalroutes.Compare(0.55, 0.45, [True, False, False, True], [False, True, True, True])
+    assert (c.only_current, c.only_other) == (1, 2) and c.p == 1.0
+    assert any("could be chance" in line for line in evalroutes._compare_lines(c))
+    same = evalroutes.Compare(0.55, 0.45, [True, False], [True, False])
+    assert any("cannot tell them apart" in line for line in evalroutes._compare_lines(same))
+
+
+@pytest.mark.parametrize("value, over, parts", [
+    (0.45, {"embeddings": None}, ["--compare-threshold", "embeddings:", "config.example.yaml"]),
+    (1.5, {}, ["--compare-threshold 1.5", "0 to 1", "0.55"]),
+    (0.55, {}, ["0.55", "config's own", "different value"]),
+])
+def test_compare_threshold_errors_name_the_cause_and_the_fix(tmp_path, value, over, parts):
+    with pytest.raises(SystemExit) as err:
+        evalroutes.run(cfg_of(**over), args_for(hand_csv(tmp_path), tmp_path, compare_threshold=value))
+    assert all(part in str(err.value) for part in parts)
+
+
+def test_a_comparison_with_the_embedder_down_says_it_was_not_run(tmp_path, capsys):
+    assert evalroutes.run(cfg_of(), args_for(hand_csv(tmp_path), tmp_path, compare_threshold=0.45), embedder=Down()) == 0
+    out = capsys.readouterr().out
+    assert "Threshold comparison\n  not run" in out and "did not answer" in out
+
+
 def test_the_shipped_label_set_is_valid_and_balanced():
     """tests/fixtures/routes.csv: 100 prompts, 25 per route of the example config, no duplicates."""
     import collections

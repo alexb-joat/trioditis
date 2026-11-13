@@ -82,6 +82,9 @@ def main(argv: list[str] | None = None) -> None:
                     help="the config to grade (default: TRIODITIS_CONFIG or config.yaml; same as the option before the command)")
     ev.add_argument("--notebook", default=None, metavar="FILE", help="where a threshold proposal goes (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
     ev.add_argument("--dry-run", action="store_true", help="show the proposal that would be recorded, write nothing")
+    ev.add_argument("--compare-threshold", type=float, default=None, metavar="VALUE",
+                    help="instead of the sweep, score this embeddings.threshold against the config's on every row "
+                         "(for a value chosen on other labels; nothing is proposed or written)")
 
     h = sub.add_parser("hardware", help="detect hardware and suggest local models (no config change)")
     h.add_argument("--json", action="store_true", help="machine-readable output")
