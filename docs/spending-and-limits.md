@@ -29,8 +29,8 @@ Spend is calculated from `~/.hlidskjalv/prices.json`, the same file Hlidskjalv r
 Rather than typing prices, import them from a provider-facts file, which lists each model's price with the documentation page it came from (for example Euboulia's [`provider-facts.json`](https://github.com/alexb-joat/euboulia/blob/main/src/catalog/provider-facts.json)). Models are matched by the `id` in `config.yaml`; prices of models it does not list are left as they are, and each imported entry keeps its `_source` and `_fetched` date:
 
 ```bash
-python -m trioditis prices import provider-facts.json --dry-run   # show old -> new
-python -m trioditis prices import provider-facts.json
+trioditis prices import provider-facts.json --dry-run   # show old -> new
+trioditis prices import provider-facts.json
 ```
 
 It warns when the facts are more than 30 days old.
@@ -60,10 +60,10 @@ A model that answers `429` is skipped like one that is down, and the next candid
 `trioditis usage` reads the metrics database and prints calls, errors, tokens and spend per group. It needs no config and never writes to the database, so it is safe while the router runs:
 
 ```bash
-python -m trioditis usage                          # last 24 hours, per model
-python -m trioditis usage --since 7d --by client   # per calling tool
-python -m trioditis usage --since month --by day
-python -m trioditis usage --session eval/run-7 --json
+trioditis usage                          # last 24 hours, per model
+trioditis usage --since 7d --by client   # per calling tool
+trioditis usage --since month --by day
+trioditis usage --session eval/run-7 --json
 ```
 
 `--since` and `--until` take `30m`, `24h`, `7d`, `2w`, `today`, `month` or a date (`2026-10-01`). `--by` is `model` (the default), `route`, `provider`, `client`, `session` or `day`. With `--plan` it is `model-effort` (the default), `model`, `effort`, `day`, `source`, `person` or `agent`.
@@ -91,11 +91,11 @@ claude-sonnet     21   5% (1%-23%)              -            -          -
 A subscription (Claude, ChatGPT) has usage meters instead of a bill. To learn how heavy each model and effort really is on those meters, Trioditis can keep a ledger of plan use beside its API calls: `plan_usage` (one row per message) and `plan_meter` (meter readings over time), in the same metrics database. Spend, caps and `trioditis usage` without `--plan` never read them.
 
 ```bash
-python -m trioditis plan import --claude-code --dry-run   # what would be imported, nothing written
-python -m trioditis plan import --claude-code             # token counts from Claude Code's transcripts
-python -m trioditis plan import events.json               # a plan-usage.v1 file (Euboulia exports one)
-python -m trioditis plan import --meter meter.json        # plan meter readings
-python -m trioditis usage --plan --since 7d               # messages and tokens per model and effort, meter rise
+trioditis plan import --claude-code --dry-run   # what would be imported, nothing written
+trioditis plan import --claude-code             # token counts from Claude Code's transcripts
+trioditis plan import events.json               # a plan-usage.v1 file (Euboulia exports one)
+trioditis plan import --meter meter.json        # plan meter readings
+trioditis usage --plan --since 7d               # messages and tokens per model and effort, meter rise
 ```
 
 Without arguments, `plan import` imports what the config's `plan:` section names (`claude_code: true`, `meter_file: PATH`, `person: LABEL`); the Linux daily timer runs it that way before `refit`. Every import can run again: rows are keyed by id, a repeat adds nothing, and a message seen half-written is completed with its final counts. Unchanged transcripts are skipped.

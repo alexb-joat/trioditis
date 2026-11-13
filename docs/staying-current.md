@@ -16,9 +16,9 @@ Next to the model, tokens, cost and latency, every call stores:
 ## The daily refit
 
 ```bash
-python -m trioditis refit --dry-run     # see the result, write nothing
-python -m trioditis refit               # write it
-python -m trioditis refit --json        # the whole fitted document
+trioditis refit --dry-run     # see the result, write nothing
+trioditis refit               # write it
+trioditis refit --json        # the whole fitted document
 ```
 
 `refit` reads the metrics database (read-only), your config, `prices.json` and, if configured, the model facts. It writes two files to `~/.hlidskjalv/`:

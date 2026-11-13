@@ -8,7 +8,7 @@ Autostart per user on Linux, macOS and Windows, and an optional hardened contain
 
 ## Run in the background
 
-Each script installs a per-user autostart (no admin/root), bound to localhost, and has a `--remove` / `-Remove` option.
+Each script installs a per-user autostart (no admin/root), bound to localhost, and has a `--remove` / `-Remove` option. The scripts live in the repository and run Trioditis from its folder, so they need the clone install ([README, step 2](../README.md#quick-start)), not `pipx`.
 
 | OS | Command | Logs |
 |---|---|---|

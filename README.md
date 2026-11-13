@@ -40,17 +40,27 @@
 ollama pull llama3.2:3b && ollama pull qwen2.5-coder:7b && ollama pull nomic-embed-text
 ```
 
-**2.** Install Trioditis. Every package must match the hash in the lockfile:
+**2.** Install Trioditis with [pipx](https://pipx.pypa.io/stable/installation/) and give it a folder:
+
+```bash
+pipx install trioditis
+trioditis init --dir ~/trioditis     # writes config.yaml and .env there (owner-only); never overwrites
+cd ~/trioditis                       # config.yaml, .env and logs/ are read from the current folder
+```
+
+<details>
+<summary>Or from a clone, with every package checked against the lockfile's hashes</summary>
+
+`pipx` installs the newest release of every dependency on the day you run it. The clone installs the exact versions in `requirements.txt` and refuses any file whose hash differs. From a clone, write `python -m trioditis` wherever these pages say `trioditis`.
 
 ```bash
 git clone https://github.com/alexb-joat/trioditis.git && cd trioditis
 python3 -m venv .venv && source .venv/bin/activate    # Debian/Ubuntu: sudo apt install python3-venv
 pip install --require-hashes --no-deps -r requirements.txt
-python -m trioditis init     # writes config.yaml and .env (owner-only); never overwrites
+python -m trioditis init
 ```
 
-<details>
-<summary>Windows (PowerShell)</summary>
+Windows (PowerShell):
 
 ```powershell
 git clone https://github.com/alexb-joat/trioditis.git; cd trioditis
@@ -64,8 +74,8 @@ python -m trioditis init
 **3.** Check and run, the same on every system:
 
 ```bash
-python -m trioditis check     # which local models answer, which cloud keys are set
-python -m trioditis serve     # http://127.0.0.1:8787/v1, localhost only
+trioditis check     # which local models answer, which cloud keys are set
+trioditis serve     # http://127.0.0.1:8787/v1, localhost only
 ```
 
 With the models from step 1 pulled and no cloud keys yet, `check` prints:
@@ -87,7 +97,7 @@ config OK: 9 models, 4 routes
 **4.** Try it:
 
 ```bash
-python -m trioditis explain "Why does my python function raise KeyError?"     # shows the decision, calls no model
+trioditis explain "Why does my python function raise KeyError?"     # shows the decision, calls no model
 curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/json' \
   -d '{"model":"auto","messages":[{"role":"user","content":"Write a regex for UK postcodes"}]}'
 ```

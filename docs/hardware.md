@@ -7,8 +7,8 @@ Which local models fit this computer, and where a local model could take work fr
 ---
 
 ```bash
-python -m trioditis hardware          # readable report
-python -m trioditis hardware --json   # same data as GET /v1/hardware
+trioditis hardware          # readable report
+trioditis hardware --json   # same data as GET /v1/hardware
 ```
 
 Trioditis detects your CPU, RAM and GPU (NVIDIA via `nvidia-smi`, AMD via `/sys`, Apple Silicon via `sysctl`; stdlib only, every probe fails soft), lists the models installed in your local Ollama, and suggests per route where a local model could take work from a paid cloud model — with the reasoning spelled out:
