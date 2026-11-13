@@ -9,7 +9,7 @@ Next to the model, tokens, cost and latency, every call stores:
 - **why the answer ended** (`finish_reason`: `stop`, `length`, `tool_calls`, ...), for streams too;
 - **why no model answered**, when none did (`rate_limited`, `budget_exceeded`, `upstream_error`);
 - **a fingerprint of the conversation** (a hash, never the text), to notice when the same request comes back within 2 minutes;
-- **cached prompt tokens**, where the provider reports them. OpenAI and OpenRouter do. Anthropic's OpenAI-compatible endpoint, which Trioditis uses, has no prompt caching, so Claude calls always pay the full input price there.
+- **cached prompt tokens**, where the provider reports them. OpenAI and OpenRouter do. Anthropic's OpenAI-compatible endpoint, which Trioditis uses, does not support prompt caching ([Anthropic's page](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk), read 13 November 2026), so Trioditis records no cached tokens for Claude calls.
 
 `trioditis usage --outcomes` turns these into rates per model, route, tool or day ([spending-and-limits.md](spending-and-limits.md#usage-reports)).
 
