@@ -120,6 +120,16 @@ Each call records why its answer ended, retries and cache use, so `trioditis usa
 
 Report a vulnerability privately via [SECURITY.md](SECURITY.md). The full design and its limits are in [docs/security-model.md](docs/security-model.md).
 
+## Known limits
+
+- Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model.
+- Every provider is called at its OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters.
+- Trioditis adds no prompt-caching settings of its own to the requests it forwards. It records cached tokens only when a provider reports them.
+- On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](docs/security-model.md)).
+- Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
+- CI does not build the Docker image.
+- Routing accuracy is not yet published.
+
 ## Platforms
 
 | Linux (systemd) | macOS (launchd) | Windows 10/11 (Scheduled Task) |
@@ -140,6 +150,8 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 
 - [x] Daily and monthly spending caps with local fallback
 - [x] Hardware detection and local-model suggestions
+- [x] Routes can prefer the cheapest or fastest model
+- [x] Outcome rates per model, a plan-usage ledger and a daily refit
 - [ ] A small local LLM as an optional classifier for ambiguous prompts
 - [ ] Learn from feedback: per-route model scores from thumbs up and down
 - [ ] Cost and latency budgets per route
