@@ -1305,3 +1305,19 @@ def test_init_writes_a_working_folder_and_never_overwrites(tmp_path, capsys):
     assert "kept" in capsys.readouterr().out
     main(["--config", str(folder / "config.yaml"), "check"])  # the written config is valid as it is
     assert "config OK" in capsys.readouterr().out
+
+
+def test_check_names_a_missing_key_variable_and_never_prints_a_key(tmp_path, capsys, monkeypatch):
+    from trioditis.__main__ import main
+    folder = tmp_path / "router"
+    with pytest.raises(SystemExit):
+        main(["init", "--dir", str(folder)])
+    capsys.readouterr()
+    monkeypatch.chdir(folder)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-MARKER-never-printed")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    main(["--config", str(folder / "config.yaml"), "check"])
+    seen = capsys.readouterr()
+    assert "missing $OPENAI_API_KEY" in seen.out  # the variable to set, by name
+    assert "MARKER" not in seen.out + seen.err  # a key that is set shows only as "ready"
+    assert "ready" in seen.out
