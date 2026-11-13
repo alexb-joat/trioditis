@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/banner-dark.svg">
-  <img alt="Trioditis: one endpoint, the right model for every prompt" src="docs/img/banner-light.svg" width="720">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/banner-dark.svg">
+  <img alt="Trioditis: one endpoint, the right model for every prompt" src="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/banner-light.svg" width="720">
 </picture>
 
 **A security-first router for LLMs.** One OpenAI-compatible endpoint that sends each prompt to the right model, whether local (Ollama), cloud (Claude, GPT, OpenRouter) or legacy, and keeps sensitive prompts on your machine.
@@ -11,7 +11,7 @@
 [![codeql](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml)
 ![python](https://img.shields.io/badge/python-3.11%2B-3776AB)
 ![platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-555)
-[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-green)](https://github.com/alexb-joat/trioditis/blob/main/LICENSE)
 
 [Quick start](#quick-start) &nbsp;·&nbsp; [How it routes](#how-a-request-is-routed) &nbsp;·&nbsp; [Connect your tools](#connect-your-tools) &nbsp;·&nbsp; [Security](#security-at-a-glance) &nbsp;·&nbsp; [Docs](#documentation)
 
@@ -22,8 +22,8 @@
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/routing-dark.svg">
-  <img alt="Clients send requests to Trioditis on 127.0.0.1:8787. It checks privacy, picks a route, filters models and calls with fallback to local, cloud or legacy models." src="docs/img/routing-light.svg" width="880">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/routing-dark.svg">
+  <img alt="Clients send requests to Trioditis on 127.0.0.1:8787. It checks privacy, picks a route, filters models and calls with fallback to local, cloud or legacy models." src="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/routing-light.svg" width="880">
 </picture>
 
 ## Why Trioditis
@@ -118,7 +118,7 @@ Responses carry `X-Trioditis-Route` and `X-Trioditis-Model`. `POST /v1/route` or
 
 | Client | Settings |
 |---|---|
-| **Cline** (VS Code) | Provider *OpenAI Compatible*, base URL `http://127.0.0.1:8787/v1`, model `route/code`. Full recipe, including local-model context: [docs/vscode-cline.md](docs/vscode-cline.md) |
+| **Cline** (VS Code) | Provider *OpenAI Compatible*, base URL `http://127.0.0.1:8787/v1`, model `route/code`. Full recipe, including local-model context: [docs/vscode-cline.md](https://github.com/alexb-joat/trioditis/blob/main/docs/vscode-cline.md) |
 | **Open WebUI, Odysseus, chat UIs** | Add the endpoint `http://127.0.0.1:8787/v1` and pick model `auto` |
 | **OpenAI SDKs** | `OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="<your TRIODITIS_API_KEY>")` |
 
@@ -126,11 +126,11 @@ Trioditis speaks the OpenAI chat-completions format, which most tools support. C
 
 ## Spending and limits
 
-Every cloud call is checked against your daily and monthly caps first (defaults: $1 a day, $15 a month). Over a cap, the route's local model answers instead, so you get an answer, not a bill. `trioditis usage --since 7d --by client` shows what each tool spent. Per-provider caps, provider rate-limit and balance readouts, and call history are in [docs/spending-and-limits.md](docs/spending-and-limits.md). `trioditis hardware` suggests which local models fit your computer ([docs/hardware.md](docs/hardware.md)).
+Every cloud call is checked against your daily and monthly caps first (defaults: $1 a day, $15 a month). Over a cap, the route's local model answers instead, so you get an answer, not a bill. `trioditis usage --since 7d --by client` shows what each tool spent. Per-provider caps, provider rate-limit and balance readouts, and call history are in [docs/spending-and-limits.md](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md). `trioditis hardware` suggests which local models fit your computer ([docs/hardware.md](https://github.com/alexb-joat/trioditis/blob/main/docs/hardware.md)).
 
 ## Staying current
 
-Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](docs/staying-current.md). On a subscription, `trioditis plan import --claude-code` and `usage --plan` show tokens per model and effort next to how far the plan's meters rose, from counts only, never text ([Plan usage](docs/spending-and-limits.md#plan-usage)).
+Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](https://github.com/alexb-joat/trioditis/blob/main/docs/staying-current.md). On a subscription, `trioditis plan import --claude-code` and `usage --plan` show tokens per model and effort next to how far the plan's meters rose, from counts only, never text ([Plan usage](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md#plan-usage)).
 
 ## Security at a glance
 
@@ -144,17 +144,17 @@ Each call records why its answer ended, retries and cache use, so `trioditis usa
 | Open proxy and SSRF | Upstream URLs come only from `config.yaml`; no redirects followed |
 | Supply chain | Actions pinned to commit SHAs, read-only workflows, CodeQL and dependency review on every pull request |
 
-Report a vulnerability privately via [SECURITY.md](SECURITY.md). The full design and its limits are in [docs/security-model.md](docs/security-model.md).
+Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat/trioditis/blob/main/SECURITY.md). The full design and its limits are in [docs/security-model.md](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md).
 
 ## Known limits
 
 - Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model.
 - Every provider is called at its OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters.
 - No prompt caching for Claude models. Trioditis calls Anthropic at its OpenAI-compatible endpoint, and Anthropic's page for it says "Prompt caching is not supported" ([source](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk), read 13 November 2026). For every provider, Trioditis adds no caching settings of its own and records cached tokens only when the provider reports them.
-- On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](docs/security-model.md)).
+- On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md)).
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
 - CI does not build the Docker image.
-- The router picks the right route about two times in three. On 315 held-out prompts it chose the labelled route for 205 (65.1%, 95% interval 59.7–70.1%) on the example config with local embeddings on, and for 116 (36.8%) with keywords alone. Most misses (65 of 110) go to `quick`, the default route, and a miss still gets an answer. The prompts are synthetic and in English; measured 13 November 2026 ([method, data and limits](docs/route-accuracy.md)). Your own routes give a different number: `trioditis eval-routes` measures it.
+- The router picks the right route about two times in three. On 315 held-out prompts it chose the labelled route for 205 (65.1%, 95% interval 59.7–70.1%) on the example config with local embeddings on, and for 116 (36.8%) with keywords alone. Most misses (65 of 110) go to `quick`, the default route, and a miss still gets an answer. The prompts are synthetic and in English; measured 13 November 2026 ([method, data and limits](https://github.com/alexb-joat/trioditis/blob/main/docs/route-accuracy.md)). Your own routes give a different number: `trioditis eval-routes` measures it.
 
 ## Platforms
 
@@ -162,12 +162,12 @@ Report a vulnerability privately via [SECURITY.md](SECURITY.md). The full design
 |---|---|---|
 | Python 3.11+, CI | Python 3.11+, CI | Python 3.11+, CI |
 
-CI runs the unit tests and a real-server smoke test on all three, on Python 3.11, 3.12 and 3.13. To run in the background or in a hardened container, see [docs/deployment.md](docs/deployment.md).
+CI runs the unit tests and a real-server smoke test on all three, on Python 3.11, 3.12 and 3.13. To run in the background or in a hardened container, see [docs/deployment.md](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md).
 
 ## Documentation
 
-- [VS Code with Cline](docs/vscode-cline.md) · [Spending caps and provider limits](docs/spending-and-limits.md) · [Hardware suggestions](docs/hardware.md)
-- [Background service and Docker](docs/deployment.md) · [Security model](docs/security-model.md) · [`config.example.yaml`](config.example.yaml) (providers, models, routes, privacy, limits, logging)
+- [VS Code with Cline](https://github.com/alexb-joat/trioditis/blob/main/docs/vscode-cline.md) · [Spending caps and provider limits](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md) · [Hardware suggestions](https://github.com/alexb-joat/trioditis/blob/main/docs/hardware.md)
+- [Background service and Docker](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md) · [Security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md) · [`config.example.yaml`](https://github.com/alexb-joat/trioditis/blob/main/config.example.yaml) (providers, models, routes, privacy, limits, logging)
 
 **See every decision live:** [Hlidskjalv](https://github.com/alexb-joat/hlidskjalv) reads the decision log (route, model, tokens, never prompts) and shows it next to your files, commands and Git history.
 
@@ -188,8 +188,8 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 
 ## Contributing
 
-Pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`. If Trioditis saves you money or time, the **Sponsor** button at the top of the repository supports it.
+Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/trioditis/blob/main/CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`. If Trioditis saves you money or time, the **Sponsor** button at the top of the repository supports it.
 
 ## License
 
-[MIT](LICENSE). Not affiliated with Anthropic, OpenAI, Ollama, OpenRouter or any model provider; their names refer only to their public APIs.
+[MIT](https://github.com/alexb-joat/trioditis/blob/main/LICENSE). Not affiliated with Anthropic, OpenAI, Ollama, OpenRouter or any model provider; their names refer only to their public APIs.
