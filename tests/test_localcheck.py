@@ -169,3 +169,19 @@ def test_a_server_that_is_not_ollama_never_gets_ollama_advice(tmp_path, capsys, 
 def test_the_suite_probe_is_offline_by_default(tmp_path, capsys):
     out = _run_check(tmp_path, capsys)  # no mock in this test: the autouse fixture answers "refused"
     assert "server not answering" in out
+
+
+def test_the_readme_shows_what_check_really_prints(capsys, monkeypatch):
+    """The Quick start prints `check` output for the models its step 1 pulls and no cloud keys."""
+    from pathlib import Path
+
+    from trioditis.__main__ import main
+    repo = Path(__file__).resolve().parents[1]
+    _fake_network(monkeypatch, lambda r: httpx.Response(200, json={"data": [
+        {"id": "llama3.2:3b"}, {"id": "qwen2.5-coder:7b"}, {"id": "nomic-embed-text:latest"}]}))
+    for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    main(["--config", str(repo / "config.example.yaml"), "check"])
+    out = capsys.readouterr().out.strip()
+    assert out.startswith("config OK") and out in (repo / "README.md").read_text(encoding="utf-8")
+

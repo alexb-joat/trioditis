@@ -68,6 +68,22 @@ python -m trioditis check     # which local models answer, which cloud keys are 
 python -m trioditis serve     # http://127.0.0.1:8787/v1, localhost only
 ```
 
+With the models from step 1 pulled and no cloud keys yet, `check` prints:
+
+```text
+config OK: 9 models, 4 routes
+  local-general            local  ready
+  local-coder              local  ready
+  local-reasoner           local  not on this server: ollama pull deepseek-r1:8b
+  local-vision             local  not on this server: ollama pull llava:7b
+  legacy-mistral           local  not on this server: ollama pull mistral:7b
+  claude-sonnet            cloud  missing $ANTHROPIC_API_KEY
+  claude-haiku             cloud  missing $ANTHROPIC_API_KEY
+  claude-opus              cloud  missing $ANTHROPIC_API_KEY
+  gpt                      cloud  missing $OPENAI_API_KEY
+2 of 9 models confirmed ready; cloud providers are never contacted
+```
+
 **4.** Try it:
 
 ```bash
