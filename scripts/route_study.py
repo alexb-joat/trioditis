@@ -2,6 +2,8 @@
 
     python scripts/route_study.py agreement docs/route-accuracy/labels.csv
     python scripts/route_study.py model-baseline docs/route-accuracy/labels.csv --model llama3.2:3b
+    python scripts/route_study.py heldout docs/route-accuracy/labels.csv --settled docs/route-accuracy/settled.csv \
+        --out tests/fixtures/routes-heldout.csv
 
 `agreement` reads a CSV with two label columns and prints how often the two labellers agree, Cohen's
 kappa with a 95% interval, and a table of who said what. It makes no network call.
@@ -9,6 +11,10 @@ kappa with a 95% interval, and a table of who said what. It makes no network cal
 `model-baseline` asks a LOCAL model server to pick a route for every prompt from the route descriptions
 in the config, and prints how often it matches a label column. The one network call is to --base-url,
 which must be on this machine: every prompt in the file is sent there and nowhere else.
+
+`heldout` writes the label file for `trioditis eval-routes` from one set of the study: the route both
+labellers gave where they agree, and the maintainer's decision (the `decision` column of --settled: a
+route, or `drop`) where they don't. It makes no network call and never runs the router.
 """
 
 from __future__ import annotations
@@ -126,6 +132,49 @@ def model_baseline(args) -> int:
     return 0
 
 
+def heldout(args) -> int:
+    rows = [r for r in read(args.file, ["id", "set", "prompt", "stratum", "borderline", args.a, args.b])
+            if r["set"] == args.set]
+    if not rows:
+        sys.exit(f"route_study: {args.file} has no rows with set = {args.set!r}")
+    routes = sorted({r[args.a] for r in rows} | {r[args.b] for r in rows})
+    decisions = {r["id"]: r["decision"].strip().lower() for r in read(args.settled, ["id", "decision"])}
+    open_ids = [r["id"] for r in rows if r[args.a] != r[args.b]]
+    extra = sorted(set(decisions) - set(open_ids), key=int)
+    if extra:
+        sys.exit(f"route_study: {args.settled} decides row {extra[0]}, but in {args.file} that row is not a "
+                 f"disagreement in set {args.set!r}; remove it from {args.settled}")
+    for i in open_ids:
+        if not decisions.get(i):
+            sys.exit(f"route_study: row {i} has no decision yet; in {args.settled} fill its `decision` cell "
+                     f"with one of {', '.join(routes)}, or drop")
+        if decisions[i] not in (*routes, "drop"):
+            sys.exit(f"route_study: row {i} in {args.settled} has decision {decisions[i]!r}; "
+                     f"use one of {', '.join(routes)}, or drop")
+    out, said = [], Counter()
+    for r in rows:
+        if r[args.a] == r[args.b]:
+            route = r[args.a]
+        else:
+            route = decisions[r["id"]]
+            said["dropped" if route == "drop" else f"with {args.a}" if route == r[args.a]
+                 else f"with {args.b}" if route == r[args.b] else "a third route"] += 1
+            if route == "drop":
+                continue
+        out.append([r["prompt"], route, r["stratum"], r["borderline"]])
+    with open(args.out, "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f, lineterminator="\n")
+        w.writerow(["prompt", "expected_route", "stratum", "borderline"])
+        w.writerows(out)
+    print(f"set {args.set}: {len(rows)} prompts, both labels the same on {len(rows) - len(open_ids)}, "
+          f"{len(open_ids)} decided by the maintainer")
+    for name in sorted(said):
+        print(f"  {name}: {said[name]}")
+    per_route = Counter(row[1] for row in out)
+    print(f"wrote {len(out)} rows to {args.out} ({', '.join(f'{n} {per_route[n]}' for n in sorted(per_route))})")
+    return 0
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -144,6 +193,14 @@ def main() -> int:
     m.add_argument("--by", default="set", help="also report per value of this column (default set; '' for none)")
     m.add_argument("--out", default=None, metavar="FILE", help="also save each prompt and the model's answer as CSV")
     m.set_defaults(run=model_baseline)
+    h = sub.add_parser("heldout", help="write the eval-routes label file from agreed and settled labels (no network call)")
+    h.add_argument("file")
+    h.add_argument("--settled", required=True, metavar="FILE", help="CSV with id and decision (a route, or drop) for each disagreement")
+    h.add_argument("--out", required=True, metavar="FILE", help="where the label file goes (prompt, expected_route, stratum, borderline)")
+    h.add_argument("--set", default="second", help="which set to take (default second)")
+    h.add_argument("--a", default="writer_route", help="first label column (default writer_route)")
+    h.add_argument("--b", default="second_route", help="second label column (default second_route)")
+    h.set_defaults(run=heldout)
     args = p.parse_args()
     return args.run(args)
 

@@ -48,3 +48,45 @@ def test_the_study_record_holds_both_labels_for_every_prompt():
     assert len({r["prompt"] for r in rows}) == len(rows)
     assert sum(r["set"] == "first" for r in rows) == 100
     assert all(r["stratum"] in ("plain", "indirect") for r in rows if r["set"] == "second")
+
+
+STUDY = ("id,set,prompt,stratum,borderline,writer_route,second_route\n"
+         "1,first,old one,,no,code,quick\n"
+         "2,second,\"fix it, please\",plain,no,code,code\n"
+         "3,second,hello,plain,no,quick,quick\n"
+         "4,second,readme,indirect,yes,code,writing\n"
+         "5,second,riddle,plain,yes,reasoning,quick\n"
+         "6,second,which db,indirect,yes,code,reasoning\n")
+
+
+def heldout_args(tmp_path, settled: str):
+    (tmp_path / "l.csv").write_text(STUDY, encoding="utf-8")
+    (tmp_path / "s.csv").write_text("id,prompt,decision\n" + settled, encoding="utf-8")
+    return SimpleNamespace(file=str(tmp_path / "l.csv"), settled=str(tmp_path / "s.csv"), out=str(tmp_path / "h.csv"),
+                           set="second", a="writer_route", b="second_route")
+
+
+def test_heldout_takes_agreed_labels_and_the_maintainers_decisions(tmp_path, capsys):
+    args = heldout_args(tmp_path, "4,readme,Writing\n5,riddle,drop\n6,which db,quick\n")
+    assert rs.heldout(args) == 0
+    assert (tmp_path / "h.csv").read_text(encoding="utf-8") == (
+        "prompt,expected_route,stratum,borderline\n"
+        "\"fix it, please\",code,plain,no\nhello,quick,plain,no\nreadme,writing,indirect,yes\nwhich db,quick,indirect,yes\n")
+    out = capsys.readouterr().out
+    assert "set second: 5 prompts, both labels the same on 2, 3 decided by the maintainer" in out
+    assert "with second_route: 1" in out and "dropped: 1" in out and "a third route: 1" in out
+    assert "wrote 4 rows" in out and "code 1, quick 2, writing 1" in out
+
+
+@pytest.mark.parametrize("settled, said", [
+    ("4,readme,writing\n5,riddle,\n6,which db,code\n", "row 5 has no decision yet"),
+    ("4,readme,writing\n6,which db,code\n", "row 5 has no decision yet"),
+    ("4,readme,prose\n5,riddle,quick\n6,which db,code\n", "row 4 in"),
+    ("2,fix it,code\n4,readme,writing\n5,riddle,quick\n6,which db,code\n", "decides row 2"),
+    ("1,old one,code\n4,readme,writing\n5,riddle,quick\n6,which db,code\n", "decides row 1"),
+])
+def test_heldout_stops_on_an_open_wrong_or_stray_decision_and_writes_nothing(tmp_path, settled, said):
+    args = heldout_args(tmp_path, settled)
+    with pytest.raises(SystemExit) as err:
+        rs.heldout(args)
+    assert said in str(err.value) and not (tmp_path / "h.csv").exists()
