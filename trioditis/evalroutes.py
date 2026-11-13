@@ -42,7 +42,7 @@ from trioditis_metrics.stats import sign_test, wilson
 
 from .config import Config
 from .refit import _append_private, notebook_path
-from .router import Embedder, _classify, last_user_text, tool_names
+from .router import Embedder, EmbeddingsCountMismatch, _classify, last_user_text, tool_names
 
 GRID = range(40, 81, 5)   # the thresholds tried, in hundredths: 0.40 ... 0.80 (integers, so ties never depend on float error)
 MIN_SWEEP_ROWS = 20       # fewer labelled prompts than this cannot be split into halves worth comparing
@@ -381,6 +381,10 @@ async def evaluate(cfg: Config, rows: list[Row], embedder: Similarities | None,
     try:
         for r in rows:  # ask first, so a failure can't pass for a keyword-only answer inside the graded row
             await memo.similarities(request_text(r.prompt))
+    except EmbeddingsCountMismatch as err:  # it answered, but short: grading on that would be quietly wrong
+        ev.embeddings_note = (f"not graded: {err}, so a route would be compared on fewer examples than it has. "
+                              "Run again; if it repeats, that server is not embedding every input it is sent")
+        return ev
     except Exception as err:  # unreachable, a model that isn't pulled, an odd reply: all mean "not graded"
         ev.embeddings_note = (f"not graded: the embeddings provider {cfg.embeddings.provider!r} did not answer "
                               f"({type(err).__name__}). Start it (for Ollama: `ollama serve` and "

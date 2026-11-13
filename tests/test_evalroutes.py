@@ -8,6 +8,7 @@ import random
 from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pytest
 import yaml
 
@@ -15,7 +16,7 @@ from trioditis import evalroutes
 from trioditis.__main__ import main
 from trioditis.config import parse_config
 from trioditis.evalroutes import Candidate, Evaluation, LabelsError, Memo, Row, Score, Sweep, read_labels, split
-from trioditis.router import decide
+from trioditis.router import EmbeddingsCountMismatch, _classify, decide
 
 RAW = {
     "providers": {"local": {"base_url": "http://localhost:11434/v1", "local": True}},
@@ -205,6 +206,36 @@ def test_unreachable_embeddings_keep_the_keyword_row_and_say_so(tmp_path, capsys
     code = evalroutes.run(cfg, args_for(hand_csv(tmp_path), tmp_path), embedder=Down())
     out = capsys.readouterr().out
     assert code == 0 and "Keywords only" in out and "not graded" in out and "Threshold sweep" not in out
+
+
+def short_embedder(cfg):
+    """The real Embedder against a server that returns one vector whatever it is sent."""
+    def handler(request):
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [1.0, 0.0]}]})
+    return evalroutes.Embedder(cfg, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
+
+
+def two_examples():
+    raw_cfg = raw()
+    raw_cfg["routes"]["code"]["examples"] = ["a code example", "another code example"]
+    return parse_config(raw_cfg)
+
+
+def test_a_reply_with_fewer_vectors_than_texts_is_an_error_not_a_grade(tmp_path):
+    cfg = two_examples()
+    with pytest.raises(EmbeddingsCountMismatch, match="returned 1 vectors for 2 texts"):
+        asyncio.run(short_embedder(cfg).similarities("anything"))
+    rows = read_labels(hand_csv(tmp_path), cfg.routes)
+    ev = asyncio.run(evalroutes.evaluate(cfg, rows, short_embedder(cfg)))
+    assert ev.embeddings is None and ev.sweep is None and ev.keywords.n == 6
+    assert "not graded" in ev.embeddings_note and "returned 1 vectors for 2 texts" in ev.embeddings_note
+
+
+def test_the_router_falls_back_to_keywords_on_a_short_embeddings_reply():
+    cfg = two_examples()
+    reasons = []
+    route = asyncio.run(_classify(cfg, "fix my python script", short_embedder(cfg), reasons))
+    assert route == "code" and reasons[0] == "embeddings unavailable (EmbeddingsCountMismatch); keywords only"
 
 
 def test_embeddings_with_no_route_examples_are_not_graded(tmp_path):

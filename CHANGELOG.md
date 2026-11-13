@@ -20,6 +20,7 @@
 - `eval-routes` also prints a baseline (always the default route), accuracy per `stratum` when the label file has that column, and with `--compare-threshold VALUE` tests one threshold against the config's on every row instead of running the sweep.
 
 **Fixed**
+- When an embeddings server returns fewer vectors than the texts it was sent, the router now treats that as "embeddings unavailable" and routes by keywords, and `eval-routes` prints "not graded" with the counts. Before, a route was quietly compared on fewer examples than it has.
 - `trioditis check` now asks each local model server (one `GET /models`, 2 seconds) and says per model whether it is `ready`, not on that server (for Ollama: `ollama pull <id>`) or the server is not answering (with its address); it used to print `ready` for every local model even with nothing running. A cloud model with its key set reads `key set (not tested)`: `check` never contacts cloud providers. When every model fails, the 502 message lists the attempts as text (`local-coder: ConnectError`) and, if a local server did not answer, names its address and the fix.
 - `trioditis init` writes `config.yaml` readable by you only, like `.env`. In 0.5.0 other accounts on the computer could read it, and it names your providers and local addresses. A `config.yaml` written by 0.5.0 keeps its mode: `chmod 600 config.yaml`.
 

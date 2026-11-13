@@ -143,6 +143,10 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (na * nb) if na and nb else 0.0
 
 
+class EmbeddingsCountMismatch(ValueError):
+    """The embeddings server sent back a different number of vectors than texts it was given."""
+
+
 class Embedder:
     """Semantic signal via any OpenAI-compatible /embeddings endpoint (local only)."""
 
@@ -165,6 +169,9 @@ class Embedder:
         )
         r.raise_for_status()
         data = sorted(r.json()["data"], key=lambda d: d["index"])
+        if len(data) != len(texts):  # fewer vectors would compare a route on fewer examples than it has
+            raise EmbeddingsCountMismatch(
+                f"{prov.base_url}/embeddings returned {len(data)} vectors for {len(texts)} texts (model {e.model})")
         return [d["embedding"] for d in data]
 
     async def similarities(self, text: str) -> dict[str, float]:
