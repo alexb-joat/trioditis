@@ -4,8 +4,10 @@ How often does the router pick the route a person would pick? This page holds th
 the results behind every accuracy number Trioditis publishes. The command is
 [`trioditis eval-routes`](staying-current.md#measuring-the-router).
 
-Status, 13 November 2026: the plan below is written down. The second label set does not exist yet, and
-no result on it has been seen.
+Status, 13 November 2026: the plan below was committed first (commit `bb6cf32`). The second set has since
+been written and labelled by two models; see [What has been done](#what-has-been-done). The maintainer
+still has to settle the rows where the labellers disagree, so the threshold test has not run and the
+router has not seen the second set.
 
 ## What is already known (first set, 100 prompts)
 
@@ -81,3 +83,35 @@ fairly.
 - Everything is measured on the example config. Your own routes, keywords and examples give a different
   number; run `eval-routes` on your own labels.
 - One user message per prompt: no conversation history, no tools, no session pin.
+
+## What has been done
+
+Everything here is from 13 November 2026. The files are in [`route-accuracy/`](route-accuracy/).
+
+**Writing.** Four runs of Claude Haiku 5.5 (`claude-haiku-5-5`), one per route, each wrote 80 prompts from
+[`writer-instructions.txt`](route-accuracy/writer-instructions.txt): 320 prompts, 40 plain and 40
+indirect per route, 16 per route marked borderline by the writer. Each run made one tool call, the one
+that saved its file. Five prompts were near copies of an earlier prompt and were removed
+([`removed-near-copies.csv`](route-accuracy/removed-near-copies.csv): one reasoning, four quick), which
+leaves 315: 80 code, 79 reasoning, 80 writing, 76 quick.
+
+**Second labels.** Two runs of Claude Sonnet 5.5 (`claude-sonnet-5-5`) labelled all 415 prompts, half
+each, from [`labeller-instructions.txt`](route-accuracy/labeller-instructions.txt). The prompts were
+shuffled with a fixed seed, and the sheet held an id and the prompt, nothing else.
+
+**Agreement** between the writer's route and the second label
+(`python scripts/route_study.py agreement docs/route-accuracy/labels.csv`):
+
+| Set | Same label | Cohen's kappa (95% interval) |
+|---|---|---|
+| First, 100 prompts | 96/100 | 0.95 (0.89–0.99) |
+| Second, 315 prompts | 308/315 | 0.97 (0.95–0.99) |
+| Both, 415 prompts | 404/415 | 0.96 (0.94–0.98) |
+
+The interval comes from 2,000 bootstrap resamples of the prompts. All 11 disagreements are on prompts the
+writer had marked borderline. Read the kappa with one caution: prompts written to fit a route are clearer
+than what people type unprompted, so two labellers agree on them more easily than they would on real
+traffic.
+
+Both labels for every prompt are in [`labels.csv`](route-accuracy/labels.csv).
+

@@ -1,0 +1,22 @@
+You are writing test prompts for a study of a request router. Do not read any files, do not search, do not run commands. Your only tool call is one Write at the end.
+
+A router sends each user message to one of four routes. These descriptions are everything that defines them:
+
+- code: Writing, reviewing or debugging code
+- reasoning: Math, logic, multi-step analysis and planning
+- writing: Drafting and editing prose
+- quick: Short questions and small talk
+
+Write 80 messages that a real person might type to an AI assistant and that belong on the route "{ROUTE}".
+
+Rules:
+1. 40 messages are "plain": they use the words people usually use for this kind of task. 40 are "indirect": they describe the need without those usual words, so that a reader still sees which route fits but a keyword list would likely miss it.
+2. About 16 of the 80 (spread over both kinds) are "borderline": another route could also be argued, yet "{ROUTE}" is still the best fit.
+3. Vary them: length from three words to a few sentences, tone from terse to chatty, many different subjects and settings (work, study, home, hobbies, travel, money, health, science). Some may include a short pasted snippet or sentence to work on. No two messages about the same thing.
+4. Generic content only: no real people, companies or products' private details; invented names are fine.
+5. English only. Write them the way people type: some lower-case, some casual; no numbering inside the message.
+
+Output: write the file {OUT} as JSON Lines, exactly 80 lines, one object per line, with these keys and nothing else:
+{"prompt": "<the message>", "stratum": "plain" or "indirect", "borderline": true or false}
+
+Then reply with one line: the number of lines written, how many tool calls you made, and your exact model ID if you know it.

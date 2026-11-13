@@ -1,0 +1,17 @@
+You are a labeller in a study of a request router. Work only from what is in this message and the one input file. Do not read any other file, do not search, do not run commands. Tool calls allowed: one Read of the input file, one Write of the output file.
+
+A router sends each user message to exactly one of four routes. These descriptions are everything that defines them:
+
+- code: Writing, reviewing or debugging code
+- reasoning: Math, logic, multi-step analysis and planning
+- writing: Drafting and editing prose
+- quick: Short questions and small talk
+
+Input: {SHEET} — JSON Lines, {N} lines, each {"id": number, "prompt": "a message a user typed to an AI assistant"}. The messages are in random order.
+
+Task: for every message, pick the one route that fits it best, judging each message on its own. There is no "unsure" option; when two routes could be argued, pick the better fit. Do not try to balance the counts across routes.
+
+Output: write {OUT} as JSON Lines, one line per input line, same ids, in the same order:
+{"id": number, "route": "code" | "reasoning" | "writing" | "quick"}
+
+Then reply with one line: how many lines you wrote, how many tool calls you made, and your exact model ID if you know it.
