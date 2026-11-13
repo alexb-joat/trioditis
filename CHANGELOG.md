@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-11-13)
+
+Measured rather than assumed: outcome rates per model, a ledger of plan usage, and the router's accuracy on held-out prompts. The first release on PyPI.
+
+**Install**
+- `pipx install trioditis` is now the Quick start. Installing from a clone, with every package checked against the lockfile's hashes, stays as the second option; from a clone the command is `python -m trioditis`, and the background-service scripts still need the clone.
+- The docs write `trioditis ...` instead of `python -m trioditis ...`.
 
 **Usage reports**
 - `trioditis usage --outcomes`: per model, route, tool or day, the share of calls that failed, of answers cut off at the length limit, of answers asked again within 2 minutes, and of prompt tokens served from cache. Every call-based rate has a 95% interval, and `-` means no data, never zero. `--json` always includes the rates.
