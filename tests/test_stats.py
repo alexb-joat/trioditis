@@ -1,6 +1,6 @@
 import pytest
 
-from trioditis_metrics.stats import beta_mean, ewma, ewma_chart, quantile, ratio_estimate, sign_test, wilson
+from trioditis_metrics.stats import beta_mean, cohen_kappa, ewma, ewma_chart, quantile, ratio_estimate, sign_test, wilson
 
 
 def test_wilson_matches_published_values():
@@ -126,3 +126,22 @@ def test_sign_test_matches_hand_computed_values():
 def test_sign_test_refuses_negative_counts():
     with pytest.raises(ValueError, match="b >= 0"):
         sign_test(-1, 3)
+
+
+def test_cohen_kappa_matches_a_hand_worked_table_and_repeats_exactly():
+    # 50 items: both yes 20, both no 15, first yes / second no 5, first no / second yes 10.
+    # Observed agreement 35/50 = 0.7; chance = 0.5 * 0.6 + 0.5 * 0.4 = 0.5; kappa = (0.7 - 0.5) / 0.5 = 0.4.
+    pairs = [("yes", "yes")] * 20 + [("no", "no")] * 15 + [("yes", "no")] * 5 + [("no", "yes")] * 10
+    out = cohen_kappa(pairs)
+    assert out["kappa"] == pytest.approx(0.4) and (out["n"], out["agree"]) == (50, 35)
+    assert out["lo"] < 0.4 < out["hi"] and 0.1 < out["lo"] and out["hi"] < 0.7
+    assert cohen_kappa(pairs) == out                       # the resampling is seeded
+    assert cohen_kappa(reversed(pairs))["kappa"] == pytest.approx(0.4)
+
+
+def test_cohen_kappa_at_the_edges():
+    assert cohen_kappa([]) is None
+    assert cohen_kappa([("a", "a")] * 5) is None           # one label throughout: no value
+    full = cohen_kappa([("a", "a"), ("b", "b")] * 10)
+    assert full["kappa"] == 1.0 and full["hi"] == 1.0
+    assert cohen_kappa([("a", "b"), ("b", "a")] * 10)["kappa"] == pytest.approx(-1.0)

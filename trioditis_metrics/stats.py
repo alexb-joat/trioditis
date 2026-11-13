@@ -7,7 +7,9 @@ Every rate here comes with its uncertainty: 1 error in 3 calls and 1,000 in
 from __future__ import annotations
 
 import math
+import random
 import statistics
+from collections import Counter
 
 Z95 = 1.959963984540054  # two-sided 95%
 
@@ -41,6 +43,37 @@ def sign_test(b: int, c: int) -> float:
         return 1.0
     tail = sum(math.comb(n, i) for i in range(min(b, c) + 1))
     return min(1.0, 2 * tail / 2 ** n)
+
+
+def _kappa(pairs: list[tuple[str, str]]) -> float | None:
+    n = len(pairs)
+    observed = sum(a == b for a, b in pairs) / n
+    first, second = Counter(a for a, _ in pairs), Counter(b for _, b in pairs)
+    chance = sum(first[c] * second[c] for c in first) / (n * n)
+    return None if chance >= 1 else (observed - chance) / (1 - chance)
+
+
+def cohen_kappa(pairs, resamples: int = 2000, seed: int = 0) -> dict | None:
+    """Agreement between two labellers on the same items, beyond what their label frequencies give by chance.
+
+    `pairs` holds (first label, second label) per item. Kappa is 1 when they always agree, 0 when they
+    agree as often as two labellers with these label frequencies would by chance, below 0 when less. The
+    95% interval is the 2.5th to 97.5th percentile of kappa over `resamples` bootstrap resamples of the
+    items (drawn with a fixed `seed`, so a repeat run prints the same interval). None when there are no
+    items or when both labellers used one and the same label throughout (chance agreement is then 1 and
+    kappa has no value)."""
+    pairs = list(pairs)
+    if not pairs:
+        return None
+    kappa = _kappa(pairs)
+    if kappa is None:
+        return None
+    rng = random.Random(seed)  # noqa: S311  (resampling for an interval, not a secret)
+    n = len(pairs)
+    draws = sorted(k for k in (_kappa([pairs[rng.randrange(n)] for _ in range(n)]) for _ in range(resamples))
+                   if k is not None)
+    lo, hi = (quantile(draws, 0.025), quantile(draws, 0.975)) if draws else (kappa, kappa)
+    return {"kappa": kappa, "lo": lo, "hi": hi, "n": n, "agree": sum(a == b for a, b in pairs)}
 
 
 def quantile(xs, q: float) -> float | None:
