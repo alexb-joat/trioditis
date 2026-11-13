@@ -66,7 +66,7 @@ python -m trioditis usage --since month --by day
 python -m trioditis usage --session eval/run-7 --json
 ```
 
-`--since` and `--until` take `30m`, `24h`, `7d`, `2w`, `today`, `month` or a date (`2026-10-01`). `--by` is `model`, `route`, `provider`, `client`, `session` or `day`.
+`--since` and `--until` take `30m`, `24h`, `7d`, `2w`, `today`, `month` or a date (`2026-10-01`). `--by` is `model` (the default), `route`, `provider`, `client`, `session` or `day`. With `--plan` it is `model-effort` (the default), `model`, `effort`, `day`, `source`, `person` or `agent`.
 
 **Per tool.** Each call records the calling tool's name: the `X-Trioditis-Client` header when a client sets one, else the first word of its `User-Agent` (`ninshubur/0.1 …` → `ninshubur`, `curl/8.5` → `curl`). Tools built on a shared library show that library's name; Cline, for example, sends `ai-sdk/openai-compatible/…` and appears as `ai-sdk`.
 
