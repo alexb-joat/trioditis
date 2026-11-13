@@ -1,0 +1,8 @@
+id,prompt,writer_route,second_route,decision
+17,whats the best strategy to solve a sudoku when ive been stuck on the same square for ages,reasoning,quick,quick
+20,solve this riddle: what has keys but can't open locks,reasoning,quick,quick
+71,"proofread the docstrings in my utils.py, they're full of typos and half sentences",code,writing,writing
+240,write a plain-English explanation of my school timetable generator for the teacher who'll maintain it,code,writing,writing
+277,"write a readme for my python tool, install and usage sections, it's a csv cleaner",code,writing,writing
+372,one line I can use to decline a meeting?,quick,writing,quick
+381,should the workout log I'm building keep its data on the phone or in a file on my laptop? trade-offs please,code,reasoning,reasoning
