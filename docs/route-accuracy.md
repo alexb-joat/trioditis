@@ -115,3 +115,18 @@ traffic.
 
 Both labels for every prompt are in [`labels.csv`](route-accuracy/labels.csv).
 
+**The local-model baseline.** `llama3.2:3b` (Q4_K_M, on a local Ollama, temperature 0, seed 0) was given
+the four route descriptions and asked for one word per prompt
+(`python scripts/route_study.py model-baseline docs/route-accuracy/labels.csv --model llama3.2:3b --label writer_route`).
+Every reply held a route name. Its answers are in
+[`baseline-llama3.2-3b.csv`](route-accuracy/baseline-llama3.2-3b.csv).
+
+| Set | Right | 95% interval (Wilson) |
+|---|---|---|
+| First, 100 prompts (final labels) | 48/100 | 38.5–57.7% |
+| Second, 315 prompts (writer's label; 7 rows not yet settled) | 205/315 | 59.7–70.1% |
+
+On the second set it got 103/155 plain and 102/160 indirect prompts right, and by route 58/80 code,
+59/79 reasoning, 63/80 writing and 25/76 quick: it rarely answers `quick` (39 of its 415 answers). The
+second-set row will be scored again on the final labels; at most 7 rows can change.
+

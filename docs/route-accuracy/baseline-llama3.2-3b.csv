@@ -1,0 +1,440 @@
+prompt,model_route
+"docker build fails with 'no matching manifest for linux/arm64', what do i change in the Dockerfile",reasoning
+"write pytest tests for def add_tax(price, rate): return price * (1 + rate)",code
+"debug this: const total = items.reduce((a, b) => a + b.price); gives me NaN",code
+"my little maze generator makes walls that don't connect to anything, some corners are floating",code
+"what's the cleanest way to show that if a number's digits add up to a multiple of 3, the number itself is divisible by 3?",reasoning
+"resignation note to my team, leaving on good terms, five lines max",code
+is ibuprofen ok to take on an empty stomach,reasoning
+the sheet that emails my team every Monday is sending to people who already unsubscribed,code
+"regex for ISO dates like 2026-11-13 that rejects month 13 and day 45, python",code
+a basketball player hits 60% of her free throws. what are the odds she makes exactly 3 of 5?,reasoning
+"my mom's moving into assisted living and I want the letter to the family group chat to sound kind, not like a plan",writing
+"post about finishing my first marathon, humble not braggy, for a professional networking site",writing
+my photo sorting thing puts everything in one folder and files with the same name overwrite each other,code
+"python function returns None instead of the list, why?",code
+my thesis bibliography lists the same paper twice under two spellings of the author's name,reasoning
+"getting this when I run it:
+TypeError: 'NoneType' object is not subscriptable
+  File ""app.py"", line 14, in main
+    name = data[""user""][""name""]
+no idea where the None comes from",code
+whats the best strategy to solve a sudoku when ive been stuck on the same square for ages,reasoning
+"write a short bedtime story about a shy octopus, for a 5 year old",writing
+my mileage log double-counts fuel stops when I import from the bank app,code
+solve this riddle: what has keys but can't open locks,code
+what does 'let's circle back' actually mean from my boss,reasoning
+"how far is the moon from us, roughly, in km",code
+"write a birthday poem for my mom, she likes gardening and bad puns",writing
+caption for the photo of my dog stealing a whole pizza off the counter,writing
+solve the inequality |2x - 5| < 9 and tell me the interval,reasoning
+powershell script to find every file over 1 GB on my C drive,code
+"which is bigger, 2^50 or 3^30, and how can I tell without a computer",reasoning
+is it true goldfish only have a three second memory,code
+"if a train leaves at 14:20 going 85 km/h and another leaves the same station 40 minutes later going 110 km/h, when does the second catch up",reasoning
+"is there a faster way to find primes up to a million in python, my loop takes forever",code
+"what's the deal with the afternoon nap in spain, is it a real thing",reasoning
+"pitch paragraph for our community radio crowdfunding page, we need 2000 euros for a new transmitter",code
+"my kid's school sent a notice about phones and I want to tell the principal I disagree, but calmly. put it in a few lines",writing
+"prove that the sum of the first n odd numbers is n squared, step by step please",reasoning
+why is my excel vba macro throwing subscript out of range,code
+"I'm just bored, keep me company for a sec",quick
+"Write a short speech for my dad's retirement party, he worked at the same factory 31 years",writing
+"my bread came out dense again, is that the yeast or me",code
+why does my brain go blank in exams,reasoning
+quick question about my lease: what's a security deposit,quick
+"haiku about a delayed train, dry humour",writing
+"rent is 1100 a month, buying is 180k with 20% down plus property tax and fees. which one comes out cheaper over 7 years?",reasoning
+why do my socks always disappear in the wash,quick
+I want my habit tracker to remember streaks even after I close the browser tab,code
+rephrase for a ten year old: photosynthesis is the process by which plants convert light energy into chemical energy,writing
+the words in my anniversary card feel generic. the couple has been together 30 years and I want it to sound like me,writing
+"I need a welcome note for new hires at my shop, the first week schedule is on the back",writing
+prove that a tree with n nodes always has n-1 edges,reasoning
+"recommend a history podcast, not too long",writing
+"the tip split for our dinner bill is off by a cent every time, I think the rounding is the problem",reasoning
+"my kid asked if the sun is a star or a planet, what do i tell her",writing
+nine people shake hands once with each other at a dinner. how many handshakes happen?,reasoning
+"c# async method never returns, the await hangs forever",reasoning
+remind me which ocean sits between africa and australia,reasoning
+write me a makefile for a c project with separate test and clean targets,code
+"bake sale: 120 cookies, each sells for 1.50, costs 0.40 each to make, and we owe 90 for the stall. how many do we need to sell to break even?",code
+"good night, talk tomorrow",quick
+what's a good name for a grey tabby cat,writing
+the first line of the tale I'm telling my students needs work. it's about a lighthouse keeper who finds a bottle with a letter from 1911,writing
+can you proofread my cover letter for a warehouse job? my english is decent but i always mess up the commas,writing
+every morning at 8 I want my laptop to open these five sites and my calendar on its own,code
+"write the about page for our family wine shop, open since 1987, my uncle still does the tastings",writing
+tell me something interesting about octopuses,reasoning
+quick question: what's the capital of australia?,quick
+"I'm nervous about my driving test, say something that calms me down",quick
+is it rude to leave a party early,quick
+dog walking tagline pls,writing
+"groupby sum returns NaN for every group after my merge, the columns look fine when I print them",reasoning
+"our churn rose 4 points after the pricing change. what else could explain it, and how would you test each one?",reasoning
+the thing that texts me when my plant needs water keeps texting every minute instead of once a day,quick
+"proofread the docstrings in my utils.py, they're full of typos and half sentences",writing
+"tipping in japan, do I even have to",quick
+the setlist timing sheet for my gig: I want to know how long the whole show runs,code
+"my kid asked why the moon looks bigger near the horizon. i think it's an illusion, but how would we actually test that at home?",reasoning
+my partner keeps leaving the bins full. I want a sticky note for the kitchen door that's firm but funny,writing
+"in the little game I'm making, when the ball hits the corner of the paddle it goes through the wall",code
+anyone else miss summer or is it just me,quick
+my balcony sensor is reporting fine but the graph I made shows a flat line,code
+is it normal to feel tired after a long flight,reasoning
+make this less robotic: The system processes requests in O(n) time and returns a JSON object to the caller.,code
+"my office coffee machine says descale, what does that even mean",quick
+is it worth going to bed at 11 if I have to get up at 6,quick
+i rode 42 km in 2 h 15 min with two 10 minute breaks. what was my moving average?,reasoning
+"if the forecast says 40 percent chance of rain and I see it three days in a row, is it likely to rain at least once",reasoning
+"help me write a grant abstract for a community garden project, 250 words max",writing
+how many ways can 5 people sit around a round table if two of them refuse to sit next to each other,reasoning
+my cousin says the restaurant bill came to 84 including a 15% tip on a 70 pre-tip total. do the numbers add up?,reasoning
+"i earn 52k a year and my brackets are 0-10k at 0%, 10-40k at 20%, and 40k+ at 35%. what's my effective rate?",reasoning
+"job offer A pays 70k with 2 weeks off, offer B pays 65k with 5 weeks and a 40 min shorter commute, lay out the trade-offs and which wins if I value time more",reasoning
+"what's the time complexity of python's sorted() when the list is already sorted, and does it change for reversed lists",reasoning
+walk me through solving x + y = 10 and 2x - y = 8,reasoning
+the puzzle leaderboard shows tied scores in random order and I want ties sorted by time,reasoning
+"explain why the average of a set of numbers can be higher than most of the numbers in it, give an example",reasoning
+"I need a paragraph for my climbing club's website explaining the bouldering wall rules, friendly but firm",code
+"logic question: all cats are animals, some animals are pets, so are some cats pets? yes or no and why",reasoning
+"cannot borrow v as mutable because it is also borrowed as immutable: let first = &v[0]; v.push(4); println!(""{}"", first);  why",reasoning
+"write an apology text to my roommate for eating his leftovers, keep it light",writing
+express route returns 404 for /api/items even though I defined it,code
+"work out the NPV of a project costing 40k up front that pays 12k a year for 5 years, with a discount rate of 8%",code
+is the hermitage worth a whole afternoon,writing
+"phone's at 20 percent, plugged in now, how long till it's full",code
+"why does the monty hall switch win two thirds of the time, talk me through it",reasoning
+"compare these three apartments by cost, commute and sunlight, weighted by my priorities",reasoning
+"toast for my friend's 30th, she loves old movies and bad puns, under a minute out loud",writing
+help me write a thank you note to my old teacher who got me into chemistry,code
+"write a complaint letter to an airline about a lost suitcase, I'm still waiting after 9 days",code
+"my sister's wedding toast, two minutes, funny then sincere",writing
+"my sourdough starter doubles about every 7 hours at room temp. starting from 40 g, when does it reach 500 g?",reasoning
+my therapist suggested I put down what I'd say to my brother. can you help turn my messy notes into the actual words,writing
+does drinking cold water actually burn more calories,code
+"draft meeting minutes from this list: budget approved, hiring delayed to March, office move in June",writing
+"my portfolio went up 18% then down 18%. am i even, and what if the order were flipped?",reasoning
+refactor this if/elif chain into a dict lookup: if day == 'mon': price = 5 elif day == 'tue': price = 6 elif day == 'wed': price = 7,reasoning
+the grade sheet I use for my class: averages are right but the letter grade column never changes,code
+"need a 3-day hiking trip for 4 people, budget 600, one person can only do 8 km a day, is there a plan that fits",writing
+implement binary search in rust with generics,code
+write a js function that computes compound interest over 10 years and show the working,code
+what time zone is Lisbon in,reasoning
+that German word for missing a place you've never even been to,code
+best way to store fresh basil,writing
+"95% confidence interval for a sample mean of 52, sd 8, n = 36",reasoning
+"is a list comprehension actually faster than a for loop with append, or is that folklore",reasoning
+expected number of coin flips until you get two heads in a row,reasoning
+"parse json from an http response in swift, the decoder throws",code
+make a todo app in vanilla javascript with localStorage,code
+what's the difference between a latte and a flat white,writing
+"turn these bullets into one paragraph for our newsletter:
+- shipped offline mode
+- fixed sync conflicts
+- next up: push notifications",writing
+what's a good name for a golden retriever puppy,writing
+is this argument valid? 'if it rains the grass is wet. the grass is wet. so it rained.',reasoning
+"the funny opening line for my friend's divorce party invitation, nothing mean",writing
+java: why does my HashMap lookup return null even though I put the key in,code
+how long do I boil an egg for a soft yolk,code
+how do I parse a csv in go when some fields have commas inside quotes,code
+tell me a fun fact about tardigrades,reasoning
+"what does git rebase -i HEAD~3 actually do, my branch looks weird",reasoning
+solve 2^(x+1) = 64 with the working shown,code
+is 2026 a leap year,code
+"three things my clients actually said about me: fast, polite, left no dust. turn them into something that sounds like a person, not an ad",writing
+"just got off the train, all good, you?",quick
+what's 17 times 23,reasoning
+"drawing two reds in a row without replacement has probability 1/3, ten marbles in the bag, how many are red",reasoning
+why is the sky blue,quick
+"thanks, that helped a lot",quick
+the sign-up text for our bus lane petition is too dry. make it land with ordinary people on the street,writing
+"my brain hurts, convince me that 0.999... equals 1",reasoning
+my manager keeps saying my update was unclear. could you make the note i left in the shared doc read cleaner so the next person knows what changed,writing
+i'm weighing a used car for 8k now against a newer one at 11k with lower repairs for 4 years. lay out the numbers so i can see which is better,code
+"tighten this so it stops rambling: Our team has been working really hard over the past few months on making onboarding better for new people, and we think we have made some progress.",code
+what's the bird that sings all night in europe,reasoning
+the menu on my site hides behind the logo on phones and I can't reach the links,code
+"my resting pulse is 62 and max is roughly 220 minus my age. i'm 34, so if i want to train at 60-70% of max, what's my range?",reasoning
+plan a 3 day stay in krakow for two people on a total budget of 400 euros,writing
+"short apology to a customer whose order arrived two weeks late, no excuses, offer 15 percent off",quick
+"our sprint has 34 points of work, each dev does about 6 a day, there are four devs and five days, and one is out for two days. will we finish?",reasoning
+how long to pay off 12k of credit card debt at 24% APR if i pay 350 a month?,code
+what currency do they use in peru,reasoning
+anything fun to do in Belgrade on a rainy day,writing
+"my friend in hungary keeps saying jo napot, what does it mean",quick
+my physics homework says 'the ball rises for 2 seconds so the height is 19.6 m'. is my logic right?,reasoning
+plural of cactus?,code
+"trail guide intro for our hiking group, the kind you read in the parking lot while nervous about the climb",writing
+"lab is open Mon-Fri, sample arrives Tuesday, results take 3 working days, sent Friday afternoon, when are results due",code
+the bus comes every 12 min from the station and my friend's bus every 18 min. after how long do they both show up at the same time?,reasoning
+knapsack problem: solve it for these 5 items (weights and values listed below) with a 10 kg limit,code
+"explain why the monty hall problem says switching wins, i still don't get it",reasoning
+my flask route 500s only when the json body is missing the id key: @app.post('/items') def add(): item_id = request.json['id'],code
+"ok so why does my app's clock show a different time on the laptop than on the phone, explain it simply",quick
+i want a syrup at 60% sugar by weight and i've got 800 g total. how much sugar and how much water?,code
+"product blurb for a handmade ceramic mug, glossy blue glaze, dishwasher safe, 2 to 3 sentences",writing
+"gym: 40 a month or 350 for the year, and i plan to go three times a week. which is cheaper per visit?",code
+prove that the sum of two odd numbers is always even,reasoning
+"river puzzle: farmer, wolf, goat, cabbage, and a boat that holds only one. what are the steps?",reasoning
+"two old friends meet at a train station after ten years, quiet and a bit awkward, dialogue only",code
+"can you review my flask login route, i think the password check is wrong.",code
+how many days in a leap year,reasoning
+how likely is it that at least two people in a room of 23 strangers share a birthday?,reasoning
+"2000 at 5 percent compounded yearly vs 5 percent simple interest, after how many years is the gap over 500",reasoning
+write a regex that matches UK postcodes,code
+"edit my resignation letter, I want it short and not bitter",writing
+"i've flipped heads five times in a row, what are the chances the next five are all tails?",reasoning
+what does APR mean on a loan,code
+derivative of x^3 * sin(x),reasoning
+my vinyl list counts 'Radiohead' and 'radiohead' as two different bands,code
+rework the opening of my blog post so it hooks in two sentences: Today I want to talk about moving to a new city and what I learned about making friends as an adult.,writing
+"set up a weekly study schedule for my linear algebra exam in 3 weeks, 6 hours a week",reasoning
+"the apology from our cafe for the cold soup last tuesday, a real one not a corporate one",writing
+"something to listen to while I cook dinner, podcasts maybe",writing
+A children's museum needs the text for a board about how bridges hold weight. Kids 8 to 10. make it fun,writing
+"crocodile vs alligator, what's the difference",quick
+shorten this abstract to 150 words and keep the main result: We propose a lightweight method for tagging support tickets that cuts manual triage time by a third on three internal datasets.,code
+"in my mystery draft the butler was in the study at 9, the gardener was seen near the cellar, and the cook was out of the house until 10. which suspect could have been in the house at 9?",reasoning
+can u write a tweet thread about why bees matter? 5 tweets,writing
+draft a press release for our bakery opening next saturday,writing
+"my react useEffect keeps firing forever, the dependency array is [user] and user is a fresh object every render. whats the usual fix",reasoning
+why does 2 + '2' give me '22' in the little calculator I wrote for my kid,reasoning
+"the copy for the flyer that goes in the mailboxes about the water shutoff on tuesday, short and clear",writing
+write a memorial plaque inscription for the bench we put in the park for my grandfather,writing
+"jest test passes on my laptop but fails in CI, why",reasoning
+"help me say no to a wedding invite without sounding rude, I just can't afford the trip",writing
+should i pay down my 6% student loan early or put the 2000 bonus into savings at 4%? run the numbers,reasoning
+"each unit costs 7 to make, sells for 15, and fixed costs are 900 a month. when do i break even, and what if i drop the price to 13?",code
+"The little tracker I made for running splits: every time I add a lap, the average goes down instead of up. Why?",reasoning
+what do you call a group of crows,reasoning
+"help me write a toast for my sister's wedding, she's marrying a guy who is super into camping",writing
+why does my python loop skip the last element when I use range(len(items) - 1),code
+what's 15% of 80,reasoning
+make my recipe page scale the ingredient amounts when I change servings from 4 to 6,code
+"crashes when I erase items from a vector inside a range-based for loop, what's the right pattern",reasoning
+speed of sound?,quick
+my board game timer hits zero and then keeps going into negative numbers,code
+"four people, five projects, and nobody can take more than two. is there any way to staff all of them without anyone doubling up in the same week?",reasoning
+"three friends split a 137 euro bill, Ana had two cocktails so she pays 10 more than each of the others, what does each person pay",code
+explain what this line does: x = [y for y in range(10) if y % 2],reasoning
+"my kid's teacher asked for a paragraph about what our family does for holidays. nothing fancy, lots of food, some chaos",writing
+"explain photosynthesis to my niece in a few lines she'll enjoy reading, she's 9",writing
+"my cron job runs but the output file is always empty, debug it with me",code
+Draft a short email to my landlord asking when the boiler will be fixed. Keep it polite.,writing
+how many ounces in a cup,code
+make this more confident: The results were kind of interesting and maybe suggest something.,reasoning
+"should I take vitamin D in winter, honest answer",reasoning
+rewrite the description of our tacos on the menu so it doesn't sound like a chain restaurant,writing
+my study group needs a short message reminding everyone the exam moved to thursday and to bring calculators,code
+is 17 x 24 really 408? check it step by step,reasoning
+best knot for tying a tent line,quick
+"#!/bin/bash
+cp $1 $2
+rm $1
+
+I want this to stop at the first failure and say which step broke",code
+can you make the chess clock on my site stop counting once someone's flag falls,code
+"friendly reminder to the volunteers that the Saturday shift starts at 9 not 10, warm not bossy",writing
+"I need something to hand my neighbor that says the fence is mine to fix, I'm sorry about the mess, and it'll be done by sunday",code
+roughly what's the population of iceland,reasoning
+"write a reference letter for my former intern, she was fast and careful with client data",writing
+"a bakery with 3 ovens, each batch takes 40 min, and 6 orders of different sizes. what order gets everything out fastest?",code
+boiling point of water in fahrenheit?,code
+write a bash script to rename every .jpeg in a folder to .jpg,code
+"rope burns unevenly and takes an hour to burn fully, how do I time 45 minutes using two of them",code
+Write dialogue for two characters arguing about who forgot to lock the greenhouse,code
+is it fine to scrape the fuzz off my jam and keep eating it,writing
+"I'm sending a little news to my scattered college friends about the baby. group chat voice, a few sentences",writing
+tell me a joke about cats,writing
+"startup spends 12k a month, has 80k in the bank, revenue starts at 5k and grows 8 percent a month, when does cash run out",reasoning
+write a plain-English explanation of my school timetable generator for the teacher who'll maintain it,writing
+what does 'ephemeral' mean,reasoning
+"docker build dies at the pip install step with 'No matching distribution found for numpy==2.9', any idea why",reasoning
+synonym for happy?,reasoning
+"the bike lock code is three digits. the digits add to 14, the first digit is double the last, and the middle digit is 5. what are the options?",code
+"tailwind grid isn't responsive on mobile, the cards don't stack",code
+pasted: 'me and him went to the shop yesterday' - that sound right?,quick
+write a script for a 60-second youtube video about budget travel in Georgia (the country),writing
+how do you say good morning in portuguese,writing
+"paste in my hike's GPX file and get the total distance back, that's the whole idea",code
+"my roommate, me and a third flatmate each said one thing about who ate the last cookie. dan: 'it wasn't me'. eli: 'dan did it'. fran: 'eli is lying'. exactly one of them is telling the truth. so who ate it?",reasoning
+"add a dark mode toggle to my css site, the stylesheet starts with body { background: white; }",code
+I run a tiny hostel in a mountain village and guests keep asking how to get to the trailhead. put the directions into something friendlier for the welcome folder,writing
+"my travel journal entry from the Lisbon trip rambles. get it to a nice short page for the family, keep the details",writing
+who wrote pride and prejudice,code
+"shop marks cost up 40 percent then takes 20 percent off the marked price, net change vs cost",reasoning
+is 'utilize' ever better than 'use' or is it always filler,reasoning
+"write a character backstory for my dnd rogue, she grew up on canal boats",code
+"6 tasks with durations and dependencies between them, what order minimizes total time?",reasoning
+how many letters are in the greek alphabet,reasoning
+what's the name of the big bone in the upper arm,code
+should I drink water before coffee or after,code
+"draft a newsletter intro for our book club, we read a lot of translated fiction this year",writing
+write a cold open for a podcast episode about ghost towns,code
+volume of a cone with radius 3 cm and height 10 cm,code
+"lovely weather today, isn't it",quick
+my grandma's 90th is saturday and everyone's going to look at me to say a few words. she taught me to make pierogi and to swear in polish,writing
+my pottery site's front page feels cold. I want it to sound like me talking to someone at my kitchen table,writing
+TS says property 'email' does not exist on type 'User' even though my interface has it: interface User { id: number; name: string } and then u.email,reasoning
+"bio for conf talk, short. im a nurse who got into data analysis",writing
+"scrape web titles python, save to csv",code
+"the nightly backup on my home server copies the whole disk and fills it up, I only want the files that changed",code
+why do leaves change colour before they fall,reasoning
+two job offers: one pays more but the commute eats 90 minutes a day. which one leaves me better off after three years?,reasoning
+"I have 4,000 bank transactions in a file and want each one tagged groceries, rent or fun automatically",code
+"my react useEffect runs forever, how do i stop the infinite loop",code
+does python's dict keep insertion order by guarantee or just because cpython happens to do it,reasoning
+"write a readme for my python tool, install and usage sections, it's a csv cleaner",code
+"a bat and a ball cost 1.10 total, the bat costs 1.00 more than the ball, what does the ball cost",reasoning
+how do I write a SQL trigger that logs deletes into an audit table,code
+"where's the highest waterfall in the world, roughly",reasoning
+my neighbour's dog barks at 6am every single day. we've been polite about it for months. how do people usually deal with that,reasoning
+my site keeps showing the old logo after I swapped the image file,code
+"need a product description for my candles, they're soy wax with cedar and smoke notes",writing
+"left join on orders gives me duplicate customer rows: SELECT c.id, o.total FROM customers c LEFT JOIN orders o ON o.customer_id = c.id JOIN regions r ON r.id = c.region_id",reasoning
+"my laptop battery readings at three brightness levels show drain of 4%, 7% and 13% per hour. what's the pattern and what do you predict at full brightness?",reasoning
+"my coworker Dana says no worries all the time, is that british or american",quick
+edit this for clarity: 'The implementation of the new protocol was not without issues which were encountered.',writing
+"getting TypeError: cannot read properties of undefined in my node app, what's going on",code
+"how do I tell my neighbour the bass from his party kept me up, without starting a war, keep it under 4 lines",quick
+"fix grammar and tone but keep the meaning: 'Their going to the market tomorow, we was hoping to see you there.'",writing
+"explain to my bank in a few lines why the 35 euro fee was unfair, I don't want to lose my temper",reasoning
+good morning!!,quick
+I keep stalling on telling my landlord the rent will be late. how do I phrase it so it doesn't sound like begging,code
+the dice roller for my tabletop game should show the odds of rolling a 7 on two dice when I press roll,code
+how much caffeine is in a can of coke,quick
+how many calories in a banana,quick
+"every employee who works weekends gets a bonus, Mira works weekends and got no bonus, what follows",reasoning
+github actions yaml fails with 'mapping values are not allowed here' on line 9,code
+what's the thing called when two notes sound together,reasoning
+"scratch card pays 50 once in every 200 tickets and costs 2, is it worth it on average",reasoning
+"garden stone for my cat, something a kid would smile at when they walk past",writing
+what's the weather usually like in lisbon in november,reasoning
+"you're pretty funny, you know that",writing
+"fuel for a 640 km drive, my car uses 7.4 l per 100 km, and i want a 15% margin. how many litres should i bring?",code
+"if i put 300 a month into an account that grows about 4% a year, how long until i have 10k sitting there?",reasoning
+what's the difference between affect and effect,code
+"c program won't compile: 'expected ; before }' on line 14, what's wrong",reasoning
+Write an email to my team explaining the new shift schedule. Keep it under 150 words.,writing
+quick q: is a tomato a fruit,quick
+my monthly spending page has a blank row for March even though I have March data,code
+Write the opening paragraph of a mystery novel set on a ferry,code
+"12 drawers, each holds either 2 or 5 pens, 54 pens total, how many drawers hold 5",reasoning
+quiz page for my students marks wrong answers as correct when they type extra spaces,code
+do these two statements conflict? 'nobody on the team skipped the meeting unless they were sick' and 'ana skipped and she wasn't sick',reasoning
+sql query to get the top 5 customers by total order value please,code
+summarize my notes on the 1918 flu into one paragraph for my history class,writing
+"five tasks:
+1 before 3
+2 before 4
+5 after both 3 and 4
+each takes a day, two people, fastest finish?",code
+I want the scene where the two sisters finally talk about the farm to hit harder. they keep saying nothing,code
+"bill of 96 euros for 4 people. two of us had 12 euros extra in drinks, the rest was shared evenly. what does each person owe?",reasoning
+"refactor this so it stops repeating itself:
+if x == 1:
+    print('a')
+elif x == 2:
+    print('b')
+elif x == 3:
+    print('c')",code
+"short note to my landlord saying the boiler is broken again and I'd like someone out this week, polite but firm",code
+tell me something about ants I probably don't know,reasoning
+"polish my LinkedIn about section, it's bland right now",writing
+"the back cover of my zine about the skate park we lost, a bit angry, a bit funny, one paragraph",writing
+how many players on a basketball team on the court,code
+"single elimination tournament with 37 players, how many matches and why",reasoning
+"java.lang.NullPointerException
+	at Report.total(Report.java:42)
+	at Main.main(Main.java:9)
+happens only when the list is empty",reasoning
+a card to go with the gift basket for my coworker's last day. she loves cats and hates meetings,writing
+any tips for falling asleep faster,quick
+"reasoning check: the store is open on sundays and today is sunday, so can it be closed today? explain",reasoning
+"typescript says property does not exist on type, fix the interface?",code
+can you turn these bullet points into something I can read out at the vigil: 'Mom loved sunflowers. Taught piano. Terrible at cards. Always brought soup.',writing
+"landing in split tomorrow, is it cold there this time of year",quick
+Can you write a condolence card for a coworker whose dad passed away?,writing
+"affect or effect: the new policy will ___ our margins, which one and why",reasoning
+help me write the intro to my lab report on fruit fly mating times,code
+"turn this into async/await: fs.readFile('a.txt', (err, a) => { fs.readFile('b.txt', (err, b) => { console.log(a + b) }) })",code
+"my telescope target list sorts Jupiter after Andromeda, which is wrong",code
+"our cabin has 4 people, each uses about 60 liters a day, and we want three days of backup water. what size tank do we need?",reasoning
+"how many test cases do i need for a fizzbuzz function, and what should they check",reasoning
+"kotlin coroutine crashes my android app on screen rotation, stack trace says NullPointerException at MainActivity",code
+"my smart home light turns on at noon as well as at night, the times are getting mixed up",code
+how should i lay out 12 tomato plants in equal rows if no row can hold more than 3?,code
+how do i read a csv in pandas and drop rows with missing values,code
+"edit this paragraph so it flows better: The river was wide. It was cold. People swam in it anyway, mostly kids.",writing
+what does ubiquitous mean,reasoning
+calculate the monthly payment on a 250000 loan at 6.5% over 30 years,reasoning
+our lab sheet shows a 3 degree drop in one flask and a 2 degree rise in an identical flask with the same reagents. my partner says one is a typo. how would you work out which reading to trust?,reasoning
+"npm install takes forever, is yarn faster than npm these days",quick
+polite way to say no to a freelance client who keeps asking for free revisions,code
+what's the tallest mountain in africa,reasoning
+"my recipe's in grams and I only have a stick of butter, how much is that",quick
+hey how's it going,quick
+"four people cross a bridge at night with one torch, times 1 2 5 and 10 minutes, max two at once, fastest total",code
+"make this sound less defensive: 'I didn't miss the deadline, the spec changed twice and nobody told me.'",code
+"coroutine launched in viewModelScope gets cancelled every time I rotate the phone, why",reasoning
+my spreadsheet-like tool keeps showing last week's totals even after I changed the input file,reasoning
+"the trivia bot in my group chat answers twice whenever someone types !trivia, what's going on",quick
+"six meetings, three rooms, A must come before B, C can't overlap D, E is only free in the morning, what schedule works",reasoning
+"five friends in a row for a photo: ali isn't at either end, bea is right of cam, dan is in the middle. what orders work?",reasoning
+"can you write a review of these headphones? sound is good, bass is weak, the case feels cheap",writing
+solve for x: 3(x - 4) + 2x = 5x - 12,reasoning
+"calculate how much paint i need for a 4m x 5m room with 2.7m walls, two coats, and one door 2m x 0.9m",code
+I want a limerick for my mom's bridge club about the new parking meter that ate their quarters,writing
+help me figure out the expected value of a lottery ticket that costs 2 and pays 1 million with probability one in 14 million,reasoning
+rewrite this so it sounds professional: hey guys we gotta push the deadline bc the vendor is slow,code
+do you like jazz,quick
+"proofread my personal statement for a nursing program, under 500 words",writing
+RSVP form for the wedding site works but the guest count in the summary always says zero,code
+"shipping quotes from three carriers with different weight rules and per-kilo fees, and my parcel is 7.3 kg. which one is cheapest?",code
+explain the big-O of my nested loops: for a in xs: for b in xs: total += a * b,reasoning
+one line I can use to decline a meeting?,quick
+"if the train is 320 m long and crosses a 1.2 km bridge at 72 km/h, how many seconds until the back of the train clears the far end?",reasoning
+what are the odds of getting at least one six in four rolls of a fair die,reasoning
+"is this valid: all cats are animals, some animals are pets, so some cats are pets",reasoning
+"add pagination to this endpoint so it returns 20 per page, express and mongoose, sorted by createdAt desc",code
+"these checks pass locally and fail on CI about one run in five, the failing one uses datetime.now() and sleep(0.1)",reasoning
+the dog-walk rota app I made shows the wrong name on Tuesdays,code
+"heard octopuses have three hearts, is that real",reasoning
+which planet has the longest day,reasoning
+should the workout log I'm building keep its data on the phone or in a file on my laptop? trade-offs please,reasoning
+"help me solve this: three boxes all labeled wrong, you can draw one item from one box. how do you label them correctly?",reasoning
+is 1000003 prime? show the reasoning,reasoning
+what's a good book for a long flight,writing
+"review this sql migration, does adding the index lock the users table for long",reasoning
+"a 12 day trip covering 4 cities in portugal, with porto needing at least 3 days and lisbon at most 4. how do i split the days?",reasoning
+define photosynthesis in one sentence,reasoning
+"test for a disease: 1 in 200 people have it, the test catches 95% of cases and gives false alarms 5% of the time. if i test positive, what are the odds i actually have it?",reasoning
+the contact form on my site takes the message but nothing ever reaches my inbox,code
+who was the guy who painted all those water lily pictures,reasoning
+"odd one out: dog, cat, fish, shark",reasoning
+is it spelled accommodate or accomodate,code
+my boss wants my wellness newsletter to sound less like a pamphlet,writing
+rain again. ugh,quick
+"budget for a 5 day camping trip for 4 people, 600 total",code
+my study-notes table gets the rows out of order whenever I click a column header,code
+"sum of whole numbers 1 to 500 with a quick trick, why does the trick work",code
+"the app won't start, it dumps a wall of red text that ends in something about a missing module",code
+two lines for the back of the lantern festival program thanking our volunteers,writing
+can dogs eat blueberries,writing
+write museum placard text about a 1920s telephone exchange,writing
+"cover letter opening line for a junior data analyst job at a bank, not cheesy",writing
+"40 raffle tickets sold, 3 winners drawn without replacement, and i hold 4 tickets. what's the chance i win at least one prize?",reasoning
+what's the capital of Australia again,quick
+"commit message for: removed the unused import and renamed the helper, what should it say",code
+why is a dict lookup O(1) on average but O(n) in the worst case,reasoning
+write a 300 word blog post about why I started running at 40,writing
+"opening lines for my grandfather's eulogy, he was a carpenter and told the same three jokes at every dinner",writing
+"check my essay: 'most of the people we sampled liked the feature, so most users like the feature.' does that hold?",writing
+what year did the Berlin wall fall,reasoning
+"my sister wants a mean-but-loving roast for her 40th. ten lines, she can take it",writing
+"logic puzzle: alice says bob is lying, bob says carol is lying, carol says they're both lying. who's telling the truth?",reasoning
+is it safe to use eval on user input if I strip out letters first,reasoning
+spell 'necessary' for me,writing
+tagline for a bakery that does sourdough and terrible puns,writing
