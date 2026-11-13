@@ -517,3 +517,19 @@ def test_labels_are_required_and_help_goes_to_stdout(tmp_path, capsys):
         main(["eval-routes", "--help"])
     out = capsys.readouterr()
     assert stop.value.code == 0 and "--labels" in out.out and "local embeddings provider" in out.out and out.err == ""
+
+
+def test_the_shipped_label_set_is_valid_and_balanced():
+    """tests/fixtures/routes.csv: 100 prompts, 25 per route of the example config, no duplicates."""
+    import collections
+    import csv
+
+    from trioditis.evalroutes import read_labels
+    repo = Path(__file__).resolve().parents[1]
+    routes = list(yaml.safe_load((repo / "config.example.yaml").read_text(encoding="utf-8"))["routes"])
+    path = repo / "tests" / "fixtures" / "routes.csv"
+    assert len(read_labels(path, routes)) == 100  # read_labels rejects duplicates and unknown routes
+    with open(path, encoding="utf-8", newline="") as f:
+        per_route = collections.Counter(r["expected_route"] for r in csv.DictReader(f))
+    assert per_route == {name: 25 for name in routes}
+

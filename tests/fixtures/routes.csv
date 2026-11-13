@@ -1,0 +1,125 @@
+prompt,expected_route,borderline
+"make this sound less defensive: 'I didn't miss the deadline, the spec changed twice and nobody told me.'",writing,
+rework the opening of my blog post so it hooks in two sentences: Today I want to talk about moving to a new city and what I learned about making friends as an adult.,writing,
+"if the forecast says 40 percent chance of rain and I see it three days in a row, is it likely to rain at least once",reasoning,yes
+"short note to my landlord saying the boiler is broken again and I'd like someone out this week, polite but firm",writing,
+what year did the Berlin wall fall,quick,
+"short apology to a customer whose order arrived two weeks late, no excuses, offer 15 percent off",writing,
+"friendly reminder to the volunteers that the Saturday shift starts at 9 not 10, warm not bossy",writing,
+rain again. ugh,quick,
+rephrase for a ten year old: photosynthesis is the process by which plants convert light energy into chemical energy,writing,
+spell 'necessary' for me,quick,
+"a bat and a ball cost 1.10 total, the bat costs 1.00 more than the ball, what does the ball cost",reasoning,
+"job offer A pays 70k with 2 weeks off, offer B pays 65k with 5 weeks and a 40 min shorter commute, lay out the trade-offs and which wins if I value time more",reasoning,
+"2000 at 5 percent compounded yearly vs 5 percent simple interest, after how many years is the gap over 500",reasoning,
+"coroutine launched in viewModelScope gets cancelled every time I rotate the phone, why",code,
+what's the difference between a latte and a flat white,quick,yes
+"sum of whole numbers 1 to 500 with a quick trick, why does the trick work",reasoning,
+"explain why the average of a set of numbers can be higher than most of the numbers in it, give an example",reasoning,yes
+shorten this abstract to 150 words and keep the main result: We propose a lightweight method for tagging support tickets that cuts manual triage time by a third on three internal datasets.,writing,
+what time zone is Lisbon in,quick,
+"thanks, that helped a lot",quick,
+"docker build dies at the pip install step with 'No matching distribution found for numpy==2.9', any idea why",code,
+how do I parse a csv in go when some fields have commas inside quotes,code,
+"#!/bin/bash
+cp $1 $2
+rm $1
+
+I want this to stop at the first failure and say which step broke",code,
+good morning!!,quick,
+what's the capital of Australia again,quick,
+do you like jazz,quick,
+"cover letter opening line for a junior data analyst job at a bank, not cheesy",writing,
+"12 drawers, each holds either 2 or 5 pens, 54 pens total, how many drawers hold 5",reasoning,
+is it rude to leave a party early,quick,yes
+"turn these bullets into one paragraph for our newsletter:
+- shipped offline mode
+- fixed sync conflicts
+- next up: push notifications",writing,
+"why does the monty hall switch win two thirds of the time, talk me through it",reasoning,yes
+"rope burns unevenly and takes an hour to burn fully, how do I time 45 minutes using two of them",reasoning,
+"java.lang.NullPointerException
+	at Report.total(Report.java:42)
+	at Main.main(Main.java:9)
+happens only when the list is empty",code,
+"opening lines for my grandfather's eulogy, he was a carpenter and told the same three jokes at every dinner",writing,
+does python's dict keep insertion order by guarantee or just because cpython happens to do it,code,yes
+"regex for ISO dates like 2026-11-13 that rejects month 13 and day 45, python",code,
+"is this valid: all cats are animals, some animals are pets, so some cats are pets",reasoning,
+"fix grammar and tone but keep the meaning: 'Their going to the market tomorow, we was hoping to see you there.'",writing,
+"npm install takes forever, is yarn faster than npm these days",code,yes
+"startup spends 12k a month, has 80k in the bank, revenue starts at 5k and grows 8 percent a month, when does cash run out",reasoning,
+"cannot borrow v as mutable because it is also borrowed as immutable: let first = &v[0]; v.push(4); println!(""{}"", first);  why",code,
+is 2026 a leap year,quick,
+"shop marks cost up 40 percent then takes 20 percent off the marked price, net change vs cost",reasoning,yes
+"groupby sum returns NaN for every group after my merge, the columns look fine when I print them",code,
+why does my python loop skip the last element when I use range(len(items) - 1),code,
+is it normal to feel tired after a long flight,quick,yes
+"affect or effect: the new policy will ___ our margins, which one and why",writing,yes
+"turn this into async/await: fs.readFile('a.txt', (err, a) => { fs.readFile('b.txt', (err, b) => { console.log(a + b) }) })",code,
+"commit message for: removed the unused import and renamed the helper, what should it say",writing,yes
+"drawing two reds in a row without replacement has probability 1/3, ten marbles in the bag, how many are red",reasoning,
+"six meetings, three rooms, A must come before B, C can't overlap D, E is only free in the morning, what schedule works",reasoning,
+should I drink water before coffee or after,quick,yes
+"three friends split a 137 euro bill, Ana had two cocktails so she pays 10 more than each of the others, what does each person pay",reasoning,
+"scratch card pays 50 once in every 200 tickets and costs 2, is it worth it on average",reasoning,yes
+best way to store fresh basil,quick,
+prove that the sum of two odd numbers is always even,reasoning,
+can dogs eat blueberries,quick,
+tell me something interesting about octopuses,quick,
+is 'utilize' ever better than 'use' or is it always filler,writing,yes
+"what's the time complexity of python's sorted() when the list is already sorted, and does it change for reversed lists",code,yes
+"if a train leaves at 14:20 going 85 km/h and another leaves the same station 40 minutes later going 110 km/h, when does the second catch up",reasoning,
+what's a good name for a grey tabby cat,quick,
+"post about finishing my first marathon, humble not braggy, for a professional networking site",writing,
+"my sister's wedding toast, two minutes, funny then sincere",writing,
+polite way to say no to a freelance client who keeps asking for free revisions,writing,
+"lab is open Mon-Fri, sample arrives Tuesday, results take 3 working days, sent Friday afternoon, when are results due",reasoning,yes
+is it safe to use eval on user input if I strip out letters first,code,
+why is a dict lookup O(1) on average but O(n) in the worst case,code,yes
+"these checks pass locally and fail on CI about one run in five, the failing one uses datetime.now() and sleep(0.1)",code,
+"five tasks:
+1 before 3
+2 before 4
+5 after both 3 and 4
+each takes a day, two people, fastest finish?",reasoning,
+"single elimination tournament with 37 players, how many matches and why",reasoning,
+is it worth going to bed at 11 if I have to get up at 6,quick,yes
+make this more confident: The results were kind of interesting and maybe suggest something.,writing,
+what does ubiquitous mean,quick,
+"need a 3-day hiking trip for 4 people, budget 600, one person can only do 8 km a day, is there a plan that fits",reasoning,
+"toast for my friend's 30th, she loves old movies and bad puns, under a minute out loud",writing,
+"resignation note to my team, leaving on good terms, five lines max",writing,
+how many ounces in a cup,quick,
+what do you call a group of crows,quick,
+"haiku about a delayed train, dry humour",writing,
+"four people cross a bridge at night with one torch, times 1 2 5 and 10 minutes, max two at once, fastest total",reasoning,
+"left join on orders gives me duplicate customer rows: SELECT c.id, o.total FROM customers c LEFT JOIN orders o ON o.customer_id = c.id JOIN regions r ON r.id = c.region_id",code,
+"every employee who works weekends gets a bonus, Mira works weekends and got no bonus, what follows",reasoning,
+hey how's it going,quick,
+"add pagination to this endpoint so it returns 20 per page, express and mongoose, sorted by createdAt desc",code,
+"two old friends meet at a train station after ten years, quiet and a bit awkward, dialogue only",writing,
+anything fun to do in Belgrade on a rainy day,quick,
+"tighten this so it stops rambling: Our team has been working really hard over the past few months on making onboarding better for new people, and we think we have made some progress.",writing,
+"refactor this so it stops repeating itself:
+if x == 1:
+    print('a')
+elif x == 2:
+    print('b')
+elif x == 3:
+    print('c')",code,
+my flask route 500s only when the json body is missing the id key: @app.post('/items') def add(): item_id = request.json['id'],code,
+what's 17 times 23,quick,yes
+tagline for a bakery that does sourdough and terrible puns,writing,
+TS says property 'email' does not exist on type 'User' even though my interface has it: interface User { id: number; name: string } and then u.email,code,
+"product blurb for a handmade ceramic mug, glossy blue glaze, dishwasher safe, 2 to 3 sentences",writing,
+"getting this when I run it:
+TypeError: 'NoneType' object is not subscriptable
+  File ""app.py"", line 14, in main
+    name = data[""user""][""name""]
+no idea where the None comes from",code,
+"recommend a history podcast, not too long",quick,
+"which is bigger, 2^50 or 3^30, and how can I tell without a computer",reasoning,
+"crashes when I erase items from a vector inside a range-based for loop, what's the right pattern",code,
+"my react useEffect keeps firing forever, the dependency array is [user] and user is a fresh object every render. whats the usual fix",code,
+"is a list comprehension actually faster than a for loop with append, or is that folklore",code,yes
