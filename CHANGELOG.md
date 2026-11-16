@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 (2026-11-13)
+## 0.6.0 (2026-11-16)
 
 Measured rather than assumed: outcome rates per model, a ledger of plan usage, and the router's accuracy on held-out prompts. The first release on PyPI.
 
