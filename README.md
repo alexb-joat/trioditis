@@ -40,7 +40,7 @@
 ollama pull llama3.2:3b && ollama pull qwen2.5-coder:7b && ollama pull nomic-embed-text
 ```
 
-**2.** Install Trioditis with [pipx](https://pipx.pypa.io/stable/installation/) and give it a folder:
+**2.** Install Trioditis with [pipx](https://pipx.pypa.io/stable/how-to/install-pipx.html) and give it a folder:
 
 ```bash
 pipx install trioditis
