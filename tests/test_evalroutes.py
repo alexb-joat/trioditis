@@ -33,6 +33,10 @@ RAW = {
 ROUTES = ["code", "writing", "quick"]
 
 
+def flat(text: str) -> str:
+    """The printed text with every run of whitespace as one space: a wrapped line reads as it would unwrapped."""
+    return " ".join(text.split())
+
 def raw(**over):
     out = json.loads(json.dumps(RAW))
     out.update(over)
@@ -178,7 +182,8 @@ def test_every_printed_line_fits_100_columns(tmp_path, capsys):
     evalroutes.run(cfg_of(), args_for(hand_csv(tmp_path), tmp_path), embedder=FakeEmbedder(HAND_TABLE))  # the skipped sweep
     lines = capsys.readouterr().out.splitlines()
     assert any("disagree on" in x for x in lines) and any("skipped" in x for x in lines)
-    assert all(len(x) <= 100 for x in lines if "pytest" not in x and not x.startswith(("labels:", "config:")))
+    # A path is never broken, so a line that holds one may run long; the temporary folder's length varies by system.
+    assert all(len(x) <= 100 for x in lines if str(tmp_path) not in x and not x.startswith(("labels:", "config:")))
 
 
 def test_it_grades_the_routers_own_choice(tmp_path):
@@ -322,7 +327,7 @@ def test_the_sweep_picks_on_one_half_reports_on_the_other_and_never_touches_the_
     args = args_for(labels, tmp_path)
     args.config = str(config_file)
     assert evalroutes.run(cfg, args, embedder=FakeEmbedder(table)) == 0
-    out = capsys.readouterr().out
+    out = flat(capsys.readouterr().out)  # a long path goes on its own line, and temporary folders differ in length
     assert f"Proposal written to {tmp_path / 'notebook.jsonl'}." in out and "Nothing was applied to your config." in out
     assert "Exact sign test on those rows, two-sided: p = 0.00" in out and "unlikely to be chance" in out
     assert config_file.read_bytes() == before
@@ -516,7 +521,7 @@ def test_the_command_line_runs_with_the_config_before_or_after_the_command(tmp_p
             main(argv)
         out = capsys.readouterr().out
         assert stop.value.code == 0 and "n = 30 labelled prompts" in out and "Keywords + embeddings" in out
-        assert f"config: {config}" in out
+        assert f"config: {config}" in flat(out)  # a long path goes on its own line
     assert (tmp_path / "nb.jsonl").exists()  # the first run, not the dry one
 
 

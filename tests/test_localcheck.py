@@ -94,6 +94,35 @@ def test_check_names_the_missing_key_of_a_local_server_and_does_not_ask_it(tmp_p
     assert asked == []
 
 
+@pytest.mark.parametrize("answer", ["models", "refused", "unreachable"])
+def test_check_sends_a_local_servers_key_and_never_prints_it(tmp_path, capsys, monkeypatch, answer):
+    from trioditis.__main__ import main
+    key = "local-MARKER-never-printed"
+    sent: list[str | None] = []
+
+    def handler(req):
+        sent.append(req.headers.get("Authorization"))
+        if answer == "unreachable":  # even an error whose text carries the key shows only its type
+            raise httpx.ConnectError(f"cannot reach with {key}")
+        if answer == "refused":
+            return httpx.Response(401, text=f"bad key {key}")
+        return httpx.Response(200, json={"data": [{"id": "llama3.2:3b"}]})
+
+    _fake_network(monkeypatch, handler)
+    monkeypatch.setenv("LOCAL_KEY", key)
+    conf = json.loads(json.dumps(BASE))
+    conf["providers"]["local"]["api_key_env"] = "LOCAL_KEY"
+    f = tmp_path / "config.yaml"
+    f.write_text(json.dumps(conf), encoding="utf-8")
+    main(["--config", str(f), "check"])
+    seen = capsys.readouterr()
+    assert sent and set(sent) == {f"Bearer {key}"}  # the key goes to the local server, in the header
+    assert "MARKER" not in seen.out + seen.err
+    state = {"models": "ready", "refused": "server answers (HTTP 401); model not checked",
+             "unreachable": "server not answering: start it (ollama serve)"}[answer]
+    assert _rows(seen.out)["small"].endswith(state)
+
+
 def test_check_never_contacts_a_cloud_provider(tmp_path, capsys, monkeypatch):
     asked = _fake_network(monkeypatch, lambda r: httpx.Response(200, json={"data": []}))
     out = _run_check(tmp_path, capsys)
