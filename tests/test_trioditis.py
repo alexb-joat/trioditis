@@ -75,6 +75,12 @@ def test_config_rejects_cloud_embeddings():
         cfg(embeddings={"provider": "cloud", "model": "e"})
 
 
+def test_embeddings_threshold_defaults_to_the_measured_value():
+    # Leaving `threshold` out must route like the example config (0.45, docs/route-accuracy.md).
+    c = cfg(embeddings={"provider": "local", "model": "e"})
+    assert c.embeddings.threshold == 0.45
+
+
 def test_config_rejects_unknown_route_model():
     with pytest.raises(ConfigError, match="unknown model"):
         cfg(routes={"r": {"models": ["nope"]}}, default_route="r")

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+**Routing**
+- An `embeddings:` block without `threshold` now uses 0.45, the value the example config sets and the held-out test chose (was 0.55). Configs that set `threshold` are unchanged.
+
 ## 0.6.0 (2026-11-16)
 
 Measured rather than assumed: outcome rates per model, a ledger of plan usage, and the router's accuracy on held-out prompts. The first release on PyPI.

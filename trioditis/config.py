@@ -75,11 +75,17 @@ class Route:
     prefer: str = "configured"  # configured (list order) | cheapest (local first, then estimated cost) | fastest
 
 
+# Used when the embeddings block has no `threshold`. 0.45 won the held-out test
+# in docs/route-accuracy.md (example config, nomic-embed-text); other embedding
+# models score on other scales, so measure with `trioditis eval-routes`.
+DEFAULT_EMBEDDINGS_THRESHOLD = 0.45
+
+
 @dataclass(frozen=True)
 class Embeddings:
     provider: str
     model: str
-    threshold: float = 0.55
+    threshold: float = DEFAULT_EMBEDDINGS_THRESHOLD
 
 
 @dataclass(frozen=True)
@@ -243,7 +249,7 @@ def parse_config(raw: dict) -> Config:
         if not providers[e["provider"]].local:
             # Embedding the prompt sends it somewhere; keep that local.
             raise ConfigError("embeddings.provider must be a local provider")
-        emb = Embeddings(e["provider"], e["model"], float(e.get("threshold", 0.55)))
+        emb = Embeddings(e["provider"], e["model"], float(e.get("threshold", DEFAULT_EMBEDDINGS_THRESHOLD)))
 
     pv = raw.get("privacy") or {}
     on_no_local = pv.get("on_no_local_model", "reject")
