@@ -149,7 +149,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 ## Known limits
 
 - Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model.
-- Every provider is called at its OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters.
+- Every chat request goes to the provider's OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters.
 - No prompt caching for Claude models. Trioditis calls Anthropic at its OpenAI-compatible endpoint, and Anthropic's page for it says "Prompt caching is not supported" ([source](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk), read 13 November 2026). For every provider, Trioditis adds no caching settings of its own and records cached tokens only when the provider reports them.
 - On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md)).
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
