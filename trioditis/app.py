@@ -1,4 +1,4 @@
-"""HTTP layer: an OpenAI-compatible API in front of many models."""
+"""HTTP layer: an OpenAI-compatible API in front of many models, and an Anthropic Messages passthrough (gate.py)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from trioditis_metrics import BudgetGuard, MetricsDB, Prices
 from trioditis_metrics.home import data_home
 from trioditis_metrics.ratelimits import parse as parse_ratelimits
 
+from . import gate
 from .accounts import ACCOUNTS_EVERY_S, adapter_for
 from .accounts import report as account_report
 from .config import Config
@@ -205,6 +206,11 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             if origin is not None and not origin_is_local(origin):
                 security.write(request, f"foreign origin {origin[:100]!r}")
                 return _error(403, "forbidden origin", "auth_error")
+        elif request.url.path in gate.PATHS:
+            if not gate.key_ok(request.headers, key):  # Authorization there is Anthropic's credential, not ours
+                security.write(request, f"invalid or missing router key ({gate.ROUTER_KEY_HEADER})")
+                return gate.anthropic_error(401, f"invalid or missing router key: send it in {gate.ROUTER_KEY_HEADER} "
+                                                 f"(ANTHROPIC_CUSTOM_HEADERS)", "authentication_error")
         elif request.url.path != "/health" and not check_bearer(request.headers.get("authorization"), key):
             security.write(request, "invalid or missing API key")
             return _error(401, "invalid or missing API key", "auth_error")
@@ -247,7 +253,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
 
     @app.get("/health")
     async def health():
-        return {"status": "ok"}
+        return {"status": "ok", "anthropic_gate": True}  # claude-t routes only to a router that has the gate
 
     @app.get("/v1/models")
     async def list_models():
@@ -287,6 +293,10 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         except RoutingError as e:
             return _error(e.status, e.message)
         return d.as_dict()
+
+    gate.mount(app, client=client, metrics=metrics, prices=prices, router_key=router_api_key, caller=client_of,
+               read_raw=gate.raw_reader(cfg.limits.max_body_bytes,
+                                        lambda r: security.write(r, "body too large (streamed past the limit)")))
 
     @app.post("/v1/chat/completions")
     async def chat(request: Request):

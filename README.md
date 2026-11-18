@@ -121,8 +121,9 @@ Responses carry `X-Trioditis-Route` and `X-Trioditis-Model`. `POST /v1/route` or
 | **Cline** (VS Code) | Provider *OpenAI Compatible*, base URL `http://127.0.0.1:8787/v1`, model `route/code`. Full recipe, including local-model context: [docs/vscode-cline.md](https://github.com/alexb-joat/trioditis/blob/main/docs/vscode-cline.md) |
 | **Open WebUI, Odysseus, chat UIs** | Add the endpoint `http://127.0.0.1:8787/v1` and pick model `auto` |
 | **OpenAI SDKs** | `OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="<your TRIODITIS_API_KEY>")` |
+| **Claude Code** | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude`, or `scripts/claude-t` from a clone, which goes direct if the router is down. Recipe: [docs/claude-code.md](https://github.com/alexb-joat/trioditis/blob/main/docs/claude-code.md) |
 
-Trioditis speaks the OpenAI chat-completions format, which most tools support. Clients that only speak a provider's native API (for example Claude Code) cannot use it yet.
+Trioditis speaks the OpenAI chat-completions format, which most tools support, and routes those requests. Claude Code speaks Anthropic's Messages format: Trioditis passes those requests to Anthropic unchanged with your own login and counts their tokens. It doesn't route them, and Claude Code picks the model.
 
 ## Spending and limits
 
@@ -140,7 +141,7 @@ Each call records why its answer ended, retries and cache use, so `trioditis usa
 | Router exposed to the network | Binds `127.0.0.1`; refuses any other bind without a 32+ character API key |
 | A web page in your browser reaching the router | Foreign `Host` (DNS rebinding) or `Origin` gets 403 and a log line; POST bodies must be JSON |
 | Sensitive data sent to the cloud | Detectors force local-only routing or reject |
-| Key and prompt leakage | Keys only in environment variables; the client's key is never forwarded; logs hold metadata and a hash, not prompt text |
+| Key and prompt leakage | Keys only in environment variables; the client's router key is never forwarded; logs hold metadata and a hash, not prompt text. The Claude Code passthrough forwards your own Anthropic credential to `https://api.anthropic.com` only, and never stores or logs it |
 | Open proxy and SSRF | Upstream URLs come only from `config.yaml`; no redirects followed |
 | Supply chain | Actions pinned to commit SHAs, read-only workflows, CodeQL and dependency review on every pull request |
 
@@ -149,7 +150,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 ## Known limits
 
 - Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model.
-- Every chat request goes to the provider's OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters.
+- Every routed chat request goes to the provider's OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters for routing; the Claude Code passthrough only forwards to Anthropic.
 - No prompt caching for Claude models. Trioditis calls Anthropic at its OpenAI-compatible endpoint, and Anthropic's page for it says "Prompt caching is not supported" ([source](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk), read 13 November 2026). For every provider, Trioditis adds no caching settings of its own and records cached tokens only when the provider reports them.
 - On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md)).
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.

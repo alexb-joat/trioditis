@@ -1,0 +1,26 @@
+#!/bin/sh
+# claude-t: Claude Code through Trioditis, for this one process only. Same arguments as `claude`.
+#
+# Your claude.ai login stays the credential: Trioditis passes it to Anthropic untouched and only counts
+# tokens (`trioditis plan report`). If Trioditis isn't answering, Claude Code starts direct, unmetered,
+# and says so. Nothing outside this process changes; plain `claude` is never routed.
+#
+#   TRIODITIS_URL      the router (default http://127.0.0.1:8787)
+#   TRIODITIS_API_KEY  the router key, if the router has one: sent as X-Trioditis-Key, never as Authorization
+set -eu
+
+url="${TRIODITIS_URL:-http://127.0.0.1:8787}"
+url="${url%/}"
+
+if curl -fsS --max-time 2 "$url/health" 2>/dev/null | grep -q '"anthropic_gate":true'; then
+    export ANTHROPIC_BASE_URL="$url"
+    if [ -n "${TRIODITIS_API_KEY:-}" ]; then
+        nl='
+'
+        export ANTHROPIC_CUSTOM_HEADERS="${ANTHROPIC_CUSTOM_HEADERS:+$ANTHROPIC_CUSTOM_HEADERS$nl}X-Trioditis-Key: $TRIODITIS_API_KEY"
+    fi
+else
+    echo "claude-t: no Trioditis with the Anthropic gate at $url (down, or older than the gate); starting Claude Code direct, not metered." >&2
+fi
+
+exec claude "$@"

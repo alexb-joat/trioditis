@@ -1,0 +1,240 @@
+"""Anthropic Messages passthrough: Claude Code, or any Anthropic-format client, through Trioditis.
+
+Point a client at the router with ``ANTHROPIC_BASE_URL=http://127.0.0.1:8787``. Each request goes to
+Anthropic as it was sent: the body bytes, the ``anthropic-*`` headers as an open list, and the client's
+own credential (``Authorization`` or ``x-api-key``). The answer comes back as it was sent: status, headers,
+error bodies, and the event stream chunk by chunk, ``ping`` events included. Claude Code's gateway guide
+asks for all of that: it stalls on a buffered stream and recovers from errors by their exact wording.
+
+What Trioditis adds is metering, from the response and never from the prompt: token counts, model,
+message id. The credential is passed on and never read, stored or logged; the only thing checked is
+whether an ``x-api-key`` is present, which says the call is billed per token rather than on a plan.
+Model choice stays with the client: a base URL changes where requests go, not which model answers.
+"""
+
+from __future__ import annotations
+
+import hmac
+import json
+import time
+
+import httpx
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from trioditis_metrics import MetricsDB, Prices
+from trioditis_metrics.plan import merge_events
+
+from .envvars import env
+from .plan import _count, _hash, _word, load_salt
+from .security import fingerprint
+
+UPSTREAM = "https://api.anthropic.com"
+MESSAGES = "/v1/messages"
+COUNT_TOKENS = "/v1/messages/count_tokens"
+ROUTER_KEY_HEADER = "x-trioditis-key"
+PATHS = frozenset({MESSAGES, COUNT_TOKENS})
+
+# Request headers that belong to this hop, not to the request: everything else goes upstream as sent.
+# accept-encoding is replaced by "identity" so the stream arrives as plain events and leaves as it came.
+_HOP_REQUEST = frozenset({"host", "connection", "keep-alive", "proxy-authorization", "proxy-connection", "te",
+                          "trailer", "transfer-encoding", "upgrade", "content-length", "accept-encoding"})
+_HOP_RESPONSE = frozenset({"connection", "keep-alive", "transfer-encoding", "content-length", "content-encoding",
+                           "trailer", "upgrade", "proxy-authenticate"})
+
+# Read timeout between two bytes: a long thinking pause still gets the upstream's ping events.
+TIMEOUT = httpx.Timeout(connect=10.0, read=600.0, write=60.0, pool=10.0)
+METER_LINE_MAX = 1 << 20      # one event line kept for metering; a longer one passes through unparsed
+METER_JSON_MAX = 4 << 20      # a non-streamed answer parsed for its usage up to this size
+
+
+def upstream_base() -> str:
+    url = (env("GATE_UPSTREAM") or UPSTREAM).rstrip("/")
+    if not url.startswith("https://"):
+        raise ValueError(f"TRIODITIS_GATE_UPSTREAM must be an https:// URL (the credential travels with every "
+                         f"request), got {url[:80]!r}")
+    return url
+
+
+def key_ok(headers, expected: str) -> bool:
+    """With a router key set, a gate request carries it in X-Trioditis-Key: Authorization is Anthropic's.
+    Claude Code sends it with ANTHROPIC_CUSTOM_HEADERS="X-Trioditis-Key: <key>"."""
+    got = headers.get(ROUTER_KEY_HEADER) or ""
+    return bool(got) and hmac.compare_digest(got.encode(), expected.encode())
+
+
+def anthropic_error(status: int, message: str, etype: str = "api_error") -> JSONResponse:
+    """Errors Trioditis itself raises, in Anthropic's shape so Claude Code shows the message. A refusal says
+    x-should-retry: false, which Claude Code's gateway guide says it reads. On a 401 it retries anyway (seen
+    18 Nov 2026: 16 tries in 90 s), so a missing router key shows as a long wait, not an error."""
+    headers = {"x-should-retry": "false"} if 400 <= status < 500 else None
+    return JSONResponse({"type": "error", "error": {"type": etype, "message": message}}, status_code=status,
+                        headers=headers)
+
+
+class Meter:
+    """Token counts from the answer as it streams past. Holds one event line at a time, never the body."""
+
+    def __init__(self, content_type: str):
+        self.sse = content_type.startswith("text/event-stream")
+        self.json = content_type.startswith("application/json")
+        self._buf = b""
+        self.message_id: str | None = None
+        self.model: str | None = None
+        self.usage: dict[str, int] = {}
+
+    def feed(self, chunk: bytes) -> None:
+        if self.sse:
+            self._buf += chunk
+            *lines, self._buf = self._buf.split(b"\n")
+            if len(self._buf) > METER_LINE_MAX:
+                self._buf = b""  # an outsized line (a big tool input) carries no usage; drop it, keep streaming
+            for line in lines:
+                if line.startswith(b"data:") and (b'"usage"' in line or b'"message_start"' in line):
+                    self._event(line[5:])
+        elif self.json and len(self._buf) <= METER_JSON_MAX:
+            self._buf += chunk
+
+    def finish(self) -> None:
+        if self.json and len(self._buf) <= METER_JSON_MAX:
+            self._event(self._buf)
+        self._buf = b""
+
+    def _event(self, raw: bytes) -> None:
+        try:
+            o = json.loads(raw)
+        except ValueError:
+            return
+        if not isinstance(o, dict):
+            return
+        # message_start carries the message (id, model, first usage); message_delta only usage; a non-streamed
+        # answer is the message itself.
+        msg = o.get("message") if o.get("type") == "message_start" else (o if o.get("type") == "message" else {})
+        if not isinstance(msg, dict):
+            return
+        if isinstance(msg.get("id"), str) and msg["id"].startswith("msg_"):
+            self.message_id = msg["id"][:100]
+        if isinstance(msg.get("model"), str):
+            self.model = _word(msg["model"])
+        usage = msg.get("usage") if msg else o.get("usage")
+        if not isinstance(usage, dict):
+            return
+        for k in ("input_tokens", "output_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"):
+            v = _count(usage.get(k))
+            if v is not None and v >= self.usage.get(k, -1):
+                self.usage[k] = v  # counts only grow over a stream; the last report is the total
+
+
+def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices: Prices, read_raw,
+          router_key, caller) -> None:
+    base = upstream_base()
+    salt: dict[str, str] = {}
+
+    def _salt() -> str:
+        if "v" not in salt:
+            salt["v"] = load_salt(create=True)
+        return salt["v"]
+
+    def record(request: Request, path: str, status: int, meter: Meter, started: float, at: float) -> None:
+        if path != MESSAGES:
+            return  # count_tokens answers without a model call
+        sid = (request.headers.get("x-claude-code-session-id") or "")[:200] or None
+        agent = request.headers.get("x-claude-code-agent-id")
+        u = meter.usage
+        tin, cr, cw, tout = (u.get("input_tokens"), u.get("cache_read_input_tokens"),
+                             u.get("cache_creation_input_tokens"), u.get("output_tokens"))
+        try:
+            if "x-api-key" in request.headers:
+                # Billed per token to the key's owner: real spend, so it goes with the API calls and counts
+                # toward the caps. The gate never blocks it; Claude Code would only stall.
+                usage = None
+                if tin is not None and tout is not None:
+                    usage = {"prompt_tokens": tin + (cr or 0) + (cw or 0), "completion_tokens": tout}
+                    if cr is not None:
+                        usage["cached_tokens"] = cr
+                cost = prices.cost(meter.model, False, usage) if usage else None
+                metrics.record({"route": "passthrough", "model": meter.model or "none",
+                                "local": False, "status": status, "latency_ms": int((time.monotonic() - started) * 1000),
+                                "usage": usage, "cost": cost, "provider": "anthropic",
+                                "unpriced": bool(usage and cost is None and status < 400),
+                                "session_fp": fingerprint(sid) if sid else None, "client": caller(request.headers)})
+                return
+            if status != 200 or not meter.message_id or not meter.model:
+                return  # a plan call that failed used nothing worth a row; Claude Code shows the error itself
+            s = _salt()
+            ev = {"id": "cc-" + _hash(s, meter.message_id), "at": at,
+                  "source": "claude-code" if sid else (caller(request.headers) or "anthropic"),
+                  "service": "claude", "model": meter.model, "tokens_in": tin, "tokens_out": tout,
+                  "cache_read": cr, "cache_write": cw, "tokens_measured": 1, "agent": 1 if agent else 0,
+                  "thread_tokens": sum(v or 0 for v in (tin, cr, cw))}
+            if sid:
+                ev["thread_fp"] = _hash(s, "session\0" + sid, 16)  # the transcript importer's formula
+            with metrics.conn:
+                merge_events(metrics.conn, [ev])
+        except Exception:  # noqa: S110 -- metering is best-effort; it must never break the client's answer
+            pass
+
+    async def relay(resp: httpx.Response, meter: Meter, on_done):
+        try:
+            async for chunk in resp.aiter_raw():  # identity encoding: raw bytes are the events as sent
+                meter.feed(chunk)
+                yield chunk
+        finally:
+            await resp.aclose()
+            meter.finish()
+            on_done()
+
+    async def passthrough(request: Request, path: str):
+        started, at = time.monotonic(), time.time()
+        key = router_key()
+        auth = request.headers.get("authorization") or ""
+        if key and hmac.compare_digest(auth.encode(), f"Bearer {key}".encode()):
+            # The router key in Authorization would go to Anthropic with the request. Refuse it here.
+            return anthropic_error(401, f"the router key goes in {ROUTER_KEY_HEADER}, not Authorization "
+                                        f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); Authorization is "
+                                        f"passed to Anthropic", "authentication_error")
+        try:
+            raw = await read_raw(request)
+        except _TooLarge as e:
+            return anthropic_error(413, str(e), "request_too_large")
+        headers = [(k, v) for k, v in request.headers.raw
+                   if k.lower().decode("latin-1") not in _HOP_REQUEST and not k.lower().startswith(b"x-trioditis-")]
+        headers.append((b"accept-encoding", b"identity"))
+        url = base + path + (f"?{request.url.query}" if request.url.query else "")
+        try:
+            req = client.build_request("POST", url, content=raw, headers=headers, timeout=TIMEOUT)
+            resp = await client.send(req, stream=True)
+        except httpx.HTTPError as e:
+            return anthropic_error(502, f"trioditis could not reach {base}: {type(e).__name__}. Detach with "
+                                        f"`unset ANTHROPIC_BASE_URL` to go direct.")
+        meter = Meter(resp.headers.get("content-type", ""))
+        out = StreamingResponse(relay(resp, meter, lambda: record(request, path, resp.status_code, meter, started, at)),
+                                status_code=resp.status_code)
+        out.raw_headers = [(k, v) for k, v in resp.headers.raw if k.lower().decode("latin-1") not in _HOP_RESPONSE]
+        return out
+
+    @app.post(MESSAGES)
+    async def messages(request: Request):
+        return await passthrough(request, MESSAGES)
+
+    @app.post(COUNT_TOKENS)
+    async def count_tokens(request: Request):
+        return await passthrough(request, COUNT_TOKENS)
+
+
+class _TooLarge(Exception):
+    pass
+
+
+def raw_reader(max_bytes: int, on_refuse):
+    """The request body as bytes, read with a cap (a chunked upload has no Content-Length to check first)."""
+    async def read(request: Request) -> bytes:
+        parts, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > max_bytes:
+                on_refuse(request)
+                raise _TooLarge(f"request body over {max_bytes} bytes (limits.max_body_bytes)")
+            parts.append(chunk)
+        return b"".join(parts)
+    return read
