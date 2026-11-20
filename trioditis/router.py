@@ -576,14 +576,16 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
     # A coding agent's tool list is a structural fact, and the held-out test had no tools: when the
     # tool names match a route's tool keywords, the router decides and the picker is not asked.
     tool_hit = next((n for n, r in cfg.routes.items() if tool_score(tools or [], r)[0] > 0), None)
-    skip = (f"the request's tools match route {tool_hit}'s tool keywords" if tool_hit
+    skip = ("an adopted setting has the router serve (trioditis reinforce)" if not p.serves
+            else f"the request's tools match route {tool_hit}'s tool keywords" if tool_hit
             else "no text to classify" if not text.strip()
             else f"the prompt is {len(text):,} characters, over max_chars {p.max_chars:,}" if len(text) > p.max_chars
             else "another picker call is still running (one at a time; the model may be loading)" if picker.busy()
             else None)
     if skip:
         router = await _classify(cfg, text, embedder, reasons, tools)
-        info["outcome"] = "busy" if skip.startswith("another picker call") else "skipped"
+        info["outcome"] = ("busy" if skip.startswith("another picker call")
+                           else "not_serving" if not p.serves else "skipped")
         reasons.append(f"route picker not asked: {skip}")
         return router, router, info
 

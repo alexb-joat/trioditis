@@ -112,3 +112,31 @@ Two limits. The log has no labels, so this counts disagreement, never which of t
 The method, the data and the results behind the accuracy numbers Trioditis publishes are in [Route accuracy: the study](route-accuracy.md).
 
 **The one network call**: embedding the prompts and each route's `examples` with the configured local embeddings provider (for example Ollama), the same call the router makes. Nothing else leaves your machine, and each prompt is embedded once however many thresholds are tried.
+
+## The reinforcement loop (opt-in; the gate and the undo are built, adopting is not yet)
+
+The loop's aim is a router that corrects two of its own settings from evidence, inside limits that are fixed in the code:
+
+1. **Scope.** Only `embeddings.threshold` and whether the [route picker](../README.md#how-a-request-is-routed)'s route is served. Never model lists or their order, spend caps, privacy rules or new models.
+2. **Gate.** A change is adopted only when it does at least as well on your own labelled prompts (below).
+3. **Size.** At most one change a day; the threshold moves at most 0.05 a step and stays inside 0.35 to 0.55.
+4. **Undo.** Every adoption is logged with its before and after and is taken back with one command.
+5. **Visible.** `trioditis check` lists each of the two values with the layer that set it: the built-in default, `config.yaml`, or an adoption with its date. `trioditis explain` names an adopted value among its reasons.
+6. **Off by default.** Nothing below happens without a `reinforce:` block.
+
+```yaml
+reinforce:
+  labels: ~/routing/labels.csv     # your labelled gate set: prompt, expected_route (the format above)
+```
+
+**What this version does.** `trioditis reinforce run --dry-run` puts one question to the gate set, whether the picker's route should be served, and prints the verdict. `trioditis reinforce revert` takes back the last adopted value and `revert --all` returns to the `config.yaml` values; both take `--dry-run`. The running router reads adopted values from `~/.hlidskjalv/trioditis-adopted.json` (private, never `config.yaml`) and picks up a change within about a second, no restart. With picker serving adopted to "no", a request gets the router's own route and the picker is not asked (logged as `not_serving`).
+
+**What it does not do yet.** `reinforce run` without `--dry-run` refuses: an adoption must be able to revert itself when its watch chart alarms, and that chart is not built. Threshold steps are meant to be proposed from your traffic; that is not built either, so no threshold candidate reaches the gate. Until both exist nothing writes an adoption, and the undo has nothing to take back.
+
+**The gate's rule.** The candidate and the setting in force are each scored on every row of the gate set, the same rows for both. The candidate passes only when it is right on more rows and the 95% interval of the paired difference (candidate minus in force) stays above -5 points. The interval is a Wald interval with 0.5 added to each cell of the paired table (Agresti and Min, *Statistics in Medicine* 24, 2005, 729-740), which keeps its width when the two settings rarely disagree. With 20 rows of 120 where the two differ, a candidate has to be ahead by about 3 rows. When earlier adoptions came from the same gate set, the candidate must also pass against the setting that set started from, so small steps cannot add up to a drift. A gate set decides at most 5 candidates and a value that was taken back is not gated again until the file changes.
+
+For the picker question the gate asks the picker once per row it would see in the running router (rows over `max_chars` keep the router's route under both settings) and waits for every answer: the gate is about routes, and time is measured by `scripts/picker_timing.py`.
+
+**Limits.** A gate set is one person's labels: "at least as good on these prompts" is the claim, nothing wider. Prompts you wrote to test the router are not a sample of what you send it, so label prompts from your own work. Two settings and a five-value threshold range make a self-correcting dial, not broad learning.
+
+**Network calls**: the config's local embeddings provider and its local route picker, once per row each. The gate set's prompts go nowhere else and are not written to any file or report.

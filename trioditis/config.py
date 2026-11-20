@@ -86,6 +86,7 @@ class Embeddings:
     provider: str
     model: str
     threshold: float = DEFAULT_EMBEDDINGS_THRESHOLD
+    threshold_given: bool = False  # the config names a threshold (else it is the built-in default)
 
 
 @dataclass(frozen=True)
@@ -98,10 +99,22 @@ class RoutePicker:
     max_chars: int = 200    # longer prompts skip the picker: the accuracy test's prompts were at most 206
     #                         characters, and on a laptop CPU 2 of 20 calls passed timeout_ms at 200
     #                         characters, 7 of 20 at 250 (docs/route-accuracy.md, "Time by prompt length")
+    serves: bool = True     # not a config key: False only when the reinforcement loop adopted "the router
+    #                         serves" (trioditis/adopted.py); the request then gets the router's own route
 
 
 PICKER_TEXT_CHARS = 4000  # how much of a prompt the picker reads: the same cut the embeddings signal makes
 ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars"}
+
+
+@dataclass(frozen=True)
+class Reinforce:
+    """The reinforcement loop (opt-in, docs/staying-current.md): with this block present, routing
+    values the loop adopted override the config's. Absent = off, and the adopted file is ignored."""
+    labels: str  # the labelled gate set: a CSV with prompt and expected_route, read on this machine only
+
+
+REINFORCE_KEYS = {"labels"}
 
 
 @dataclass(frozen=True)
@@ -144,6 +157,7 @@ class Config:
     default_route: str
     embeddings: Embeddings | None = None
     route_picker: RoutePicker | None = None
+    reinforce: Reinforce | None = None
     privacy: Privacy = field(default_factory=Privacy)
     limits: Limits = field(default_factory=Limits)
     logging: Logging = field(default_factory=Logging)
@@ -266,7 +280,8 @@ def parse_config(raw: dict) -> Config:
         if not providers[e["provider"]].local:
             # Embedding the prompt sends it somewhere; keep that local.
             raise ConfigError("embeddings.provider must be a local provider")
-        emb = Embeddings(e["provider"], e["model"], float(e.get("threshold", DEFAULT_EMBEDDINGS_THRESHOLD)))
+        emb = Embeddings(e["provider"], e["model"], float(e.get("threshold", DEFAULT_EMBEDDINGS_THRESHOLD)),
+                         threshold_given="threshold" in e)
 
     pv = raw.get("privacy") or {}
     on_no_local = pv.get("on_no_local_model", "reject")
@@ -297,6 +312,7 @@ def parse_config(raw: dict) -> Config:
 
     return Config(providers, models, routes, default_route, embeddings=emb,
                   route_picker=_parse_route_picker(raw.get("route_picker"), providers, routes),
+                  reinforce=_parse_reinforce(raw.get("reinforce")),
                   privacy=privacy, limits=limits, logging=logging, facts=facts, plan=parse_plan(raw.get("plan")))
 
 
@@ -330,6 +346,21 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
         raise ConfigError(f"route {without[0]}: needs a description, because route_picker chooses from the "
                           f"route descriptions")
     return RoutePicker(prov, model.strip(), timeout, max_chars)
+
+
+def _parse_reinforce(raw) -> Reinforce | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError("reinforce must be a mapping with labels, or absent (off)")
+    unknown = set(raw) - REINFORCE_KEYS
+    if unknown:
+        raise ConfigError(f"reinforce: unknown key(s) {', '.join(sorted(unknown))}; use labels")
+    labels = raw.get("labels")
+    if not isinstance(labels, str) or not labels.strip():
+        raise ConfigError("reinforce.labels must be the path of the labelled gate set, a CSV with the columns "
+                          "prompt and expected_route (e.g. ~/routing/labels.csv)")
+    return Reinforce(str(Path(labels.strip()).expanduser()))
 
 
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")

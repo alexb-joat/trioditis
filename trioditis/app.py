@@ -23,6 +23,7 @@ from trioditis_metrics.ratelimits import parse as parse_ratelimits
 from . import gate
 from .accounts import ACCOUNTS_EVERY_S, adapter_for
 from .accounts import report as account_report
+from .adopted import Layer
 from .config import Config
 from .envvars import env
 from .hardware import ReportCache
@@ -134,6 +135,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
     )
     embedder = Embedder(cfg, client) if cfg.embeddings else None
     picker = RoutePickerClient(cfg, client) if cfg.route_picker else None  # local only (config checks)
+    adopted = Layer(cfg)  # cfg itself unless `reinforce:` is on and the loop has adopted a routing value
     pins = SessionPins(cfg.limits.session_ttl_s)
     cooldowns = Cooldowns()
     log = DecisionLog(cfg.logging.path, cfg.logging.log_prompts)
@@ -290,7 +292,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         route picker, always local, is asked, so the dry run shows the route a real request gets)."""
         try:
             body = await read_json(request)
-            d = await decide(cfg, body, embedder=embedder, pins=None, signals=signals,
+            d = await decide(adopted.current(), body, embedder=embedder, pins=None, signals=signals,
                              session_id=None, picker=picker)
         except RoutingError as e:
             return _error(e.status, e.message)
@@ -307,8 +309,8 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             body = await read_json(request)
             sid = session_of(request, body)
             caller = client_of(request.headers)  # the calling tool, for usage per tool
-            d = await decide(cfg, body, embedder=embedder, pins=pins, session_id=sid, signals=signals,
-                             picker=picker)
+            d = await decide(adopted.current(), body, embedder=embedder, pins=pins, session_id=sid,
+                             signals=signals, picker=picker)
         except RoutingError as e:
             return _error(e.status, e.message)
 

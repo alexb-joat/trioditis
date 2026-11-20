@@ -25,7 +25,8 @@ from .evalroutes import _fit, _pct
 
 ASKED = ("chose", "timeout", "no_route", "error")   # the picker was called
 NOT_ASKED = {"skipped": "tools matched a route, no text, or the prompt was over max_chars",
-             "busy": "another picker call was still running"}
+             "busy": "another picker call was still running",
+             "not_serving": "an adopted setting had the router serve (trioditis reinforce)"}
 
 
 class LogError(Exception):

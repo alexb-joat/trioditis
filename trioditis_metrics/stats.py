@@ -45,6 +45,25 @@ def sign_test(b: int, c: int) -> float:
     return min(1.0, 2 * tail / 2 ** n)
 
 
+def paired_difference(b: int, c: int, n: int, z: float = Z95) -> tuple[float, float, float] | None:
+    """(difference, low, high) for two settings scored on the same n rows: the first setting's share
+    right minus the second's, as a fraction, with its interval.
+
+    `b` rows went right under the first setting only, `c` under the second only. The interval is the
+    Wald interval after adding 0.5 to each of the paired table's four cells (b + 0.5, c + 0.5, n + 2),
+    the "Wald+2" interval of Agresti and Min (Statistics in Medicine 24, 2005, 729-740): the plain
+    Wald interval is too narrow with few disagreements and has zero width with none. The difference
+    returned is the plain (b - c) / n. None when there is no data."""
+    if b < 0 or c < 0 or b + c > n:
+        raise ValueError(f"need b >= 0, c >= 0 and b + c <= n, got b={b}, c={c}, n={n}")
+    if n <= 0:
+        return None
+    bb, cc, nn = b + 0.5, c + 0.5, n + 2
+    centre = (bb - cc) / nn
+    half = z * math.sqrt((bb + cc) - (bb - cc) ** 2 / nn) / nn
+    return (b - c) / n, max(-1.0, centre - half), min(1.0, centre + half)
+
+
 def _kappa(pairs: list[tuple[str, str]]) -> float | None:
     n = len(pairs)
     observed = sum(a == b for a, b in pairs) / n

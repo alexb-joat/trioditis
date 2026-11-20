@@ -131,6 +131,12 @@ embeddings:
 #   timeout_ms: 2500               # no answer in time -> the router's route
 #   max_chars: 200                 # longer prompts skip it: at 200, 2 of 20 calls on that laptop passed 2.5 s
 
+# Reinforcement loop (optional, off unless this block is here). In this version it only measures:
+# `trioditis reinforce run --dry-run` scores "should the picker's route be served?" on your own
+# labelled prompts and adopts nothing (docs/staying-current.md).
+# reinforce:
+#   labels: ~/routing/labels.csv   # CSV with prompt, expected_route; read on this machine only
+
 privacy:
   enabled: true
   builtin_detectors: true          # emails, card numbers, IBANs, API keys, private keys...

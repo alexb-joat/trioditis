@@ -142,6 +142,23 @@ def main(argv: list[str] | None = None) -> None:
     rf.add_argument("--json", action="store_true", help="print the fitted document")
     rf.add_argument("--dry-run", action="store_true", help="show the result, write nothing")
 
+    rn = sub.add_parser("reinforce", help="the reinforcement loop: gate a routing change on your labelled prompts, "
+                                          "or take an adopted one back (off unless the config has `reinforce:`)",
+                        description="Routing values the loop adopts live in ~/.hlidskjalv/trioditis-adopted.json, never "
+                                    "in config.yaml, and only two can move: embeddings.threshold (inside 0.35 to 0.55, "
+                                    "0.05 a step) and whether the route picker's route is served. A change has to pass "
+                                    "the gate: right on more rows of your labelled gate set (config reinforce.labels) "
+                                    "than the setting in force, with the 95% interval of the paired difference above "
+                                    "-5 points. Network calls: the config's local embeddings provider and local route "
+                                    "picker; nothing else.")
+    rn_sub = rn.add_subparsers(dest="reinforce_cmd", required=True)
+    rr = rn_sub.add_parser("run", help="gate each candidate on the labelled gate set and show the verdict "
+                                       "(this version only with --dry-run: it adopts nothing yet)")
+    rr.add_argument("--dry-run", action="store_true", help="show the verdict, write nothing")
+    rv = rn_sub.add_parser("revert", help="take back the last adopted value (works with the loop on or off)")
+    rv.add_argument("--all", action="store_true", help="take back every adopted value: back to the config.yaml values")
+    rv.add_argument("--dry-run", action="store_true", help="show what would be taken back, write nothing")
+
     args = ap.parse_args(argv)
     if args.cmd == "usage":  # reads the metrics database only: works without a config
         sys.exit(plan_report(args) if args.plan else usage_report(args))
@@ -185,9 +202,17 @@ def main(argv: list[str] | None = None) -> None:
         from .localcheck import picker_lines
         for line in picker_lines(cfg):  # [] unless route_picker: is configured
             print(line)
+        from .reinforce import check_lines
+        for line in check_lines(cfg):  # [] unless `reinforce:` is configured or a value is adopted
+            print(textwrap.fill(line, width=98, subsequent_indent="    ", break_long_words=False,
+                                break_on_hyphens=False))
         for line in _facts_lines(cfg):
             print(line)
         return
+
+    if args.cmd == "reinforce":
+        from . import reinforce
+        sys.exit(reinforce.run(cfg, args) if args.reinforce_cmd == "run" else reinforce.revert(cfg, args))
 
     if args.cmd == "refit":
         from .refit import run
@@ -203,7 +228,17 @@ def main(argv: list[str] | None = None) -> None:
         body = {"model": "auto", "messages": [{"role": "user", "content": args.prompt}]}
         # Keyword/rule signals only here, so the CLI never calls any network service; prices and past
         # latency (read-only) let it show a route's cost or speed order.
-        d = asyncio.run(decide(cfg, body, signals=Signals(prices=Prices(), latency=_readonly_latency())))
+        from . import adopted
+        try:
+            doc = adopted.read() if cfg.reinforce else adopted.empty()
+            note = None
+        except adopted.AdoptedError as err:
+            doc, note = adopted.empty(), f"adopted values not used: {err}"
+        live = adopted.apply(cfg, doc)  # cfg itself unless `reinforce:` is on and a value is adopted
+        d = asyncio.run(decide(live, body, signals=Signals(prices=Prices(), latency=_readonly_latency())))
+        if note:
+            d.reasons.append(note)
+        d.reasons.extend(line for line in adopted.layer_lines(cfg, doc) if ": adopted " in line)
         if cfg.route_picker:
             d.reasons.append("route_picker is configured but not asked here (explain contacts no service); "
                              "POST /v1/route asks it")
