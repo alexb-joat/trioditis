@@ -132,7 +132,7 @@ async def test_slow_picker_falls_back_within_the_timeout():
     d = await decide(c, body("I have a python bug"), picker=p)
     assert d.route == "code" and d.picker["outcome"] == "timeout"
     assert d.picker["ms"] < 1500
-    assert ("route picker: no answer in 0.2 s (left to finish, so a loading model is ready next turn) "
+    assert ("route picker: no answer in 0.2 s (left to finish; requests that start after it ends get the picker) "
             "-> router chose code") in d.reasons
     p._left.cancel()
 
@@ -183,9 +183,13 @@ async def test_tool_keywords_decide_ahead_of_the_picker():
 
 async def test_long_prompts_skip_the_picker():
     c, p = asker(never)
-    d = await decide(c, body("debug this python " + "x" * 600), picker=p)
+    assert c.route_picker.max_chars == 200  # the default: docs/route-accuracy.md, "Time by prompt length, same machine"
+    d = await decide(c, body("debug this python " + "x" * 183), picker=p)
     assert d.route == d.router_route == "code" and d.picker["outcome"] == "skipped"
-    assert "route picker not asked: the prompt is 618 characters, over max_chars 500" in d.reasons
+    assert "route picker not asked: the prompt is 201 characters, over max_chars 200" in d.reasons
+    c, p = asker(lambda req: reply("code"))
+    d = await decide(c, body("hello " + "x" * 194), picker=p)  # exactly max_chars: still asked
+    assert d.picker["outcome"] == "chose" and d.route == "code"
     c, p = asker(lambda req: reply("code"), pcfg({"max_chars": 1000}))
     d = await decide(c, body("hello " + "x" * 600), picker=p)
     assert d.picker["outcome"] == "chose" and d.route == "code"
@@ -299,7 +303,8 @@ def test_check_missing_model_names_the_pull(monkeypatch):
 def test_check_ready_reports_both_call_times(monkeypatch):
     serve(monkeypatch, local_server())
     lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(2.0, 1.05))
-    assert lines[1] == "  ready: first call 2.00 s (may include loading the model), next call 1.05 s"
+    assert lines[1] == ("  ready: first call 2.00 s (may include loading the model), next call 1.05 s "
+                        "(a 25-character message; longer prompts take longer, see max_chars)")
     assert len(lines) == 2
 
 
@@ -307,7 +312,7 @@ def test_check_warns_when_the_first_call_exceeds_the_timeout(monkeypatch):
     serve(monkeypatch, local_server())
     lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(12.0, 0.4))
     assert len(lines) == 3 and "first call took longer than timeout_ms" in lines[2]
-    assert "next turn gets the picker" in lines[2] and "raise OLLAMA_KEEP_ALIVE" in lines[2]
+    assert "requests get the picker again once that call ends" in lines[2] and "raise OLLAMA_KEEP_ALIVE" in lines[2]
     c = pcfg(providers={**BASE["providers"], "llamacpp": {"base_url": "http://localhost:8080/v1", "local": True}},
              route_picker={"provider": "llamacpp", "model": "qwen2.5-coder:7b"})
     assert "OLLAMA_KEEP_ALIVE" not in picker_lines(c, clock=ticks(12.0, 0.4))[2]

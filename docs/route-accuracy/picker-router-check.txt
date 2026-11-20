@@ -1,0 +1,39 @@
+# The route picker in the running router, 20 November 2026. One run of each part; made-up prompts.
+#
+# Method: `trioditis serve` on a spare port at commit 59a3cfe with `route_picker:` on (timeout_ms 2500,
+# max_chars 500, the default at that commit) and the embeddings signal on. Every model the router could
+# forward to was replaced by a stub on this machine that answers at once, so no request left the laptop
+# and "request ms" is the router's own time plus the picker's. Times in the labels count from request 1. The rows are the decision log's fields.
+
+## Part A. Picker: qwen2.5-coder:7b on Ollama 0.40.0, not loaded at the start (`ollama ps` empty)
+1 first turn, model not loaded               route quick     router alone quick     picker timeout   2501 ms   request 2507 ms
+2 first turn at 2.5 s                        route reasoning router alone reasoning picker busy            -   request 60 ms
+3 first turn at 14.6 s                       route writing   router alone writing   picker busy            -   request 1102 ms
+4 second turn of 3's conversation            route writing   router alone -         picker -               -   request 43 ms
+5 first turn, 720-character prompt           route writing   router alone writing   picker skipped         -   request 146 ms
+6 first turn, tool list matches route code   route code      router alone code      picker skipped         -   request 67 ms
+7 first turn, streaming                      route code      router alone code      picker chose      985 ms   request 993 ms
+8 first turn                                 route quick     router alone quick     picker chose      669 ms   request 673 ms
+9 first turn                                 route reasoning router alone reasoning picker chose     1120 ms   request 1123 ms
+10 first turn                                route writing   router alone writing   picker chose      850 ms   request 852 ms
+11 first turn                                route reasoning router alone reasoning picker chose      919 ms   request 922 ms
+12 first turn                                route code      router alone code      picker chose     1316 ms   request 1319 ms
+
+# `ollama ps` first listed the model 13.5 s after request 1 was sent (read off the console, which was not kept). Ollama's log has the call request 1
+# left behind ending with HTTP 200 after 15.57 s, so request 3 (sent at about 14.6 s) was still `busy`.
+# Request 3 took 1102 ms although the picker was not asked: Ollama's log shows its embeddings call taking
+# 988 ms, waiting behind the picker's call on the same server.
+# Requests 7 to 12: the picker chose the route the router alone chose, six of six.
+
+## Part B. Picker: a stub server that is not Ollama (8 s on its first call, 0.3 s after, always replies "writing")
+1 first turn, server takes 8 s               route quick     router alone quick     picker timeout   2500 ms   request 2505 ms
+2 first turn at 3.0 s                        route reasoning router alone reasoning picker busy            -   request 22 ms
+3 first turn at 9.0 s                        route writing   router alone quick     picker chose      303 ms   request 342 ms
+4 first turn, server stopped                 route writing   router alone writing   picker error        0 ms   request 19 ms
+
+# The stub's log: the first call was answered after 8.0 s with the router still connected (it had not
+# cancelled the call). Request 4: the stub was stopped, the picker's call failed (ConnectError), and the
+# request was served on the router's route.
+
+# Not covered: llama.cpp, LM Studio, vLLM or any other real server besides Ollama; a streaming request
+# during a load; more than one run.

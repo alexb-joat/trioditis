@@ -586,7 +586,7 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
             done, _ = await asyncio.wait({task}, timeout=p.timeout_ms / 1000)
             if not done:
                 picker.leave(task)
-                return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s (left to finish, so a loading model is ready next turn)"
+                return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s (left to finish; requests that start after it ends get the picker)"
             return task.result(), "chose", ""
         except asyncio.CancelledError:
             task.cancel()

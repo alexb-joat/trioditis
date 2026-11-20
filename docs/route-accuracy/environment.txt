@@ -9,3 +9,7 @@ nomic-embed-text:latest 0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf
 qwen2.5-coder:7b dae161e27b0e 7.6B Q4_K_M, 4683087561 bytes on disk
 # The machine: AMD Ryzen 7 7735HS (Radeon 680M integrated graphics), 14 GB RAM, Linux.
 # Ollama ran qwen on the CPU (api/ps: size_vram 0).
+
+# Added 20 November 2026 for "Time by prompt length" and "In the running router" (same machine, same
+# Ollama 0.40.0, same qwen2.5-coder:7b digest). During the timing run: 15,215 MiB RAM (the 14 GB above) of which 627 MiB free
+# and 1,469 MiB available at the end, 12,036 MiB of swap in use, load average 2.60 at the start and 9.55 at the end.

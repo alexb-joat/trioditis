@@ -94,8 +94,9 @@ class RoutePicker:
     provider: str
     model: str
     timeout_ms: int = 2500  # no answer in time: the router's route is used
-    max_chars: int = 500    # longer prompts skip the picker: tested on prompts up to 206 characters, and
-    #                         on a laptop CPU 1,000 characters already took 2.6 s
+    max_chars: int = 200    # longer prompts skip the picker: the accuracy test's prompts were at most 206
+    #                         characters, and on a laptop CPU calls start to pass timeout_ms at 250 to 300
+    #                         characters (docs/route-accuracy.md, "Time by prompt length, same machine")
 
 
 ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars"}
