@@ -1,5 +1,6 @@
 """route_picker: a local model picks the route for the first turn of an `auto` conversation."""
 import asyncio
+import gc
 import json
 
 import httpx
@@ -43,6 +44,12 @@ def never(req):
     raise AssertionError("the picker must not be asked")
 
 
+async def settled(p):
+    """Wait for the picker's running call to end, the way a later request would find it."""
+    while p.busy():
+        await asyncio.sleep(0.01)
+
+
 # ------------------------------------------------------------------ config
 
 def test_absent_block_is_off():
@@ -56,7 +63,9 @@ def test_absent_block_is_off():
     ({"model": ""}, "route_picker.model"),
     ({"timeout_ms": 0}, "100 to 60000"),
     ({"timeout_ms": "2500"}, "whole number"),
-    ({"max_chars": 0}, "at least 1"),
+    ({"provider": ["local"]}, "must name a provider"),
+    ({"max_chars": 0}, "from 1 to 4000"),
+    ({"max_chars": 4001}, "from 1 to 4000"),  # the picker reads 4,000 characters: more would be cut unseen
     ({"max_chars": True}, "whole number"),
     ({"temperature": 1}, "unknown key(s) temperature"),
 ])
@@ -69,6 +78,10 @@ def test_routes_need_descriptions():
     raw = json.loads(json.dumps(BASE))
     raw["route_picker"] = {"provider": "local", "model": "m"}
     with pytest.raises(ConfigError, match="route code: needs a description"):
+        parse_config(raw)
+    for name in raw["routes"]:
+        raw["routes"][name]["description"] = None if name == "quick" else "x"  # YAML's `description:` left empty
+    with pytest.raises(ConfigError, match="route quick: needs a description"):
         parse_config(raw)
 
 
@@ -132,9 +145,10 @@ async def test_slow_picker_falls_back_within_the_timeout():
     d = await decide(c, body("I have a python bug"), picker=p)
     assert d.route == "code" and d.picker["outcome"] == "timeout"
     assert d.picker["ms"] < 1500
-    assert ("route picker: no answer in 0.2 s (left to finish; requests that start after it ends get the picker) "
-            "-> router chose code") in d.reasons
-    p._left.cancel()
+    assert ("route picker: no answer in 0.2 s (left to finish; requests with no pinned route that start "
+            "after it ends get the picker) -> router chose code") in d.reasons
+    for call in list(p._calls):
+        call.cancel()
 
 
 async def test_a_late_call_finishes_and_the_next_turn_gets_the_picker():
@@ -153,9 +167,9 @@ async def test_a_late_call_finishes_and_the_next_turn_gets_the_picker():
     assert d1.route == "quick" and d1.picker["outcome"] == "timeout" and p.busy()
     d2 = await decide(c, body("hello there"), picker=p)
     assert d2.route == "quick" and d2.picker["outcome"] == "busy" and len(calls) == 1
-    assert "route picker not asked: its last call is still running (the model may be loading)" in d2.reasons
-    await p._left  # the late answer is dropped, not served to anyone
-    assert not p.busy()
+    assert ("route picker not asked: another picker call is still running (one at a time; the model may be "
+            "loading)") in d2.reasons
+    await settled(p)  # the late answer is dropped, not served to anyone
     d3 = await decide(c, body("hello there"), picker=p)
     assert d3.route == "code" and d3.picker["outcome"] == "chose" and len(calls) == 2
 
@@ -165,12 +179,90 @@ async def test_a_late_call_that_fails_is_swallowed():
         await asyncio.sleep(0.4)
         return httpx.Response(500, json={"error": "x"})
 
+    lost = []  # asyncio reports an exception nobody retrieved here, when the task is collected
+    asyncio.get_running_loop().set_exception_handler(lambda loop, ctx: lost.append(ctx))
     c, p = asker(late_error)
     d = await decide(c, body("hello there"), picker=p)
-    assert d.picker["outcome"] == "timeout"
-    with pytest.raises(httpx.HTTPStatusError):
-        await p._left
-    assert not p.busy()
+    assert d.picker["outcome"] == "timeout" and p.busy()
+    await settled(p)
+    await asyncio.sleep(0)
+    gc.collect()
+    assert not p._calls and lost == []
+
+
+async def test_requests_that_arrive_together_send_one_call():
+    # A burst on a cold model: one request asks, the others keep the router's route, and nothing
+    # piles up on the local server.
+    calls = []
+
+    async def loading(req):
+        calls.append(1)
+        await asyncio.sleep(0.4)
+        return reply("code")
+
+    c, p = asker(loading)
+    ds = await asyncio.gather(*(decide(c, body("hello there"), picker=p) for _ in range(6)))
+    assert len(calls) == 1
+    assert sorted(d.picker["outcome"] for d in ds) == ["busy"] * 5 + ["timeout"]
+    assert all(d.route == "quick" for d in ds)
+    await settled(p)
+
+
+async def test_a_client_with_no_session_id_and_no_tools_is_asked_on_every_turn():
+    # Nothing identifies its conversation, so nothing is pinned: each request is a first turn.
+    calls = []
+
+    def answer(req):
+        calls.append(1)
+        return reply("code")
+
+    c, p = asker(answer)
+    pins = SessionPins(600)
+    for _ in range(3):
+        d = await decide(c, body("hello there"), pins=pins, picker=p)
+        assert d.picker["outcome"] == "chose"
+    assert len(calls) == 3
+
+
+async def test_a_cancelled_request_cancels_its_call():
+    started = asyncio.Event()
+
+    async def slow(req):
+        started.set()
+        await asyncio.sleep(5)
+        return reply("code")
+
+    c, p = asker(slow, pcfg({"timeout_ms": 5000}))
+    request = asyncio.ensure_future(decide(c, body("hello there"), picker=p))
+    await started.wait()
+    request.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+    await asyncio.wait_for(settled(p), 1)  # cancelled, not left to run its 5 s
+
+
+async def test_a_router_failure_cancels_the_call(monkeypatch):
+    async def slow(req):
+        await asyncio.sleep(5)
+        return reply("code")
+
+    async def broken(*a, **k):
+        await asyncio.sleep(0.05)
+        raise RuntimeError("router")
+
+    async def broken_at_once(*a, **k):  # before the picker's wait has even started
+        raise RuntimeError("router")
+
+    c, p = asker(slow, pcfg({"timeout_ms": 5000}))
+    for failing in (broken, broken_at_once):
+        monkeypatch.setattr("trioditis.router._classify", failing)
+        with pytest.raises(RuntimeError):
+            await decide(c, body("hello there"), picker=p)
+        await asyncio.wait_for(settled(p), 1)
+    monkeypatch.setattr("trioditis.router._classify", broken)
+    with pytest.raises(RuntimeError):
+        await decide(c, body("hello there"), picker=p)
+    await asyncio.wait_for(settled(p), 1)  # cancelled, not left to run its 5 s
 
 
 async def test_tool_keywords_decide_ahead_of_the_picker():
@@ -304,7 +396,7 @@ def test_check_ready_reports_both_call_times(monkeypatch):
     serve(monkeypatch, local_server())
     lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(2.0, 1.05))
     assert lines[1] == ("  ready: first call 2.00 s (may include loading the model), next call 1.05 s "
-                        "(a 25-character message; longer prompts take longer, see max_chars)")
+                        "(the same 25-character message again; longer prompts take longer, see max_chars)")
     assert len(lines) == 2
 
 
@@ -327,3 +419,17 @@ def test_check_warns_when_warm_calls_exceed_the_timeout(monkeypatch):
 def test_check_reply_without_a_route(monkeypatch):
     serve(monkeypatch, local_server(answer="hello!"))
     assert "named no route" in picker_lines(pcfg())[1]
+    serve(monkeypatch, local_server(answer=[{"type": "text", "text": "quick"}]))  # content that is not a string
+    assert "named no route" in picker_lines(pcfg())[1]
+
+
+def test_check_says_slow_not_failed_when_a_call_never_answers(monkeypatch):
+    def handler(req):
+        if req.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "qwen2.5-coder:7b"}]})
+        raise httpx.ReadTimeout("slow", request=req)
+
+    serve(monkeypatch, handler)
+    line = picker_lines(pcfg())[1]
+    assert "failed" not in line
+    assert "no answer in 120 s: at this speed a first turn waits 0.2 s and then uses the router's route" in line

@@ -7,8 +7,10 @@ Sends the request the router's picker sends (same instruction, temperature 0, se
 with the routes of --config, N times per length in a shuffled order. The one network call is to
 --base-url, which must be on this machine. The texts are slices of this repository's own docs at
 random offsets, each used once, so no call repeats an earlier prompt; they are not written to the CSV.
---seed fixes the order and the offsets, so a rerun sends the same texts only while those files are
-unchanged. One untimed call first makes sure the model is loaded. The CSV gets one row per call as it
+Each run draws a new order and new offsets and prints its seed. --seed repeats a run's texts (while
+those files are unchanged), but not its times: a server that has just seen the same texts answered many
+of them in a fraction of the time (docs/route-accuracy/picker-timing-same-seed.csv), so measure with
+texts the server has not seen. One untimed call first makes sure the model is loaded. The CSV gets one row per call as it
 ends: characters, repeat, seconds, HTTP status, prompt tokens as the server counted them, and the
 1-minute load average (the model's own threads are part of it).
 
@@ -56,7 +58,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--lengths", default="100,150,200,250,300,500,750,1000,1500,2000,4000",
                     help="prompt lengths in characters, comma-separated (default: %(default)s)")
     ap.add_argument("--n", type=int, default=5, help="calls per length (default: %(default)s)")
-    ap.add_argument("--seed", type=int, default=20261120, help="order and text offsets (default: %(default)s)")
+    ap.add_argument("--seed", type=int, default=None,
+                    help="order and text offsets (default: a new one each run, printed at the end; "
+                         "repeating a seed resends texts the server may answer faster the second time)")
     ap.add_argument("--timeout-ms", type=int, default=RoutePicker.timeout_ms,
                     help="count calls slower than this (default: %(default)s, the picker's default)")
     ap.add_argument("--out", help="write one row per call to this CSV")
@@ -83,6 +87,9 @@ def main(argv: list[str] | None = None) -> None:
     if max(lengths) * 2 > len(prose):
         sys.exit(f"the longest length must be under {len(prose) // 2:,} characters (half the text this script slices)")
 
+    if a.seed is None:
+        a.seed = int(time.time())
+        print(f"seed {a.seed}", flush=True)  # now, so a run that is cut short still names its texts
     rng = random.Random(a.seed)  # noqa: S311  (a repeatable order and offsets, not a secret)
     jobs = [(chars, rep) for chars in lengths for rep in range(a.n)]
     if len(jobs) > len(prose) - 2 * max(lengths):

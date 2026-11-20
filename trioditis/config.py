@@ -90,15 +90,17 @@ class Embeddings:
 
 @dataclass(frozen=True)
 class RoutePicker:
-    """A local model that picks the route for the first turn of an `auto` conversation (opt-in)."""
+    """A local model that picks the route for the first turn of an `auto` conversation (opt-in).
+    A client that sends no session id and no tools has no conversation to pin: it is asked every turn."""
     provider: str
     model: str
     timeout_ms: int = 2500  # no answer in time: the router's route is used
     max_chars: int = 200    # longer prompts skip the picker: the accuracy test's prompts were at most 206
-    #                         characters, and on a laptop CPU calls start to pass timeout_ms at 250 to 300
-    #                         characters (docs/route-accuracy.md, "Time by prompt length, same machine")
+    #                         characters, and on a laptop CPU 2 of 20 calls passed timeout_ms at 200
+    #                         characters, 7 of 20 at 250 (docs/route-accuracy.md, "Time by prompt length")
 
 
+PICKER_TEXT_CHARS = 4000  # how much of a prompt the picker reads: the same cut the embeddings signal makes
 ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars"}
 
 
@@ -220,7 +222,7 @@ def parse_config(raw: dict) -> Config:
         _check_name("model", name)
         if name == "auto" or name.startswith("route/"):
             raise ConfigError(f"model name {name!r} is reserved")
-        if m.get("provider") not in providers:
+        if not isinstance(m.get("provider"), str) or m.get("provider") not in providers:
             raise ConfigError(f"model {name}: unknown provider {m.get('provider')!r}")
         models[name] = Model(
             name=name,
@@ -243,7 +245,7 @@ def parse_config(raw: dict) -> Config:
             raise ConfigError(f"route {name}: needs at least one model")
         routes[name] = Route(
             name=name,
-            description=str(r.get("description", "")),
+            description=str(r.get("description") or ""),  # `description:` left empty is None, not "None"
             models=rmodels,
             keywords=tuple(k.lower() for k in r.get("keywords") or []),
             patterns=_compile(r.get("patterns"), f"route {name}"),
@@ -259,7 +261,7 @@ def parse_config(raw: dict) -> Config:
     emb = None
     if raw.get("embeddings"):
         e = raw["embeddings"]
-        if e.get("provider") not in providers:
+        if not isinstance(e.get("provider"), str) or e.get("provider") not in providers:
             raise ConfigError("embeddings.provider must name a provider")
         if not providers[e["provider"]].local:
             # Embedding the prompt sends it somewhere; keep that local.
@@ -307,7 +309,7 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     if unknown:
         raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars")
     prov = raw.get("provider")
-    if prov not in providers:
+    if not isinstance(prov, str) or prov not in providers:
         raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
     if not providers[prov].local:
         # The picker reads every first `auto` prompt, sensitive ones included; keep that local.
@@ -320,8 +322,9 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     if isinstance(timeout, bool) or not isinstance(timeout, int) or not 100 <= timeout <= 60_000:
         raise ConfigError(f"route_picker.timeout_ms must be a whole number from 100 to 60000 (got {timeout!r})")
     max_chars = raw.get("max_chars", RoutePicker.max_chars)
-    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars < 1:
-        raise ConfigError(f"route_picker.max_chars must be a whole number of at least 1 (got {max_chars!r})")
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1 <= max_chars <= PICKER_TEXT_CHARS:
+        raise ConfigError(f"route_picker.max_chars must be a whole number from 1 to {PICKER_TEXT_CHARS} "
+                          f"(the picker reads that much of a prompt; got {max_chars!r})")
     without = [n for n, r in routes.items() if not r.description.strip()]
     if without:
         raise ConfigError(f"route {without[0]}: needs a description, because route_picker chooses from the "

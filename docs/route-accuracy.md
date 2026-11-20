@@ -247,7 +247,7 @@ The route is the first word of the reply that names one; a reply with none count
 request `scripts/route_study.py model-baseline` sends, and the one `route_picker:` sends
 (`tests/test_route_picker.py` pins it). The router had to reproduce its committed 205/315 first, and did.
 
-**Pass mark, written at 18:17, before the run at 18:18.** More than 205 of 315 right, and an exact
+**Pass mark, written at 18:17, before the run (its report is dated 18:23).** More than 205 of 315 right, and an exact
 two-sided sign test against the router on the same prompts with p < 0.05. One run, nothing tuned on
 these prompts.
 
@@ -270,10 +270,13 @@ to `quick`, the default route. Every reply named a route; no call failed.
 per call once the model was loaded, 95th percentile 1.68 s, slowest 2.38 s (the held-out prompts: median
 length 78 characters, at most 206). On 20 November the first
 call `trioditis check` made took 17.8 s and the next 0.34 s (n = 1; the gap fits the model being loaded
-into memory, which was not checked). Later that day three cold starts took 16–21 s, and one more, with
+into memory, which was not checked, and the second call repeated the first one's text). Later that day three cold starts took 16–21 s, and one more, with
 no model loaded (`ollama ps`, which lists the models in memory, was empty), 19.7 s; in the router check below it was 15.6 s. A request that arrives while the model loads falls back to the router at the
-default 2.5 s timeout; the call goes on, so the model finishes loading. Until that call ends, first
-turns skip the picker (outcome `busy` in the decision log); after it, they get the picker. `qwen2.5-coder:7b` is 4.7 GB on disk.
+default 2.5 s timeout; the call goes on, so the model finishes loading. One picker call runs at a
+time: until that call ends, other requests skip the picker (outcome `busy` in the decision log); after
+it, they get the picker. A turn counts as a first turn when nothing is pinned for its conversation, and
+a conversation is known by its session id (`X-Session-Id` or `user`) or, for a request with tools, by
+its task. A client that sends neither is asked on every turn. `qwen2.5-coder:7b` is 4.7 GB on disk.
 
 **Time by prompt length, same machine.** The call slows down as the prompt grows. On 20 November
 `scripts/picker_timing.py` sent the picker's request five times per length, in a shuffled order, with a
@@ -297,27 +300,48 @@ average 3.8 to 10.6 with the model's own threads included. Every call returned
 | 4,000 | 27.60 s | 23.49 s | 34.30 s | 5 of 5 |
 
 A first turn whose call passes `timeout_ms` waits the whole 2.5 s and then gets the router's route
-anyway, so prompts over `max_chars` skip the picker. The default is 200: the longest length here at
-which no call passed the default timeout, and about the longest prompt of the accuracy test (206
-characters). One of the 315 held-out prompts is over 200 characters, so with the default it would skip
+anyway, so prompts over `max_chars` skip the picker. The default is 200, about the longest prompt of
+the accuracy test (206 characters). At that length about one call in ten passed the default timeout:
+none of 5 in the table above, 2 of 20 in the larger run below. One of the 315 held-out prompts is over 200 characters, so with the default it would skip
 the picker; the accuracy above was measured with every prompt reaching it.
 
-Limits of these times: five calls per length, on one machine, in two runs on one afternoon. The table
-is the second run. The first, half an hour earlier with eight of the lengths
+A larger run that evening, 20 calls per length with new texts, the laptop again in use (1-minute load
+3.0 to 10.5; [picker-timing-n20.csv](route-accuracy/picker-timing-n20.csv), seed 20261122):
+
+| Characters | Median | Fastest | Slowest | Over 2.5 s | 95% interval of that share |
+|---|---|---|---|---|---|
+| 100 | 1.18 s | 0.76 s | 2.15 s | 0 of 20 | 0 to 16% |
+| 150 | 1.60 s | 1.10 s | 2.28 s | 0 of 20 | 0 to 16% |
+| 200 | 1.94 s | 1.11 s | 2.78 s | 2 of 20 | 3 to 30% |
+| 250 | 2.34 s | 1.42 s | 3.50 s | 7 of 20 | 18 to 57% |
+| 300 | 2.54 s | 2.02 s | 3.39 s | 12 of 20 | 39 to 78% |
+
+The intervals are Wilson intervals. A default of 150 would have had no call over the timeout in this
+run, at the cost of more prompts skipping the picker.
+
+Limits of these times: one machine in ordinary use, one afternoon and evening. The first table
+is the second run of the afternoon, five calls per length; its first calls (about nine, none of them at
+200 to 300 characters) ran while a test suite and a lint ran on the same machine. The first run, half an hour earlier with eight of the lengths
 ([picker-timing-first-run.csv](route-accuracy/picker-timing-first-run.csv), the same request from an
 earlier copy of the script), had 2 of 5 calls over 2.5 s at 250 characters and medians of 1.32 s at 100
-and 3.87 s at 500, so single cells move between runs. The margin is thin (the slowest call at 200 took
-2.45 s). One call each earlier that day had taken less than half these medians (500 characters 1.8 s,
+and 3.87 s at 500, so single cells move between runs. Another five-call run with new texts, made
+while other checks ran ([picker-timing-other-seed.csv](route-accuracy/picker-timing-other-seed.csv),
+seed 20261121), had 1 of 5 calls over 2.5 s at 200 characters, 1 of 5 at 250 and 3 of 5 at 300.
+Repeating the first table's seed straight after a run does not measure new prompts
+([picker-timing-same-seed.csv](route-accuracy/picker-timing-same-seed.csv)): 20 of its 40 calls at 250
+characters and up came back in 0.31 to 1.27 s, the 4,000-character ones included, where no call that
+long did in the other runs. Why was not checked. The script now draws a new seed for every run unless `--seed` is given. One call each earlier that day had taken less than half these medians (500 characters 1.8 s,
 1,000 2.6 s, 4,000 10.7 s); those calls' records were not kept, nor what else the machine was doing. The texts were slices of Markdown docs, not chat prompts (500 characters were 193 to 272
 tokens), so your prompts may count differently. And the script times the picker's call alone: in the
 router the embeddings call runs at the same moment on the same server. To set `max_chars` for another
 machine or model, run this from a clone of the repository:
 
 ```
-python scripts/picker_timing.py --model qwen2.5-coder:7b
+python scripts/picker_timing.py --model qwen2.5-coder:7b --lengths 100,150,200,250,300 --n 20
 ```
 
-and take the longest length whose calls all stay under your `timeout_ms`, with some headroom.
+and take the longest length at which few enough calls pass your
+`timeout_ms`: each one that does costs that turn the whole wait.
 
 **In the running router** (20 November, one run, made-up prompts;
 [picker-router-check.txt](route-accuracy/picker-router-check.txt)). With the picker on and every model
@@ -326,7 +350,7 @@ the router forwards to replaced by a stub on the same machine, 12 requests gave 
 first turn, with the model not loaded, fell back at 2.5 s; Ollama finished that call after 15.6 s, and
 two first turns sent before then were `busy`; a second turn, a prompt over `max_chars` and a tool list
 matching `code` did not reach the picker; six later first turns got its answer in 0.67 to 1.32 s. One
-`busy` turn still took 1.1 s, because its embeddings call waited behind the picker's call on the same
+`busy` turn still took 1.1 s, most likely because its embeddings call waited behind the picker's call on the same
 Ollama server. Against a stub server that is not Ollama and takes 8 s on its first call, the router
 kept that call open until it was answered; with that server stopped, the picker's call failed at once
 and the request was served on the router's route in 19 ms. No other real server (llama.cpp, LM Studio, vLLM) was tried.

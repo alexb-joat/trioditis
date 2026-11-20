@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 
 import httpx
 
-from .config import Config, Route
+from .config import PICKER_TEXT_CHARS, Config, Route
 from .security import detect_sensitive
 
 
@@ -199,7 +199,6 @@ class Embedder:
 
 
 ROUTE_PICKER_INSTRUCTION = 1  # bump when the text below changes: a measurement names the instruction it used
-PICKER_TEXT_CHARS = 4000       # the same cut the embeddings signal makes
 PICKER_LOAD_S = 120.0          # a call that outlives timeout_ms may run this long: it may be loading the model
 
 
@@ -218,17 +217,27 @@ class RoutePickerClient:
         self.cfg = cfg
         self.client = client
         self.routes = {n.lower(): n for n in cfg.routes}
-        self._left: asyncio.Task | None = None  # a call that outlived timeout_ms, left to finish
+        self._calls: set[asyncio.Task] = set()  # running calls: at most one (see start)
 
     def busy(self) -> bool:
-        """A call that outlived timeout_ms is still running (often: the model is loading)."""
-        return self._left is not None and not self._left.done()
+        """A call is running: another request's, or one that outlived timeout_ms and was left to
+        finish (often: the model is loading)."""
+        return any(not t.done() for t in self._calls)
 
-    def leave(self, task: asyncio.Task) -> None:
-        """Let a late call finish instead of cancelling it: cancelling stops a cold model's load, so
-        every later first turn would time out too. Its answer is dropped; its error is swallowed."""
-        self._left = task
-        task.add_done_callback(lambda t: t.cancelled() or t.exception())
+    def start(self, text: str) -> asyncio.Task:
+        """Start the call. The caller checks busy() first and calls this with no await in between,
+        so one call runs at a time: requests that arrive together don't each load a cold model.
+        A call that outlives timeout_ms is not cancelled, because cancelling stops a cold model's
+        load and every later call would time out too. Its answer is then dropped, its error swallowed."""
+        task = asyncio.ensure_future(self.pick(text))
+        self._calls.add(task)
+        task.add_done_callback(self._ended)
+        return task
+
+    def _ended(self, task: asyncio.Task) -> None:
+        self._calls.discard(task)
+        if not task.cancelled():
+            task.exception()  # retrieved here, so a late failure nobody waits for is not logged as lost
 
     def system(self) -> str:
         return ("You sort messages for a router. Routes:\n"
@@ -570,23 +579,24 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
     skip = (f"the request's tools match route {tool_hit}'s tool keywords" if tool_hit
             else "no text to classify" if not text.strip()
             else f"the prompt is {len(text):,} characters, over max_chars {p.max_chars:,}" if len(text) > p.max_chars
-            else "its last call is still running (the model may be loading)" if picker.busy()
+            else "another picker call is still running (one at a time; the model may be loading)" if picker.busy()
             else None)
     if skip:
         router = await _classify(cfg, text, embedder, reasons, tools)
-        info["outcome"] = "busy" if skip.startswith("its last call") else "skipped"
+        info["outcome"] = "busy" if skip.startswith("another picker call") else "skipped"
         reasons.append(f"route picker not asked: {skip}")
         return router, router, info
 
+    t0 = time.monotonic()
+    task = picker.start(text)  # no await since busy(): one call at a time
+
     async def ask() -> tuple[str | None, str, str]:
         """(route or None, outcome, why)"""
-        t0 = time.monotonic()
-        task = asyncio.ensure_future(picker.pick(text))
         try:
             done, _ = await asyncio.wait({task}, timeout=p.timeout_ms / 1000)
             if not done:
-                picker.leave(task)
-                return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s (left to finish; requests that start after it ends get the picker)"
+                return None, "timeout", (f"no answer in {p.timeout_ms / 1000:g} s (left to finish; "
+                                         "requests with no pinned route that start after it ends get the picker)")
             return task.result(), "chose", ""
         except asyncio.CancelledError:
             task.cancel()
@@ -600,7 +610,14 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
         finally:
             info["ms"] = int((time.monotonic() - t0) * 1000)
 
-    router, (route, outcome, why) = await asyncio.gather(_classify(cfg, text, embedder, reasons, tools), ask())
+    asking = asyncio.ensure_future(ask())  # runs alongside the router
+    try:
+        router = await _classify(cfg, text, embedder, reasons, tools)
+    except BaseException:  # the request ends here: nobody is left to use the answer
+        asking.cancel()
+        task.cancel()  # directly too: ask() may not have started yet, and then cancels nothing
+        raise
+    route, outcome, why = await asking
     info["outcome"] = outcome
     if route is None:
         reasons.append(f"route picker: {why} -> router chose {router}")

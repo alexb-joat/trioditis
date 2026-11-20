@@ -156,16 +156,21 @@ def picker_lines(cfg: Config, clock=None) -> list[str]:
                            timeout=timeout)
                 r.raise_for_status()
                 times.append(clock() - t0)
-                if asker.parse(r.json()["choices"][0]["message"]["content"] or "") is None:
+                content = r.json()["choices"][0]["message"]["content"]
+                if asker.parse(content if isinstance(content, str) else "") is None:
                     raise PickerNoRoute("its reply named no route")
     except PickerNoRoute as e:
         return [head, f"  answered, but {e}: try another model; {fallback}"]
+    except httpx.TimeoutException:
+        # Slow, not broken: say what a request would see, as the two timeout_ms lines below do.
+        return [head, f"  no answer in {timeout:g} s: at this speed a first turn waits "
+                      f"{rp.timeout_ms / 1000:g} s and then uses the router's route; try a smaller model"]
     except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as e:
         why = f"HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else type(e).__name__
         return [head, f"  a picker call failed ({why}); {fallback}"]
     first, warm = times
     lines = [head, f"  ready: first call {first:.2f} s (may include loading the model), next call {warm:.2f} s "
-                   f"(a {len(PICKER_CHECK_TEXT)}-character message; longer prompts take longer, see max_chars)"]
+                   f"(the same {len(PICKER_CHECK_TEXT)}-character message again; longer prompts take longer, see max_chars)"]
     if first * 1000 > rp.timeout_ms:
         keep = ("; to unload it less often, raise OLLAMA_KEEP_ALIVE on the Ollama server (default 5m)"
                 if looks_like_ollama(p) else "")
@@ -173,6 +178,6 @@ def picker_lines(cfg: Config, clock=None) -> list[str]:
                      "the router's route while the model loads in the background; requests get the picker again once that call ends"
                      + keep)
     if warm * 1000 > rp.timeout_ms:
-        lines.append("  the next call took longer than timeout_ms, so most first turns will use the router's "
+        lines.append("  the next call took longer than timeout_ms, so first turns will often use the router's "
                      "route: raise route_picker.timeout_ms or pick a smaller model")
     return lines

@@ -22,6 +22,11 @@ Anything that lets someone who is not the owner use the router or read what it h
 response or an upstream request; making Trioditis call a destination that is not in `config.yaml`; a flaw in the
 local-only guarantee for sensitive prompts; or a weakness in the install, container or CI supply chain.
 
+One path works differently by design, so these are not reports: the Anthropic passthrough for Claude Code
+(`docs/claude-code.md`) sends the caller's own Anthropic credential and request to `https://api.anthropic.com`,
+which is not in `config.yaml`, and runs no privacy detector on them. The router key reaching Anthropic, or that
+credential reaching a log or any other host, is in scope.
+
 ## Out of scope
 
 Someone who already has your user account or your `.env`; prompts the pattern-based detectors do not recognise (they

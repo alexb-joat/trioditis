@@ -12,6 +12,15 @@ set -eu
 url="${TRIODITIS_URL:-http://127.0.0.1:8787}"
 url="${url%/}"
 
+# The login token travels to this URL with every request: this machine or https only, and no user@host form.
+case "$url" in
+    *@*) echo "claude-t: TRIODITIS_URL has an @ in it. Give the router's address without a user or password." >&2
+         exit 2 ;;
+    https://*|http://127.0.0.1|http://127.0.0.1:*|http://localhost|http://localhost:*|http://\[::1\]|http://\[::1\]:*) ;;
+    *) echo "claude-t: TRIODITIS_URL is $url. Plain http is only for this machine (127.0.0.1, localhost, [::1]): use https, or unset it." >&2
+       exit 2 ;;
+esac
+
 if curl -fsS --max-time 2 "$url/health" 2>/dev/null | grep -q '"anthropic_gate":true'; then
     export ANTHROPIC_BASE_URL="$url"
     if [ -n "${TRIODITIS_API_KEY:-}" ]; then

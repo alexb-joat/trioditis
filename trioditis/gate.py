@@ -7,8 +7,9 @@ error bodies, and the event stream chunk by chunk, ``ping`` events included. Cla
 asks for all of that: it stalls on a buffered stream and recovers from errors by their exact wording.
 
 What Trioditis adds is metering, from the response and never from the prompt: token counts, model,
-message id. The credential is passed on and never read, stored or logged; the only thing checked is
-whether an ``x-api-key`` is present, which says the call is billed per token rather than on a plan.
+message id. The credential is passed on and never stored or logged; two things are checked: whether an
+``x-api-key`` is present, which says the call is billed per token rather than on a plan, and that
+neither credential header carries the router key.
 Model choice stays with the client: a base URL changes where requests go, not which model answers.
 """
 
@@ -17,6 +18,7 @@ from __future__ import annotations
 import hmac
 import json
 import time
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
@@ -37,10 +39,14 @@ PATHS = frozenset({MESSAGES, COUNT_TOKENS})
 
 # Request headers that belong to this hop, not to the request: everything else goes upstream as sent.
 # accept-encoding is replaced by "identity" so the stream arrives as plain events and leaves as it came.
+# content-encoding is passed down: the body is relayed as raw bytes, so if the upstream compresses
+# anyway, the client still learns how to read it (the call is then not metered).
 _HOP_REQUEST = frozenset({"host", "connection", "keep-alive", "proxy-authorization", "proxy-connection", "te",
                           "trailer", "transfer-encoding", "upgrade", "content-length", "accept-encoding"})
-_HOP_RESPONSE = frozenset({"connection", "keep-alive", "transfer-encoding", "content-length", "content-encoding",
+_HOP_RESPONSE = frozenset({"connection", "keep-alive", "transfer-encoding", "content-length",
                            "trailer", "upgrade", "proxy-authenticate"})
+# The two headers that carry a credential to Anthropic: the router key must not arrive in either.
+_CREDENTIAL_HEADERS = ("authorization", "x-api-key")
 
 # Read timeout between two bytes: a long thinking pause still gets the upstream's ping events.
 TIMEOUT = httpx.Timeout(connect=10.0, read=600.0, write=60.0, pool=10.0)
@@ -48,11 +54,25 @@ METER_LINE_MAX = 1 << 20      # one event line kept for metering; a longer one p
 METER_JSON_MAX = 4 << 20      # a non-streamed answer parsed for its usage up to this size
 
 
+def _carries(value: str, key: str) -> bool:
+    """The header value is the key, has it as one of its words, or is a scheme word followed by it
+    (the last form catches a key with a space in it)."""
+    whole = value.strip()
+    after_scheme = whole.split(None, 1)[1:]  # what follows the first word, if anything
+    return any(hmac.compare_digest(part.encode(), key.encode()) for part in [whole, *whole.split(), *after_scheme])
+
+
 def upstream_base() -> str:
     url = (env("GATE_UPSTREAM") or UPSTREAM).rstrip("/")
-    if not url.startswith("https://"):
-        raise ValueError(f"TRIODITIS_GATE_UPSTREAM must be an https:// URL (the credential travels with every "
-                         f"request), got {url[:80]!r}")
+    try:
+        parts = urlsplit(url)
+        ok = parts.scheme == "https" and bool(parts.hostname) and parts.username is None and parts.password is None
+    except ValueError:
+        ok = False
+    if not ok:
+        raise ValueError("TRIODITIS_GATE_UPSTREAM must be an https:// URL with no user or password in it "
+                         "(the credential travels with every request), got "
+                         f"{url.split('@')[-1][:80]!r}")
     return url
 
 
@@ -187,12 +207,15 @@ def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices
     async def passthrough(request: Request, path: str):
         started, at = time.monotonic(), time.time()
         key = router_key()
-        auth = request.headers.get("authorization") or ""
-        if key and hmac.compare_digest(auth.encode(), f"Bearer {key}".encode()):
-            # The router key in Authorization would go to Anthropic with the request. Refuse it here.
-            return anthropic_error(401, f"the router key goes in {ROUTER_KEY_HEADER}, not Authorization "
-                                        f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); Authorization is "
-                                        f"passed to Anthropic", "authentication_error")
+        # The router key in Authorization or x-api-key would go to Anthropic with the request. Refuse
+        # it here when it is the value or one word of it: "Bearer <key>", "bearer  <key> ", the bare key.
+        # (Not caught: the key inside a longer word, or encoded, as in Basic.)
+        carrier = next((name for name in _CREDENTIAL_HEADERS for value in request.headers.getlist(name)
+                        if key and _carries(value, key)), None)
+        if carrier:
+            return anthropic_error(401, f"the router key goes in {ROUTER_KEY_HEADER} only "
+                                        f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); it arrived in "
+                                        f"{carrier}, which is passed to Anthropic", "authentication_error")
         try:
             raw = await read_raw(request)
         except _TooLarge as e:

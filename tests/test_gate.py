@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 from pathlib import Path
 
@@ -244,10 +245,62 @@ def test_with_a_router_key_the_gate_takes_it_in_its_own_header(home, monkeypatch
     assert r.status_code == 401 and len(seen) == 1 and "X-Trioditis-Key" in r.json()["error"]["message"]
 
 
+@pytest.mark.parametrize("carrier", [
+    {"authorization": f"bearer {ROUTER_KEY}"},
+    {"authorization": f"Bearer  {ROUTER_KEY} "},
+    {"authorization": ROUTER_KEY},
+    {"x-api-key": ROUTER_KEY},
+    {"x-api-key": f" {ROUTER_KEY}"},
+])
+def test_the_router_key_never_travels_in_a_credential_header(home, monkeypatch, carrier):
+    monkeypatch.setenv("TRIODITIS_API_KEY", ROUTER_KEY)
+    seen = []
+    app, _ = make_app(home, lambda req: seen.append(1) or sse_response())
+    r = client_for(app).post("/v1/messages", content=BODY,
+                             headers={**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY, **carrier})
+    assert r.status_code == 401 and seen == []
+    assert f"it arrived in {next(iter(carrier))}" in r.json()["error"]["message"]
+    assert ROUTER_KEY not in r.text
+
+
+def test_the_router_key_is_caught_in_a_second_header_and_with_a_space_in_it(home, monkeypatch):
+    monkeypatch.setenv("TRIODITIS_API_KEY", ROUTER_KEY)
+    seen = []
+    app, _ = make_app(home, lambda req: seen.append(1) or sse_response())
+    twice = [(k, v) for k, v in {**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY}.items()]
+    twice += [("x-api-key", "sk-ant-other"), ("x-api-key", ROUTER_KEY)]
+    r = client_for(app).post("/v1/messages", content=BODY, headers=twice)
+    assert r.status_code == 401 and seen == []
+    spaced = "a router key with spaces, long enough to bind"
+    monkeypatch.setenv("TRIODITIS_API_KEY", spaced)
+    app, _ = make_app(home, lambda req: seen.append(1) or sse_response())
+    r = client_for(app).post("/v1/messages", content=BODY,
+                             headers={**CLAUDE_HEADERS, "x-trioditis-key": spaced, "authorization": f"Bearer {spaced}"})
+    assert r.status_code == 401 and seen == []
+
+
+def test_a_compressed_answer_keeps_its_content_encoding(home):
+    # accept-encoding: identity is a request, not a guarantee. The bytes are relayed as they came,
+    # so the header that says how to read them has to come along.
+    packed = gzip.compress(b'{"type":"error","error":{"type":"overloaded_error","message":"x"}}')
+    app, _ = make_app(home, lambda req: wire(529, packed, **{"content-type": "application/json",
+                                                             "content-encoding": "gzip"}))
+    r = client_for(app).post("/v1/messages", content=BODY, headers=CLAUDE_HEADERS)
+    assert r.status_code == 529 and r.headers["content-encoding"] == "gzip"
+    assert r.json()["error"]["type"] == "overloaded_error"
+
+
 def test_the_upstream_must_be_https(home, monkeypatch):
     monkeypatch.setenv("TRIODITIS_GATE_UPSTREAM", "http://api.anthropic.com")
     with pytest.raises(ValueError, match="https://"):
         make_app(home, lambda req: sse_response())
+
+
+def test_the_upstream_carries_no_user_or_password(home, monkeypatch):
+    monkeypatch.setenv("TRIODITIS_GATE_UPSTREAM", "https://api.anthropic.com:secret@other.example")
+    with pytest.raises(ValueError, match="no user or password") as e:
+        make_app(home, lambda req: sse_response())
+    assert "secret" not in str(e.value)
 
 
 def test_health_says_the_gate_is_there(home):
