@@ -376,3 +376,29 @@ temperature 0, one sample per prompt, and Ollama is not fully repeatable at temp
 of a separate set changed answer between two runs). The prompts are at most 206 characters, so long
 agent prompts are untested, and none carried a tool list: that is why requests whose tools match a
 route's `tool_keywords` keep the router's route and never reach the picker.
+
+## The picker on longer prompts: what a 500-character limit costs in waiting (20 November 2026)
+
+**Question.** `max_chars` 200 keeps the picker to short prompts, and the tables above show why: at 500
+characters a call took about 4 to 5 s on this machine, well over the default 2.5 s timeout. Raising
+`max_chars` therefore means raising `timeout_ms` with it. Which timeout does each length up to 500
+characters need here, so that a call outlives it as rarely as the default does now?
+
+**The test, written at 23:43 on 20 November, before the run** (this text was committed before the data existed).
+`scripts/picker_timing.py` as committed, `--model qwen2.5-coder:7b --lengths 200,250,300,400,500 --n 20`,
+a new seed, the routes of `config.example.yaml`: 100 calls in a shuffled order, each with a text the
+server has not seen. The run starts with the model loaded and with no test suite, lint, download or
+other model call running beside it. For each length and each timeout in the fixed list 2.5, 4, 5, 6, 8
+and 10 s it reports how many of the 20 calls took longer, with a 95% Wilson interval.
+
+- **The timeout a length needs** is the smallest in that list that at most 2 of its 20 calls outlive.
+  Two of 20 is what the default has: 2 of 20 at 200 characters and 2.5 s in the larger run above.
+- **Pass mark.** 500 characters passes if it needs 6 s or less. If it needs more, the longest listed
+  length that needs 6 s or less is the one to consider, and if none over 200 does, 200 stays.
+- **Validity.** If more than 8 of the 20 calls at 200 characters pass 2.5 s, the machine was in another
+  state than in the run above; the run is then reported as it is and repeated once, and both are shown.
+  A failed call ends the script and is handled the same way. No other repeat.
+
+This test is about time only. Whether the picker still names the right route more often than the router
+on prompts of 201 to 500 characters is a separate test that needs labelled prompts of that length; the
+held-out prompts stop at 206. The shipped default stays 200 whatever this run shows: it is one machine.
