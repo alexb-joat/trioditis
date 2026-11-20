@@ -68,7 +68,8 @@ def main(argv: list[str] | None = None) -> None:
     e.add_argument("prompt")
 
     ev = sub.add_parser("eval-routes", help="how often the router picks the right route, against a labelled CSV "
-                                             "(no chat model is called)",
+                                             "(no chat model is called); with --log, the route picker against the "
+                                             "router on your own requests",
                         description="Grade the router's route choice on a labelled CSV: columns prompt and expected_route "
                                     "(UTF-8, header in row 1; other columns are ignored). Prints accuracy with a 95% interval, "
                                     "accuracy per route and a confusion table, for keywords alone and, when the config has "
@@ -76,8 +77,14 @@ def main(argv: list[str] | None = None) -> None:
                                     "then picks embeddings.threshold on half the rows, scores it against yours on the other "
                                     "half (exact sign test) and records a proposal in the notebook only when the gain is "
                                     "unlikely to be chance. Changes nothing in the config. The only network call is to the "
-                                    "configured local embeddings provider.")
-    ev.add_argument("--labels", required=True, metavar="FILE", help="the labelled prompts (CSV with prompt, expected_route)")
+                                    "configured local embeddings provider. With --log instead of --labels it grades nothing: "
+                                    "it counts, from the decision log, how often the route picker and the router disagreed.")
+    what = ev.add_mutually_exclusive_group(required=True)
+    what.add_argument("--labels", metavar="FILE", help="the labelled prompts (CSV with prompt, expected_route)")
+    what.add_argument("--log", nargs="?", const="", default=None, metavar="FILE",
+                      help="instead of labels, read the decision log (default: the config's logging.path) and count, for "
+                           "requests classified with `route_picker:` on, how often the picker answered, how often it and "
+                           "the router disagreed and what the disagreements cost; reads files only, writes nothing")
     ev.add_argument("--config", default=argparse.SUPPRESS, metavar="FILE",
                     help="the config to grade (default: TRIODITIS_CONFIG or config.yaml; same as the option before the command)")
     ev.add_argument("--notebook", default=None, metavar="FILE", help="where a threshold proposal goes (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
@@ -204,6 +211,13 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "eval-routes":
+        if args.log is not None:
+            extra = [o for o, v in (("--notebook", args.notebook), ("--dry-run", args.dry_run),
+                                    ("--compare-threshold", args.compare_threshold)) if v not in (None, False)]
+            if extra:
+                sys.exit(f"eval-routes: {', '.join(extra)} goes with --labels; --log only reads the decision log")
+            from .evallog import run as eval_log
+            sys.exit(eval_log(cfg, args))
         from .evalroutes import run as eval_routes
         sys.exit(eval_routes(cfg, args))
 

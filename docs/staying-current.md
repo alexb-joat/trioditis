@@ -101,6 +101,14 @@ The result depends on the label set. Prompts you chose to test the router with a
 trioditis eval-routes --labels new-labels.csv --compare-threshold 0.45
 ```
 
+**The picker against the router, on your own requests** (`--log`, instead of `--labels`): with a [`route_picker:`](../README.md#how-a-request-is-routed) block, each classified request logs the route it was served on, the route the router alone would have picked, and what the picker did. This reads that decision log (the config's `logging.path`, or a file named after `--log`; a rotated `.1` file is read too) and prints how often the picker named a route when it was asked, how long it took, how often its route was the router's, a table of the disagreements, and a cost estimate for them. It reads files only: no network call, nothing written, no prompt text printed.
+
+```
+trioditis eval-routes --log
+```
+
+Two limits. The log has no labels, so this counts disagreement, never which of the two was right; for that, label prompts and use `--labels`. And the cost line is an estimate: it prices each disagreement's token counts as served and again on the model the router's route most often answered with in the same log (its first configured model when the log has none), while another model would have written a different number of tokens. Calls that failed, logged no token counts or used a model missing from `prices.json` are counted as unpriced. Pinned follow-up turns, forced routes and explicit models never reach the picker and are not in the count.
+
 The method, the data and the results behind the accuracy numbers Trioditis publishes are in [Route accuracy: the study](route-accuracy.md).
 
 **The one network call**: embedding the prompts and each route's `examples` with the configured local embeddings provider (for example Ollama), the same call the router makes. Nothing else leaves your machine, and each prompt is embedded once however many thresholds are tried.
