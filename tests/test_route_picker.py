@@ -298,15 +298,25 @@ def test_check_missing_model_names_the_pull(monkeypatch):
 
 def test_check_ready_reports_both_call_times(monkeypatch):
     serve(monkeypatch, local_server())
-    lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(4.0, 1.05))
-    assert lines[1] == "  ready: first call 4.00 s (may include loading the model), next call 1.05 s"
+    lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(2.0, 1.05))
+    assert lines[1] == "  ready: first call 2.00 s (may include loading the model), next call 1.05 s"
     assert len(lines) == 2
+
+
+def test_check_warns_when_the_first_call_exceeds_the_timeout(monkeypatch):
+    serve(monkeypatch, local_server())
+    lines = picker_lines(pcfg({"timeout_ms": 2500}), clock=ticks(12.0, 0.4))
+    assert len(lines) == 3 and "first call took longer than timeout_ms" in lines[2]
+    assert "next turn gets the picker" in lines[2] and "raise OLLAMA_KEEP_ALIVE" in lines[2]
+    c = pcfg(providers={**BASE["providers"], "llamacpp": {"base_url": "http://localhost:8080/v1", "local": True}},
+             route_picker={"provider": "llamacpp", "model": "qwen2.5-coder:7b"})
+    assert "OLLAMA_KEEP_ALIVE" not in picker_lines(c, clock=ticks(12.0, 0.4))[2]
 
 
 def test_check_warns_when_warm_calls_exceed_the_timeout(monkeypatch):
     serve(monkeypatch, local_server())
-    lines = picker_lines(pcfg({"timeout_ms": 500}), clock=ticks(4.0, 1.2))
-    assert "longer than timeout_ms" in lines[2]
+    lines = picker_lines(pcfg({"timeout_ms": 500}), clock=ticks(0.4, 1.2))
+    assert "next call took longer than timeout_ms" in lines[2]
 
 
 def test_check_reply_without_a_route(monkeypatch):

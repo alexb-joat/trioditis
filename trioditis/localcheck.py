@@ -165,6 +165,12 @@ def picker_lines(cfg: Config, clock=None) -> list[str]:
         return [head, f"  a picker call failed ({why}); {fallback}"]
     first, warm = times
     lines = [head, f"  ready: first call {first:.2f} s (may include loading the model), next call {warm:.2f} s"]
+    if first * 1000 > rp.timeout_ms:
+        keep = ("; to unload it less often, raise OLLAMA_KEEP_ALIVE on the Ollama server (default 5m)"
+                if looks_like_ollama(p) else "")
+        lines.append("  the first call took longer than timeout_ms: after the model is unloaded, the first turn uses "
+                     "the router's route while the model loads in the background, and the next turn gets the picker"
+                     + keep)
     if warm * 1000 > rp.timeout_ms:
         lines.append("  the next call took longer than timeout_ms, so most first turns will use the router's "
                      "route: raise route_picker.timeout_ms or pick a smaller model")

@@ -269,8 +269,11 @@ to `quick`, the default route. Every reply named a route; no call failed.
 **Time, on one machine** (a laptop CPU, no GPU; [environment.txt](route-accuracy/environment.txt)): median 1.05 s
 per call once the model was loaded, 95th percentile 1.68 s, slowest 2.38 s. On 20 November the first
 call `trioditis check` made took 17.8 s and the next 0.34 s (n = 1; the gap fits the model being loaded
-into memory, which was not checked). A request that arrives while the model loads falls back to the
-router at the default 2.5 s timeout. `qwen2.5-coder:7b` is 4.7 GB on disk.
+into memory, which was not checked). Later that day three cold starts took 16–21 s, and one more, with
+no model loaded (`ollama ps` empty), 19.7 s. A request that arrives while the model loads falls back to the router at the
+default 2.5 s timeout; the call goes on, so the model finishes loading and the next turn gets the
+picker. Uncached prompts slow down with length (one call each: 500 characters 1.8 s, 1,000 2.6 s,
+4,000 10.7 s), so prompts over `max_chars` (default 500) skip the picker. `qwen2.5-coder:7b` is 4.7 GB on disk.
 
 **Exploratory, no pass mark.** The committed `llama3.2:3b` answers scored 202 (no different from the
 router, p = 0.87). Keeping the router's route whenever keywords decide, and asking qwen otherwise,

@@ -118,8 +118,9 @@ embeddings:
 # Route picker (optional, off unless this block is here). A LOCAL model picks the route for
 # the first turn of each `auto` conversation; the router above still runs and is used when the
 # picker is slow, fails or names no route. On the held-out prompts it chose the labelled route
-# for 231 of 315 vs the router's 205, but sends more quick questions to pricier routes, and adds
-# about 1 s to each first turn (docs/route-accuracy.md). Requests whose tools match a route's
+# for 231 of 315 vs the router's 205, but sends more quick questions to pricier routes. Each
+# first turn waits for it: about 1 s on a laptop CPU once the model is loaded, the full
+# timeout_ms while it loads (docs/route-accuracy.md). Requests whose tools match a route's
 # tool_keywords, and prompts over max_chars, skip it. Enable with
 # `ollama pull qwen2.5-coder:7b` (4.7 GB) and uncomment.
 # route_picker:
