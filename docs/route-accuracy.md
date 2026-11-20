@@ -402,3 +402,37 @@ and 10 s it reports how many of the 20 calls took longer, with a 95% Wilson inte
 This test is about time only. Whether the picker still names the right route more often than the router
 on prompts of 201 to 500 characters is a separate test that needs labelled prompts of that length; the
 held-out prompts stop at 206. The shipped default stays 200 whatever this run shows: it is one machine.
+
+**Result: pass. On this machine 500 characters needs a 5 s timeout** (run from 23:48 to 23:53 on 20 November,
+seed 1795214896, [picker-timing-500.csv](route-accuracy/picker-timing-500.csv)). All 100 calls returned.
+
+| Characters | Median | Fastest | Slowest | Over 2.5 s | Over 4 s | Over 5 s | Over 6 s | Timeout it needs |
+|---|---|---|---|---|---|---|---|---|
+| 200 | 2.02 s | 1.57 s | 3.73 s | 4 of 20 | 0 | 0 | 0 | 4 s |
+| 250 | 2.27 s | 1.61 s | 3.56 s | 4 of 20 | 0 | 0 | 0 | 4 s |
+| 300 | 2.43 s | 1.93 s | 4.18 s | 9 of 20 | 1 | 0 | 0 | 4 s |
+| 400 | 3.26 s | 2.38 s | 5.60 s | 19 of 20 | 2 | 1 | 0 | 4 s |
+| 500 | 3.73 s | 3.16 s | 6.18 s | 20 of 20 | 8 | 1 | 1 | 5 s |
+
+No call took longer than 8 s. The 95% Wilson intervals: 0 of 20 is 0 to 16%, 1 of 20 is 1 to 24%, 2 of 20
+is 3 to 30%, 4 of 20 is 8 to 42%, 8 of 20 is 22 to 61%.
+
+What this says: with `max_chars: 500` and `timeout_ms: 5000`, a first turn of 400 to 500 characters
+waited a median of 3.3 to 3.7 s here for the picker's route, and 1 call in 20 would have waited the
+whole 5 s and then got the router's route. With 4 s, prompts up to 400 characters pass by the same
+rule and 500 does not (8 of 20 over).
+
+The validity check held, 4 of 20 calls at 200 characters passed 2.5 s against a limit of 8, but that is
+twice the 2 of 20 of the earlier run: by this run the default pair of 200 characters and 2.5 s misses
+more often than the rule's own reference rate.
+
+Limits of this run: one machine, five minutes of one evening, 20 calls per length, so "1 of 20" could
+be anything from 1 to 24%. The one 500-character call over 5 s was also over 6 s, so the 5 s and 6 s
+columns do not differ there. The model was not in memory before the script's untimed first call loaded
+it. The 1-minute load average rose from 1.3 at the start to 9.8 at the end (2.0 to 10.3 in the rows,
+the model's own threads included); available memory fell from 6.6 GB to 2.0 GB and swap in use rose
+from 9.5 GB to 10.8 GB. A model download had ended half a minute before the start; no test suite,
+lint or other model call of ours ran beside it, and what the laptop's other programs did was not
+recorded. The texts were slices of Markdown docs (500 characters were 200 to 297 tokens). The limits
+written before the run hold too: the picker's call alone was timed, and longer calls keep the picker
+busy for longer, which this run does not measure.
