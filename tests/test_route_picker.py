@@ -56,6 +56,8 @@ def test_absent_block_is_off():
     ({"model": ""}, "route_picker.model"),
     ({"timeout_ms": 0}, "100 to 60000"),
     ({"timeout_ms": "2500"}, "whole number"),
+    ({"max_chars": 0}, "at least 1"),
+    ({"max_chars": True}, "whole number"),
     ({"temperature": 1}, "unknown key(s) temperature"),
 ])
 def test_config_errors_name_the_fix(block, msg):
@@ -177,6 +179,16 @@ async def test_tool_keywords_decide_ahead_of_the_picker():
     d = await decide(c, body("hello", tools=tools), picker=p)
     assert d.route == "code" and d.picker["outcome"] == "skipped"
     assert "route picker not asked: the request's tools match route code's tool keywords" in d.reasons
+
+
+async def test_long_prompts_skip_the_picker():
+    c, p = asker(never)
+    d = await decide(c, body("debug this python " + "x" * 600), picker=p)
+    assert d.route == d.router_route == "code" and d.picker["outcome"] == "skipped"
+    assert "route picker not asked: the prompt is 618 characters, over max_chars 500" in d.reasons
+    c, p = asker(lambda req: reply("code"), pcfg({"max_chars": 1000}))
+    d = await decide(c, body("hello " + "x" * 600), picker=p)
+    assert d.picker["outcome"] == "chose" and d.route == "code"
 
 
 async def test_tools_without_a_keyword_match_still_ask_the_picker():

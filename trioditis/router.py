@@ -569,6 +569,7 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
     tool_hit = next((n for n, r in cfg.routes.items() if tool_score(tools or [], r)[0] > 0), None)
     skip = (f"the request's tools match route {tool_hit}'s tool keywords" if tool_hit
             else "no text to classify" if not text.strip()
+            else f"the prompt is {len(text):,} characters, over max_chars {p.max_chars:,}" if len(text) > p.max_chars
             else "its last call is still running (the model may be loading)" if picker.busy()
             else None)
     if skip:

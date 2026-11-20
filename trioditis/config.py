@@ -94,9 +94,11 @@ class RoutePicker:
     provider: str
     model: str
     timeout_ms: int = 2500  # no answer in time: the router's route is used
+    max_chars: int = 500    # longer prompts skip the picker: tested on prompts up to 206 characters, and
+    #                         on a laptop CPU 1,000 characters already took 2.6 s
 
 
-ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms"}
+ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars"}
 
 
 @dataclass(frozen=True)
@@ -302,7 +304,7 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
         raise ConfigError("route_picker must be a mapping with provider and model, or absent (off)")
     unknown = set(raw) - ROUTE_PICKER_KEYS
     if unknown:
-        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms")
+        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars")
     prov = raw.get("provider")
     if prov not in providers:
         raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
@@ -316,11 +318,14 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     timeout = raw.get("timeout_ms", RoutePicker.timeout_ms)
     if isinstance(timeout, bool) or not isinstance(timeout, int) or not 100 <= timeout <= 60_000:
         raise ConfigError(f"route_picker.timeout_ms must be a whole number from 100 to 60000 (got {timeout!r})")
+    max_chars = raw.get("max_chars", RoutePicker.max_chars)
+    if isinstance(max_chars, bool) or not isinstance(max_chars, int) or max_chars < 1:
+        raise ConfigError(f"route_picker.max_chars must be a whole number of at least 1 (got {max_chars!r})")
     without = [n for n, r in routes.items() if not r.description.strip()]
     if without:
         raise ConfigError(f"route {without[0]}: needs a description, because route_picker chooses from the "
                           f"route descriptions")
-    return RoutePicker(prov, model.strip(), timeout)
+    return RoutePicker(prov, model.strip(), timeout, max_chars)
 
 
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")
