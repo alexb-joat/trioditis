@@ -234,3 +234,62 @@ The limits [known in advance](#limits-known-in-advance) all hold. Three more cam
   has another scale; run the sweep on your own labels.
 - Half of the prompts were written to avoid the usual words. Traffic with a different mix of plain and
   indirect prompts gives a different overall number; the per-stratum rows show the spread.
+
+## A local model picks the route (19 November 2026)
+
+**Question.** Does a local model, asked for the route directly, pick the labelled route more often than
+the router (keywords, then embeddings at 0.45) on the same 315 held-out prompts? This is the evidence
+behind the opt-in [`route_picker:`](../README.md#how-a-request-is-routed) block.
+
+**Method.** `qwen2.5-coder:7b` on a local Ollama, one call per prompt: the route names and descriptions
+of `config.example.yaml` as the instruction, the prompt fenced, temperature 0, seed 0, at most 8 tokens.
+The route is the first word of the reply that names one; a reply with none counts as wrong. This is the
+request `scripts/route_study.py model-baseline` sends, and the one `route_picker:` sends
+(`tests/test_route_picker.py` pins it). The router had to reproduce its committed 205/315 first, and did.
+
+**Pass mark, written at 18:17, before the run at 18:18.** More than 205 of 315 right, and an exact
+two-sided sign test against the router on the same prompts with p < 0.05. One run, nothing tuned on
+these prompts.
+
+**Result: pass.** qwen picked the labelled route for 231 of 315 (73.3%, 95% interval 68.2–77.9%), the
+router for 205 (65.1%, 59.7–70.1%). On the prompts only one of them got right, qwen won 74 and the router
+48 (p = 0.023).
+
+| Route (labelled) | Router | qwen |
+|---|---|---|
+| code | 31/76 | 48/76 |
+| reasoning | 45/78 | 77/78 |
+| writing | 65/83 | 80/83 |
+| quick | 64/78 | **26/78** |
+
+The two err in opposite directions. qwen sent 33 of the 78 quick prompts to `reasoning` and 19 to
+`writing`, routes that usually cost more. The router sends its misses down: 65 of its 110 misses went
+to `quick`, the default route. Every reply named a route; no call failed.
+
+**Time, on one machine** (a laptop CPU, no GPU; [environment.txt](route-accuracy/environment.txt)): median 1.05 s
+per call once the model was loaded, 95th percentile 1.68 s, slowest 2.38 s. On 20 November the first
+call `trioditis check` made took 17.8 s and the next 0.34 s (n = 1; the gap fits the model being loaded
+into memory, which was not checked). A request that arrives while the model loads falls back to the
+router at the default 2.5 s timeout. `qwen2.5-coder:7b` is 4.7 GB on disk.
+
+**Exploratory, no pass mark.** The committed `llama3.2:3b` answers scored 202 (no different from the
+router, p = 0.87). Keeping the router's route whenever keywords decide, and asking qwen otherwise,
+scored 229 and would need a model call on 86% of the prompts.
+
+**Files.** [picker-heldout.txt](route-accuracy/picker-heldout.txt) (the full report, with per-stratum
+rows and qwen's confusion matrix), [picker-heldout.csv](route-accuracy/picker-heldout.csv) (each row's
+label and the route each method picked, no prompt text). The config hash in the report is the example
+config before the commented `route_picker:` block was added; the routes are unchanged.
+
+**To reproduce** (sends the prompts only to the local server):
+
+```
+python scripts/route_study.py model-baseline tests/fixtures/routes-heldout.csv \
+    --model qwen2.5-coder:7b --config config.example.yaml
+```
+
+**Limits.** Everything under [Limits of the result](#limits-of-the-result) holds. Also: one model at
+temperature 0, one sample per prompt, and Ollama is not fully repeatable at temperature 0 (one prompt
+of a separate set changed answer between two runs). The prompts are at most 206 characters, so long
+agent prompts are untested, and none carried a tool list: that is why requests whose tools match a
+route's `tool_keywords` keep the router's route and never reach the picker.

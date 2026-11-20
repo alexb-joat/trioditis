@@ -115,6 +115,17 @@ embeddings:
   model: nomic-embed-text
   threshold: 0.45
 
+# Route picker (optional, off unless this block is here). A LOCAL model picks the route for
+# the first turn of each `auto` conversation; the router above still runs and is used when the
+# picker is slow, fails or names no route. On the held-out prompts it chose the labelled route
+# for 231 of 315 vs the router's 205, but sends more quick questions to pricier routes, and adds
+# about 1 s to each first turn (docs/route-accuracy.md). Requests whose tools match a route's
+# tool_keywords skip it. Enable with `ollama pull qwen2.5-coder:7b` (4.7 GB) and uncomment.
+# route_picker:
+#   provider: ollama               # must be local: true
+#   model: qwen2.5-coder:7b
+#   timeout_ms: 2500               # no answer in time -> the router's route
+
 privacy:
   enabled: true
   builtin_detectors: true          # emails, card numbers, IBANs, API keys, private keys...

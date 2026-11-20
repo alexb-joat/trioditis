@@ -7,6 +7,7 @@
 - `/health` now says `"anthropic_gate": true`, so `claude-t` routes only to a router that has the passthrough.
 
 **Routing**
+- Opt-in `route_picker:` block: a local model picks the route for the first turn of each `auto` conversation. On the 315 held-out prompts `qwen2.5-coder:7b` chose the labelled route for 231 against the router's 205 (p = 0.023), but sent more quick questions to pricier routes; about 1 s per first turn on a laptop CPU. The router still runs and is used when the picker times out (`timeout_ms`, default 2500), fails or names no route; tool lists that match a route's `tool_keywords`, forced routes, named models and pinned turns never reach it. Only a `local: true` provider is accepted. Each decision logs `router_route` and `route_picker` (model, instruction version, outcome, route, ms), never prompt text. `trioditis check` reports whether the picker answers and how long a call takes. Off unless configured; `config.example.yaml` has the block commented out. [Study](docs/route-accuracy.md#a-local-model-picks-the-route-19-november-2026)
 - An `embeddings:` block without `threshold` now uses 0.45, the value the example config sets and the held-out test chose (was 0.55). Configs that set `threshold` are unchanged.
 
 ## 0.6.0 (2026-11-16)

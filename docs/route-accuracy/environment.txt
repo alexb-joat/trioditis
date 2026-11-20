@@ -4,3 +4,8 @@ $ curl -s localhost:11434/api/version
 $ curl -s localhost:11434/api/tags   (name, digest, parameter size, quantization)
 llama3.2:3b a80c4f17acd55265feec403c7aef86be0c25983ab279d83f3bcd3abbcb5b8b72 3.2B Q4_K_M
 nomic-embed-text:latest 0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f 137M F16
+
+# Added 20 November 2026 for "A local model picks the route" (run 19 November, same Ollama 0.40.0).
+qwen2.5-coder:7b dae161e27b0e 7.6B Q4_K_M, 4683087561 bytes on disk
+# The machine: AMD Ryzen 7 7735HS (Radeon 680M integrated graphics), 14 GB RAM, Linux.
+# Ollama ran qwen on the CPU (api/ps: size_vram 0).

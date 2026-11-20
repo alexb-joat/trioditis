@@ -89,6 +89,17 @@ class Embeddings:
 
 
 @dataclass(frozen=True)
+class RoutePicker:
+    """A local model that picks the route for the first turn of an `auto` conversation (opt-in)."""
+    provider: str
+    model: str
+    timeout_ms: int = 2500  # no answer in time: the router's route is used
+
+
+ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms"}
+
+
+@dataclass(frozen=True)
 class Privacy:
     enabled: bool = True
     builtin_detectors: bool = True
@@ -127,6 +138,7 @@ class Config:
     routes: dict[str, Route]
     default_route: str
     embeddings: Embeddings | None = None
+    route_picker: RoutePicker | None = None
     privacy: Privacy = field(default_factory=Privacy)
     limits: Limits = field(default_factory=Limits)
     logging: Logging = field(default_factory=Logging)
@@ -278,8 +290,37 @@ def parse_config(raw: dict) -> Config:
         raise ConfigError("facts must be the path of a provider-facts file")
     facts = str(Path(facts).expanduser()) if facts else None
 
-    return Config(providers, models, routes, default_route, emb, privacy, limits, logging, facts,
-                  parse_plan(raw.get("plan")))
+    return Config(providers, models, routes, default_route, embeddings=emb,
+                  route_picker=_parse_route_picker(raw.get("route_picker"), providers, routes),
+                  privacy=privacy, limits=limits, logging=logging, facts=facts, plan=parse_plan(raw.get("plan")))
+
+
+def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, Route]) -> RoutePicker | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ConfigError("route_picker must be a mapping with provider and model, or absent (off)")
+    unknown = set(raw) - ROUTE_PICKER_KEYS
+    if unknown:
+        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms")
+    prov = raw.get("provider")
+    if prov not in providers:
+        raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
+    if not providers[prov].local:
+        # The picker reads every first `auto` prompt, sensitive ones included; keep that local.
+        raise ConfigError(f"route_picker.provider {prov} is not local: the picker reads every first prompt, "
+                          f"sensitive ones too, so it must be a provider with local: true")
+    model = raw.get("model")
+    if not isinstance(model, str) or not model.strip():
+        raise ConfigError("route_picker.model must be the model id on that provider, e.g. qwen2.5-coder:7b")
+    timeout = raw.get("timeout_ms", RoutePicker.timeout_ms)
+    if isinstance(timeout, bool) or not isinstance(timeout, int) or not 100 <= timeout <= 60_000:
+        raise ConfigError(f"route_picker.timeout_ms must be a whole number from 100 to 60000 (got {timeout!r})")
+    without = [n for n, r in routes.items() if not r.description.strip()]
+    if without:
+        raise ConfigError(f"route {without[0]}: needs a description, because route_picker chooses from the "
+                          f"route descriptions")
+    return RoutePicker(prov, model.strip(), timeout)
 
 
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,39}$")

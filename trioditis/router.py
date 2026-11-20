@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import math
@@ -32,6 +33,10 @@ class Decision:
     sensitive: list[str] = field(default_factory=list)  # detector names only
     local_only: bool = False
     estimates: dict[str, dict] = field(default_factory=dict)  # model -> {"usd": ..., "p50_ms": ...} when ordered by them
+    # Set only when `route_picker:` is configured and this request was classified: what the router
+    # alone chose, and what the picker did ({model, instruction, outcome, route, ms}).
+    router_route: str | None = None
+    picker: dict | None = None
 
     def as_dict(self) -> dict:
         out = {
@@ -44,6 +49,9 @@ class Decision:
         }
         if self.estimates:
             out["estimates"] = self.estimates
+        if self.router_route is not None:
+            out["router_route"] = self.router_route
+            out["route_picker"] = self.picker
         return out
 
 
@@ -190,6 +198,58 @@ class Embedder:
         }
 
 
+ROUTE_PICKER_INSTRUCTION = 1  # bump when the text below changes: a measurement names the instruction it used
+PICKER_TEXT_CHARS = 4000       # the same cut the embeddings signal makes
+
+
+class PickerNoRoute(ValueError):
+    """The picker answered, but its reply named no configured route."""
+
+
+class RoutePickerClient:
+    """Asks a local model which route fits (config `route_picker:`).
+
+    The request is the one the held-out test sent (docs/route-accuracy.md, "A local model picks the
+    route"): the route names and descriptions as the instruction, the prompt fenced, temperature 0,
+    seed 0, eight tokens. The first word of the reply that names a route wins."""
+
+    def __init__(self, cfg: Config, client: httpx.AsyncClient):
+        self.cfg = cfg
+        self.client = client
+        self.routes = {n.lower(): n for n in cfg.routes}
+
+    def system(self) -> str:
+        return ("You sort messages for a router. Routes:\n"
+                + "".join(f"- {n}: {r.description}\n" for n, r in self.cfg.routes.items())
+                + "Reply with one word: the name of the route that fits the message best.")
+
+    def body(self, text: str) -> dict:
+        return {"model": self.cfg.route_picker.model, "temperature": 0, "seed": 0, "max_tokens": 8,
+                "messages": [{"role": "system", "content": self.system()},
+                             {"role": "user", "content": f"Message:\n<<<\n{text[:PICKER_TEXT_CHARS]}\n>>>\nRoute:"}]}
+
+    def parse(self, reply: str) -> str | None:
+        words = [w.strip(".,:;`'\"*") for w in reply.strip().lower().split()]
+        return next((self.routes[w] for w in words if w in self.routes), None)
+
+    async def pick(self, text: str) -> str:
+        """The route the model names. Raises on timeout, an HTTP error or a reply with no route."""
+        p = self.cfg.route_picker
+        prov = self.cfg.providers[p.provider]
+        headers = {"Authorization": f"Bearer {prov.api_key()}"} if prov.api_key() else {}
+        r = await self.client.post(f"{prov.base_url}/chat/completions", json=self.body(text), headers=headers,
+                                   timeout=p.timeout_ms / 1000)
+        r.raise_for_status()
+        try:
+            reply = r.json()["choices"][0]["message"]["content"] or ""
+        except (ValueError, KeyError, IndexError, TypeError) as e:
+            raise PickerNoRoute("reply was not a chat completion") from e
+        route = self.parse(reply if isinstance(reply, str) else "")
+        if route is None:
+            raise PickerNoRoute("reply named no route")
+        return route
+
+
 class Cooldowns:
     """Providers that asked us to wait (429/503 with Retry-After, or a rate limit at zero):
     tried last until then, never dropped. In memory: a restart forgets them."""
@@ -276,6 +336,7 @@ async def decide(
     pins: SessionPins | None = None,
     session_id: str | None = None,
     signals: Signals | None = None,
+    picker: RoutePickerClient | None = None,
 ) -> Decision:
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
@@ -294,6 +355,7 @@ async def decide(
 
     # 1. Which route (or explicit model)?
     explicit_model = None
+    router_route, picked = None, None
     if requested in cfg.models:
         explicit_model = requested
         route_name = "explicit"
@@ -310,6 +372,11 @@ async def decide(
         if pinned and pinned in cfg.routes:
             route_name = pinned
             reasons.append(f"session pinned to {pinned}" if session_id else f"agent conversation pinned to {pinned}")
+        elif picker is not None:
+            route_name, router_route, picked = await _classify_with_picker(
+                cfg, last_user_text(messages), embedder, picker, reasons, tool_names(body))
+            if pins and pin_key:
+                pins.set(pin_key, route_name)
         else:
             route_name = await _classify(cfg, last_user_text(messages), embedder, reasons, tool_names(body))
             if pins and pin_key:
@@ -390,6 +457,8 @@ async def decide(
         sensitive=sensitive,
         local_only=local_only,
         estimates=estimates,
+        router_route=router_route,
+        picker=picked,
     )
 
 
@@ -473,3 +542,45 @@ async def _classify(cfg: Config, text: str, embedder: Embedder | None, reasons: 
 
     reasons.append(f"no strong signal -> default route {cfg.default_route}")
     return cfg.default_route
+
+
+async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | None, picker: RoutePickerClient,
+                                reasons: list[str], tools: list[str] | None = None
+                                ) -> tuple[str, str, dict]:
+    """(route served, route the router alone chose, what the picker did). The router always runs and
+    catches every picker failure; both run at once, so a fallback adds no wait beyond the picker's."""
+    p = cfg.route_picker
+    info: dict = {"model": p.model, "instruction": ROUTE_PICKER_INSTRUCTION, "outcome": "", "route": None, "ms": None}
+    # A coding agent's tool list is a structural fact, and the held-out test had no tools: when the
+    # tool names match a route's tool keywords, the router decides and the picker is not asked.
+    tool_hit = next((n for n, r in cfg.routes.items() if tool_score(tools or [], r)[0] > 0), None)
+    if tool_hit or not text.strip():
+        router = await _classify(cfg, text, embedder, reasons, tools)
+        info["outcome"] = "skipped"
+        reasons.append("route picker not asked: " + (f"the request's tools match route {tool_hit}'s tool keywords"
+                                                     if tool_hit else "no text to classify"))
+        return router, router, info
+
+    async def ask() -> tuple[str | None, str, str]:
+        """(route or None, outcome, why)"""
+        t0 = time.monotonic()
+        try:
+            return await asyncio.wait_for(picker.pick(text), timeout=p.timeout_ms / 1000), "chose", ""
+        except (TimeoutError, httpx.TimeoutException):
+            return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s"
+        except PickerNoRoute as e:
+            return None, "no_route", str(e)
+        except Exception as e:  # the picker is optional; never fail a request on it
+            return None, "error", type(e).__name__
+        finally:
+            info["ms"] = int((time.monotonic() - t0) * 1000)
+
+    router, (route, outcome, why) = await asyncio.gather(_classify(cfg, text, embedder, reasons, tools), ask())
+    info["outcome"] = outcome
+    if route is None:
+        reasons.append(f"route picker: {why} -> router chose {router}")
+        return router, router, info
+    info["route"] = route
+    same = "the router alone agrees" if route == router else f"the router alone would pick {router}"
+    reasons.append(f"route picker ({p.model}) chose {route} in {info['ms'] / 1000:.2f} s; {same}")
+    return route, router, info

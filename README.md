@@ -108,11 +108,12 @@ Cloud models are optional: add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROU
 
 1. **Privacy check.** Built-in detectors (emails, card numbers, IBANs, API keys, private keys, passwords) plus your own keywords and regexes. A hit restricts the request to local models; if none can serve it, it is rejected rather than leaked.
 2. **Pick a route** (`code`, `reasoning`, `writing`, `quick`, or your own): keyword and pattern signals, the names of the tools a coding agent offers (`tool_keywords`), then similarity to each route's example prompts using a *local* embedding model, else the default route. An agent's later turns stay on the route its task started on.
+   Optionally, a *local* model picks the route instead (`route_picker:`, off unless configured): on the held-out prompts it chose the labelled route for 231 of 315 against the router's 205, but sends more quick questions to pricier routes, and it adds about 1 s to each conversation's first turn. The router still runs and is used when the picker is slow, fails or names no route, and requests whose tools match a route's `tool_keywords` never reach it. The decision log names both routes ([study](https://github.com/alexb-joat/trioditis/blob/main/docs/route-accuracy.md#a-local-model-picks-the-route-19-november-2026)).
 3. **Filter and order models** by what the request needs: vision, tool calling, context length, and whether the provider's key is present. A route can keep its listed order or `prefer: cheapest` (local first, then by this request's estimated cost) or `fastest` (median latency of recent calls); a provider that just answered "too many requests" is tried last until its wait is over.
 4. **Call the first model and fall back** on outage, rate limit, missing model or spending cap. If no model of the route fits, only another route's model or a local one is used, never a model you call by name only.
 5. **Pin the session.** Requests with the same `X-Session-Id` (or `user`) stay on one route, so agents do not switch models mid-task.
 
-Responses carry `X-Trioditis-Route` and `X-Trioditis-Model`. `POST /v1/route` or `trioditis explain "…"` shows the decision and reasons without calling a model. Clients can bypass routing with `model: "route/code"` (force a route), `model: "legacy-mistral"` (call a model directly) or the provider's own id, such as `model: "claude-haiku-5-5"`, which pins an exact version; `X-Trioditis-Upstream-Model` names the id the provider was sent.
+Responses carry `X-Trioditis-Route` and `X-Trioditis-Model`. `POST /v1/route` or `trioditis explain "…"` shows the decision and reasons without calling a model (`/v1/route` does ask a configured route picker; `explain` contacts nothing). Clients can bypass routing with `model: "route/code"` (force a route), `model: "legacy-mistral"` (call a model directly) or the provider's own id, such as `model: "claude-haiku-5-5"`, which pins an exact version; `X-Trioditis-Upstream-Model` names the id the provider was sent.
 
 ## Connect your tools
 
@@ -156,6 +157,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
 - CI does not build the Docker image.
 - The router picks the right route about two times in three. On 315 held-out prompts it chose the labelled route for 205 (65.1%, 95% interval 59.7–70.1%) on the example config with local embeddings on, and for 116 (36.8%) with keywords alone. Most misses (65 of 110) go to `quick`, the default route, and a miss still gets an answer. The prompts are synthetic and in English; measured 13 November 2026 ([method, data and limits](https://github.com/alexb-joat/trioditis/blob/main/docs/route-accuracy.md)). Your own routes give a different number: `trioditis eval-routes` measures it.
+- The route picker was measured on one machine, one set of labels and one model at temperature 0, on prompts of at most 206 characters with no tool lists. `eval-routes` does not measure it yet; the decision log's `route` and `router_route` show how often it overrules the router on your traffic.
 
 ## Platforms
 

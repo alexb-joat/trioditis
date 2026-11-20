@@ -1,0 +1,46 @@
+qwen picks the route itself vs the router, held-out set, 2026-11-19 18:23 CET
+labels tests/fixtures/routes-heldout.csv (de0497cedc0f5b8c), config config.example.yaml (34cdabf3e4769d36), threshold 0.45, n = 315
+Pass mark (written 18:17, before the run): qwen > 205/315 AND exact sign test vs the router p < 0.05.
+
+VERDICT: PASS
+  qwen 231/315, router 205/315; only qwen right 74, only router right 48, p = 0.02322
+
+Router (keywords + embeddings at 0.45): 205/315 = 65.1% (95% interval 59.7-70.1%)
+  per route (of the rows labelled with it)
+    code       31/76 = 40.8% (95% interval 30.4-52.0%)
+    reasoning  45/78 = 57.7% (95% interval 46.6-68.0%)
+    writing    65/83 = 78.3% (95% interval 68.3-85.8%)
+    quick      64/78 = 82.1% (95% interval 72.1-89.0%)
+  per stratum
+    indirect   89/160 = 55.6% (95% interval 47.9-63.1%)
+    plain      116/155 = 74.8% (95% interval 67.5-81.0%)
+
+qwen (qwen2.5-coder:7b) picks the route: 231/315 = 73.3% (95% interval 68.2-77.9%)
+  per route (of the rows labelled with it)
+    code       48/76 = 63.2% (95% interval 51.9-73.1%)
+    reasoning  77/78 = 98.7% (95% interval 93.1-99.8%)
+    writing    80/83 = 96.4% (95% interval 89.9-98.8%)
+    quick      26/78 = 33.3% (95% interval 23.9-44.4%)
+  per stratum
+    indirect   109/160 = 68.1% (95% interval 60.6-74.8%)
+    plain      122/155 = 78.7% (95% interval 71.6-84.4%)
+  confusion (rows: label; columns: picked; '-' = no route name)
+                   code  reasoning    writing      quick          -
+  code               48         17          9          2          0
+  reasoning           0         77          1          0          0
+  writing             0          0         80          3          0
+  quick               0         33         19         26          0
+  replies with no route name (counted as wrong): 0
+  failed calls retried: 0
+  time per call, warm, this machine: median 1.05 s, 95th percentile 1.68 s, max 2.38 s, total 348 s
+
+Exploratory (no pass mark)
+  llama3.2:3b (committed 13 Nov answers): 202/315 = 64.1% (95% interval 58.7-69.2%)
+    vs router: only llama right 72, only router right 75, p = 0.869
+    qwen vs llama: only qwen right 57, only llama right 28, p = 0.002195
+  hybrid (keywords decide -> router's route, else qwen's): 229/315 = 72.7% (95% interval 67.5-77.3%)
+    model call needed on 272/315 = 86.3% (95% interval 82.1-89.7%) of prompts
+    vs router: only hybrid right 70, only router right 46, p = 0.03227
+  qwen and router pick the same route on 171/315 = 54.3% (95% interval 48.8-59.7%)
+
+Per-prompt routes (no text) in docs/route-accuracy/picker-heldout.csv

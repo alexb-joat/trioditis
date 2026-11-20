@@ -27,7 +27,7 @@ from .config import Config
 from .envvars import env
 from .hardware import ReportCache
 from .localcheck import attempts_text, connection_hint
-from .router import Cooldowns, Decision, Embedder, RoutingError, SessionPins, Signals, all_text, decide
+from .router import Cooldowns, Decision, Embedder, RoutePickerClient, RoutingError, SessionPins, Signals, all_text, decide
 from .security import check_bearer, fingerprint, host_header_is_local, origin_is_local, router_api_key
 
 _CLIENT_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,39}")
@@ -133,6 +133,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         trust_env=True,
     )
     embedder = Embedder(cfg, client) if cfg.embeddings else None
+    picker = RoutePickerClient(cfg, client) if cfg.route_picker else None  # local only (config checks)
     pins = SessionPins(cfg.limits.session_ttl_s)
     cooldowns = Cooldowns()
     log = DecisionLog(cfg.logging.path, cfg.logging.log_prompts)
@@ -285,11 +286,12 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
 
     @app.post("/v1/route")
     async def explain(request: Request):
-        """Dry run: show which model would be chosen and why. Calls no model."""
+        """Dry run: show which model would be chosen and why. Calls no answering model (a configured
+        route picker, always local, is asked, so the dry run shows the route a real request gets)."""
         try:
             body = await read_json(request)
             d = await decide(cfg, body, embedder=embedder, pins=None, signals=signals,
-                             session_id=None)
+                             session_id=None, picker=picker)
         except RoutingError as e:
             return _error(e.status, e.message)
         return d.as_dict()
@@ -305,7 +307,8 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             body = await read_json(request)
             sid = session_of(request, body)
             caller = client_of(request.headers)  # the calling tool, for usage per tool
-            d = await decide(cfg, body, embedder=embedder, pins=pins, session_id=sid, signals=signals)
+            d = await decide(cfg, body, embedder=embedder, pins=pins, session_id=sid, signals=signals,
+                             picker=picker)
         except RoutingError as e:
             return _error(e.status, e.message)
 
@@ -573,6 +576,9 @@ def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body
         "local": local,
         "usage": usage,
     }
+    if d.router_route is not None:  # route_picker on: what the router alone chose, and what the picker did
+        rec["router_route"] = d.router_route
+        rec["route_picker"] = d.picker
     if error:
         rec["error"] = error  # why no model answered: rate_limited | budget_exceeded | upstream_error
     if finish:

@@ -119,3 +119,53 @@ def attempts_text(attempts: list[dict]) -> str:
             why = str(a.get("error") or "failed")
         out.append(f"{a.get('model')}: {why}")
     return ", ".join(out)
+
+
+PICKER_CHECK_TEXT = "Hello, how are you today?"  # made up: `check` never sends anything of yours
+PICKER_FIRST_CALL_S = 120.0  # the first call may load the model into memory
+
+
+def picker_lines(cfg: Config, clock=None) -> list[str]:
+    """`check`'s lines for `route_picker:`. Asks only the picker's provider (always local): one model
+    listing, then, when the model is there, two picker calls on a made-up message. [] when it is off."""
+    import time
+
+    from .router import PickerNoRoute, RoutePickerClient
+
+    rp = cfg.route_picker
+    if rp is None:
+        return []
+    clock = clock or time.monotonic
+    p = cfg.providers[rp.provider]
+    head = f"route picker: {rp.model} on {p.name}, timeout {rp.timeout_ms / 1000:g} s"
+    fallback = "until then every request uses the router's route"
+    listing = probe(p)
+    if not listing.answered:
+        return [head, f"  not answering at {p.base_url} ({listing.error}): {start_hint(p)}; {fallback}"]
+    if listing.ids is not None and not has_model(p, listing, rp.model):
+        fix = f"ollama pull {rp.model}" if looks_like_ollama(p) else "load the model on that server"
+        return [head, f"  model not on this server: {fix}; {fallback}"]
+    asker = RoutePickerClient(cfg, None)  # only for the request body and the reply parsing
+    headers = {"Authorization": f"Bearer {p.api_key()}"} if p.api_key() else {}
+    times: list[float] = []
+    try:
+        with _client(follow_redirects=False, trust_env=False) as c:
+            for timeout in (PICKER_FIRST_CALL_S, rp.timeout_ms / 1000 * 4):
+                t0 = clock()
+                r = c.post(f"{p.base_url}/chat/completions", json=asker.body(PICKER_CHECK_TEXT), headers=headers,
+                           timeout=timeout)
+                r.raise_for_status()
+                times.append(clock() - t0)
+                if asker.parse(r.json()["choices"][0]["message"]["content"] or "") is None:
+                    raise PickerNoRoute("its reply named no route")
+    except PickerNoRoute as e:
+        return [head, f"  answered, but {e}: try another model; {fallback}"]
+    except (httpx.HTTPError, ValueError, KeyError, IndexError, TypeError) as e:
+        why = f"HTTP {e.response.status_code}" if isinstance(e, httpx.HTTPStatusError) else type(e).__name__
+        return [head, f"  a picker call failed ({why}); {fallback}"]
+    first, warm = times
+    lines = [head, f"  ready: first call {first:.2f} s (may include loading the model), next call {warm:.2f} s"]
+    if warm * 1000 > rp.timeout_ms:
+        lines.append("  the next call took longer than timeout_ms, so most first turns will use the router's "
+                     "route: raise route_picker.timeout_ms or pick a smaller model")
+    return lines

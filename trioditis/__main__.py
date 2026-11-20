@@ -175,6 +175,9 @@ def main(argv: list[str] | None = None) -> None:
             print(textwrap.fill(note, width=98, initial_indent="  ", subsequent_indent="    ",
                                 break_long_words=False, break_on_hyphens=False))
         print(f"{confirmed} of {len(cfg.models)} models confirmed ready; cloud providers are never contacted")
+        from .localcheck import picker_lines
+        for line in picker_lines(cfg):  # [] unless route_picker: is configured
+            print(line)
         for line in _facts_lines(cfg):
             print(line)
         return
@@ -194,6 +197,9 @@ def main(argv: list[str] | None = None) -> None:
         # Keyword/rule signals only here, so the CLI never calls any network service; prices and past
         # latency (read-only) let it show a route's cost or speed order.
         d = asyncio.run(decide(cfg, body, signals=Signals(prices=Prices(), latency=_readonly_latency())))
+        if cfg.route_picker:
+            d.reasons.append("route_picker is configured but not asked here (explain contacts no service); "
+                             "POST /v1/route asks it")
         print(json.dumps(d.as_dict(), indent=2))
         return
 
