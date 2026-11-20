@@ -130,7 +130,45 @@ async def test_slow_picker_falls_back_within_the_timeout():
     d = await decide(c, body("I have a python bug"), picker=p)
     assert d.route == "code" and d.picker["outcome"] == "timeout"
     assert d.picker["ms"] < 1500
-    assert "route picker: no answer in 0.2 s -> router chose code" in d.reasons
+    assert ("route picker: no answer in 0.2 s (left to finish, so a loading model is ready next turn) "
+            "-> router chose code") in d.reasons
+    p._left.cancel()
+
+
+async def test_a_late_call_finishes_and_the_next_turn_gets_the_picker():
+    # A cold model: the first call outlives timeout_ms. Cancelling it would stop the load, so it is
+    # left to finish; while it runs, turns skip the picker instead of queueing behind it.
+    calls = []
+
+    async def loading(req):
+        calls.append(1)
+        if len(calls) == 1:
+            await asyncio.sleep(0.5)
+        return reply("code")
+
+    c, p = asker(loading)
+    d1 = await decide(c, body("hello there"), picker=p)
+    assert d1.route == "quick" and d1.picker["outcome"] == "timeout" and p.busy()
+    d2 = await decide(c, body("hello there"), picker=p)
+    assert d2.route == "quick" and d2.picker["outcome"] == "busy" and len(calls) == 1
+    assert "route picker not asked: its last call is still running (the model may be loading)" in d2.reasons
+    await p._left  # the late answer is dropped, not served to anyone
+    assert not p.busy()
+    d3 = await decide(c, body("hello there"), picker=p)
+    assert d3.route == "code" and d3.picker["outcome"] == "chose" and len(calls) == 2
+
+
+async def test_a_late_call_that_fails_is_swallowed():
+    async def late_error(req):
+        await asyncio.sleep(0.4)
+        return httpx.Response(500, json={"error": "x"})
+
+    c, p = asker(late_error)
+    d = await decide(c, body("hello there"), picker=p)
+    assert d.picker["outcome"] == "timeout"
+    with pytest.raises(httpx.HTTPStatusError):
+        await p._left
+    assert not p.busy()
 
 
 async def test_tool_keywords_decide_ahead_of_the_picker():

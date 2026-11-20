@@ -200,6 +200,7 @@ class Embedder:
 
 ROUTE_PICKER_INSTRUCTION = 1  # bump when the text below changes: a measurement names the instruction it used
 PICKER_TEXT_CHARS = 4000       # the same cut the embeddings signal makes
+PICKER_LOAD_S = 120.0          # a call that outlives timeout_ms may run this long: it may be loading the model
 
 
 class PickerNoRoute(ValueError):
@@ -217,6 +218,17 @@ class RoutePickerClient:
         self.cfg = cfg
         self.client = client
         self.routes = {n.lower(): n for n in cfg.routes}
+        self._left: asyncio.Task | None = None  # a call that outlived timeout_ms, left to finish
+
+    def busy(self) -> bool:
+        """A call that outlived timeout_ms is still running (often: the model is loading)."""
+        return self._left is not None and not self._left.done()
+
+    def leave(self, task: asyncio.Task) -> None:
+        """Let a late call finish instead of cancelling it: cancelling stops a cold model's load, so
+        every later first turn would time out too. Its answer is dropped; its error is swallowed."""
+        self._left = task
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def system(self) -> str:
         return ("You sort messages for a router. Routes:\n"
@@ -237,8 +249,9 @@ class RoutePickerClient:
         p = self.cfg.route_picker
         prov = self.cfg.providers[p.provider]
         headers = {"Authorization": f"Bearer {prov.api_key()}"} if prov.api_key() else {}
+        # timeout_ms is enforced by the caller; this cap only ends a call that was left to finish.
         r = await self.client.post(f"{prov.base_url}/chat/completions", json=self.body(text), headers=headers,
-                                   timeout=p.timeout_ms / 1000)
+                                   timeout=PICKER_LOAD_S)
         r.raise_for_status()
         try:
             reply = r.json()["choices"][0]["message"]["content"] or ""
@@ -554,20 +567,31 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
     # A coding agent's tool list is a structural fact, and the held-out test had no tools: when the
     # tool names match a route's tool keywords, the router decides and the picker is not asked.
     tool_hit = next((n for n, r in cfg.routes.items() if tool_score(tools or [], r)[0] > 0), None)
-    if tool_hit or not text.strip():
+    skip = (f"the request's tools match route {tool_hit}'s tool keywords" if tool_hit
+            else "no text to classify" if not text.strip()
+            else "its last call is still running (the model may be loading)" if picker.busy()
+            else None)
+    if skip:
         router = await _classify(cfg, text, embedder, reasons, tools)
-        info["outcome"] = "skipped"
-        reasons.append("route picker not asked: " + (f"the request's tools match route {tool_hit}'s tool keywords"
-                                                     if tool_hit else "no text to classify"))
+        info["outcome"] = "busy" if skip.startswith("its last call") else "skipped"
+        reasons.append(f"route picker not asked: {skip}")
         return router, router, info
 
     async def ask() -> tuple[str | None, str, str]:
         """(route or None, outcome, why)"""
         t0 = time.monotonic()
+        task = asyncio.ensure_future(picker.pick(text))
         try:
-            return await asyncio.wait_for(picker.pick(text), timeout=p.timeout_ms / 1000), "chose", ""
+            done, _ = await asyncio.wait({task}, timeout=p.timeout_ms / 1000)
+            if not done:
+                picker.leave(task)
+                return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s (left to finish, so a loading model is ready next turn)"
+            return task.result(), "chose", ""
+        except asyncio.CancelledError:
+            task.cancel()
+            raise
         except (TimeoutError, httpx.TimeoutException):
-            return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s"
+            return None, "timeout", f"no answer in {PICKER_LOAD_S:g} s"
         except PickerNoRoute as e:
             return None, "no_route", str(e)
         except Exception as e:  # the picker is optional; never fail a request on it
