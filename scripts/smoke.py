@@ -63,7 +63,9 @@ def main() -> None:
         for _ in range(100):
             try:
                 with urllib.request.urlopen(f"{base}/health", timeout=1) as resp:
-                    assert json.load(resp) == {"status": "ok"}
+                    health = json.load(resp)
+                    # claude-t reads anthropic_gate before it routes Claude Code here
+                    assert health["status"] == "ok" and health["anthropic_gate"] is True, health
                     break
             except OSError:
                 time.sleep(0.2)
