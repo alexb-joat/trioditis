@@ -207,3 +207,19 @@ def test_eval_routes_log_counts_shadow_lines_without_a_cost(tmp_path):
     assert s.cost.n == 0  # nothing was served, so there is nothing to price
     report = "\n".join(format_report(data, s, "config.yaml", "2026-11-21", True))
     assert "3 of the 3 are shadow counts" in report and "shadow.jsonl" in report
+
+
+def test_eval_routes_log_on_the_shadow_log_itself_reads_it_once(tmp_path):
+    # `eval-routes --log logs/shadow.jsonl` read the file twice before: 3 lines became 6 requests.
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    shadow = [{"shadow": True, "router_route": "writing",
+               "route_picker": {"model": "qwen2.5-coder:7b", "instruction": 1, "outcome": o, "route": r, "ms": 700}}
+              for o, r in [("chose", "quick"), ("timeout", None), ("skipped", None)]]
+    (logs / "shadow.jsonl").write_text("".join(json.dumps(x) + "\n" for x in shadow))
+    data = read_log(logs / "shadow.jsonl")
+    read_shadow(data, logs / "shadow.jsonl")
+    assert len(data.records) == 3 and data.shadow == 3 and len(data.files) == 1
+    s = summarise(pcfg(), data.records, Prices(tmp_path / "prices.json"), data.served)
+    report = "\n".join(format_report(data, s, "config.yaml", "2026-11-21", True))
+    assert "3 of the 3 are shadow counts" in report and "shadow.jsonl + " not in report

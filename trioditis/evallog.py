@@ -78,14 +78,18 @@ def read_log(path: str | Path) -> LogData:
             picker = rec.get("route_picker")
             if isinstance(picker, dict) and isinstance(rec.get("router_route"), str):
                 data.records.append(rec)
+                if rec.get("shadow") is True:  # `--log shadow.jsonl` names the shadow log itself
+                    data.shadow += 1
     return data
 
 
 def read_shadow(data: LogData, decisions_path: str | Path) -> None:
-    """Add the shadow counts beside the decision log (`shadow.jsonl`, and `.1` first), when there are any."""
+    """Add the shadow counts beside the decision log (`shadow.jsonl`, and `.1` first), when there are any
+    and `read_log` has not read them already."""
     p = Path(decisions_path).expanduser().with_name("shadow.jsonl")
+    done = {Path(f).resolve() for f in data.files}
     for q in (p.with_name(p.name + ".1"), p):
-        if not q.is_file():
+        if not q.is_file() or q.resolve() in done:
             continue
         try:
             text = q.read_text(encoding="utf-8", errors="replace")
