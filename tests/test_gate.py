@@ -70,9 +70,9 @@ def home(tmp_path, monkeypatch):
     return tmp_path
 
 
-def make_app(home: Path, handler):
+def make_app(home: Path, handler, **over):
     metrics = MetricsDB(home / "metrics.db")
-    app = create_app(cfg(logging={"path": str(home / "logs" / "decisions.jsonl")}),
+    app = create_app(cfg(logging={"path": str(home / "logs" / "decisions.jsonl")}, **over),
                      transport=httpx.MockTransport(handler), metrics=metrics,
                      budget=BudgetGuard(metrics, BudgetCaps()), prices=Prices(home / "prices.json"),
                      hardware_file=home / "hardware.json", accounts_file=home / "accounts.json")
@@ -217,7 +217,19 @@ def test_an_unreachable_upstream_says_how_to_detach(home):
     app, _ = make_app(home, down)
     r = client_for(app).post("/v1/messages", content=BODY, headers=CLAUDE_HEADERS)
     assert r.status_code == 502 and r.json()["type"] == "error"
-    assert "api.anthropic.com" in r.json()["error"]["message"] and "ANTHROPIC_BASE_URL" in r.json()["error"]["message"]
+    assert r.json()["error"]["message"] == ("trioditis could not reach https://api.anthropic.com: ConnectError. "
+                                            "Detach with `unset ANTHROPIC_BASE_URL` to go direct.")
+
+
+def test_a_body_over_the_limit_is_refused_before_anthropic_sees_it(home):
+    calls = []
+    app, _ = make_app(home, lambda req: calls.append(req) or sse_response(), limits={"max_body_bytes": 100})
+    chunks = iter([BODY[:60], BODY[60:] + b" " * 100])  # streamed, so no Content-Length to check first
+    r = client_for(app).post("/v1/messages", content=chunks, headers=CLAUDE_HEADERS)
+    assert r.status_code == 413 and r.headers["x-should-retry"] == "false"
+    assert r.json() == {"type": "error", "error": {"type": "request_too_large",
+                                                   "message": "request body over 100 bytes (limits.max_body_bytes)"}}
+    assert calls == []
 
 
 def test_count_tokens_passes_through_and_is_not_metered(home):

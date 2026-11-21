@@ -145,7 +145,7 @@ class Meter:
                 self.usage[k] = v  # counts only grow over a stream; the last report is the total
 
 
-def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices: Prices, read_raw,
+def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices: Prices, read_raw: RawReader,
           router_key, caller, on_message=None) -> None:
     """`on_message(headers, raw)`, when given, sees every Messages request's headers and body after the
     body is read and before it goes upstream (the shadow counts, trioditis/shadow.py). It must return
@@ -219,10 +219,9 @@ def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices
             return anthropic_error(401, f"the router key goes in {ROUTER_KEY_HEADER} only "
                                         f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); it arrived in "
                                         f"{carrier}, which is passed to Anthropic", "authentication_error")
-        try:
-            raw = await read_raw(request)
-        except _TooLarge as e:
-            return anthropic_error(413, str(e), "request_too_large")
+        raw = await read_raw(request)
+        if raw is None:
+            return anthropic_error(413, read_raw.refusal(), "request_too_large")
         if on_message is not None and path == MESSAGES:
             try:
                 on_message(request.headers, raw)
@@ -253,19 +252,22 @@ def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices
         return await passthrough(request, COUNT_TOKENS)
 
 
-class _TooLarge(Exception):
-    pass
+class RawReader:
+    """The request body as bytes, read with a cap (a chunked upload has no Content-Length to check first).
+    Over the cap it returns None; the refusal text comes from the limit, never from an exception."""
 
+    def __init__(self, max_bytes: int, on_refuse):
+        self.max_bytes, self.on_refuse = max_bytes, on_refuse
 
-def raw_reader(max_bytes: int, on_refuse):
-    """The request body as bytes, read with a cap (a chunked upload has no Content-Length to check first)."""
-    async def read(request: Request) -> bytes:
+    async def __call__(self, request: Request) -> bytes | None:
         parts, size = [], 0
         async for chunk in request.stream():
             size += len(chunk)
-            if size > max_bytes:
-                on_refuse(request)
-                raise _TooLarge(f"request body over {max_bytes} bytes (limits.max_body_bytes)")
+            if size > self.max_bytes:
+                self.on_refuse(request)
+                return None
             parts.append(chunk)
         return b"".join(parts)
-    return read
+
+    def refusal(self) -> str:
+        return f"request body over {self.max_bytes} bytes (limits.max_body_bytes)"

@@ -303,8 +303,8 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
     app.state.shadow = shadow
     gate.mount(app, client=client, metrics=metrics, prices=prices, router_key=router_api_key, caller=client_of,
                on_message=shadow.offer,
-               read_raw=gate.raw_reader(cfg.limits.max_body_bytes,
-                                        lambda r: security.write(r, "body too large (streamed past the limit)")))
+               read_raw=gate.RawReader(cfg.limits.max_body_bytes,
+                                       lambda r: security.write(r, "body too large (streamed past the limit)")))
 
     @app.post("/v1/chat/completions")
     async def chat(request: Request):
