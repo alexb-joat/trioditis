@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from pathlib import Path
 
@@ -121,7 +122,8 @@ def test_first_turn_logged_once_as_numbers_and_the_request_is_unchanged(home):
     raw = (home / "logs" / "shadow.jsonl").read_text()
     assert PROMPT not in raw and "failing" not in raw and TOKEN not in raw and ROUTER_KEY not in raw
     assert CLAUDE_HEADERS["x-claude-code-session-id"] not in raw
-    assert (home / "logs" / "shadow.jsonl").stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":  # Windows has no owner-only mode bits
+        assert (home / "logs" / "shadow.jsonl").stat().st_mode & 0o777 == 0o600
 
 
 def test_side_calls_and_subagents_are_not_the_first_turn(home):

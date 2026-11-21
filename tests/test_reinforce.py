@@ -2,6 +2,7 @@
 `reinforce run --dry-run` and `reinforce revert`. No test here reaches a real server or ~/.hlidskjalv."""
 import argparse
 import json
+import os
 import stat
 
 import httpx
@@ -143,7 +144,8 @@ def test_adopt_then_apply_and_the_file_is_private(tmp_path, home):
     doc = adopted.adopt(cfg, doc, PICKER_SERVES, False, at=AT, gate=None, reason="test")
     adopted.write(doc)
     path = home / "trioditis-adopted.json"
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":  # Windows has no owner-only mode bits
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
     live = adopted.apply(cfg, adopted.read())
     assert live.embeddings.threshold == 0.40 and live.route_picker.serves is False
     assert cfg.embeddings.threshold == 0.45 and cfg.route_picker.serves is True  # the config itself is untouched
