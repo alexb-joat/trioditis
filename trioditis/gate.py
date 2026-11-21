@@ -146,7 +146,10 @@ class Meter:
 
 
 def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices: Prices, read_raw,
-          router_key, caller) -> None:
+          router_key, caller, on_message=None) -> None:
+    """`on_message(headers, raw)`, when given, sees every Messages request's headers and body after the
+    body is read and before it goes upstream (the shadow counts, trioditis/shadow.py). It must return
+    at once; what it does can't change the request, and an error in it is ignored."""
     base = upstream_base()
     salt: dict[str, str] = {}
 
@@ -220,6 +223,11 @@ def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices
             raw = await read_raw(request)
         except _TooLarge as e:
             return anthropic_error(413, str(e), "request_too_large")
+        if on_message is not None and path == MESSAGES:
+            try:
+                on_message(request.headers, raw)
+            except Exception:  # noqa: S110 -- never let an observer break the client's request
+                pass
         headers = [(k, v) for k, v in request.headers.raw
                    if k.lower().decode("latin-1") not in _HOP_REQUEST and not k.lower().startswith(b"x-trioditis-")]
         headers.append((b"accept-encoding", b"identity"))

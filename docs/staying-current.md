@@ -101,7 +101,7 @@ The result depends on the label set. Prompts you chose to test the router with a
 trioditis eval-routes --labels new-labels.csv --compare-threshold 0.45
 ```
 
-**The picker against the router, on your own requests** (`--log`, instead of `--labels`): with a [`route_picker:`](../README.md#how-a-request-is-routed) block, each classified request logs the route it was served on, the route the router alone would have picked, and what the picker did. This reads that decision log (the config's `logging.path`, or a file named after `--log`; a rotated `.1` file is read too) and prints how often the picker named a route when it was asked, how long it took, how often its route was the router's, a table of the disagreements, and a cost estimate for them. It reads files only: no network call, nothing written, no prompt text printed.
+**The picker against the router, on your own requests** (`--log`, instead of `--labels`): with a [`route_picker:`](../README.md#how-a-request-is-routed) block, each classified request logs the route it was served on, the route the router alone would have picked, and what the picker did. This reads that decision log (the config's `logging.path`, or a file named after `--log`; a rotated `.1` file is read too), plus the [shadow counts](claude-code.md#shadow-counts-opt-in) in `shadow.jsonl` beside it when there are any, and prints how often the picker named a route when it was asked, how long it took, how often its route was the router's, a table of the disagreements, and a cost estimate for them. It reads files only: no network call, nothing written, no prompt text printed.
 
 ```
 trioditis eval-routes --log

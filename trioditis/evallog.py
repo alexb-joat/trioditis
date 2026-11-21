@@ -2,7 +2,8 @@
 
 With a `route_picker:` block in the config, every classified request logs the route that was
 served, the route the router alone would have picked, and what the picker did. This reads
-that decision log and counts how often the picker answered, how often the two disagreed and
+that decision log, and the shadow counts beside it (`shadow.jsonl`: Claude Code's first turns, classified
+but never served, trioditis/shadow.py), and counts how often the picker answered, how often the two disagreed and
 where, and estimates what the disagreements cost. It reads files only: no network call, nothing written.
 
 The log carries no labels, so this measures disagreement, never which of the two was right.
@@ -40,6 +41,7 @@ class LogData:
     unreadable: int = 0       # lines that are not a JSON object
     records: list[dict] = field(default_factory=list)   # decisions classified with the picker on
     served: dict[str, Counter] = field(default_factory=dict)   # route -> (model, local) of every answered request
+    shadow: int = 0           # of the records, shadow counts (classified, never served)
 
 
 def read_log(path: str | Path) -> LogData:
@@ -77,6 +79,32 @@ def read_log(path: str | Path) -> LogData:
             if isinstance(picker, dict) and isinstance(rec.get("router_route"), str):
                 data.records.append(rec)
     return data
+
+
+def read_shadow(data: LogData, decisions_path: str | Path) -> None:
+    """Add the shadow counts beside the decision log (`shadow.jsonl`, and `.1` first), when there are any."""
+    p = Path(decisions_path).expanduser().with_name("shadow.jsonl")
+    for q in (p.with_name(p.name + ".1"), p):
+        if not q.is_file():
+            continue
+        try:
+            text = q.read_text(encoding="utf-8", errors="replace")
+        except OSError as err:
+            raise LogError(f"can't read {q}: {err.strerror or err}") from err
+        data.files.append(str(q))
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                rec = None
+            if not isinstance(rec, dict):
+                data.unreadable += 1
+            elif rec.get("shadow") is True and isinstance(rec.get("route_picker"), dict) \
+                    and isinstance(rec.get("router_route"), str):
+                data.records.append(rec)
+                data.shadow += 1
 
 
 @dataclass
@@ -145,6 +173,8 @@ def summarise(cfg: Config, records: list[dict], prices: Prices,
             agreed += 1
             continue
         pairs[(router, str(picked))] += 1
+        if rec.get("shadow") is True:
+            continue  # nothing was served, so there is no cost to compare
         cost.n += 1
         side = _router_side(cfg, router, answered or {})
         status, usage = rec.get("status"), rec.get("usage")
@@ -173,6 +203,9 @@ def format_report(data: LogData, s: Summary, config_path: str, today: str, picke
            f"  config   {config_path}",
            f"  {data.lines:,} logged requests; {s.n:,} were classified with the picker on ({span})."
            if s.n else f"  {data.lines:,} logged requests; none was classified with the picker on."]
+    if data.shadow:
+        out.append(f"  {data.shadow:,} of the {s.n:,} are shadow counts: Claude Code first turns through the gate, "
+                   "classified by both but never served, so they carry no cost.")
     if data.unreadable:
         out.append(f"  {data.unreadable:,} lines were not valid JSON and were skipped.")
     if not s.n:
@@ -236,6 +269,7 @@ def run(cfg: Config, args, *, prices: Prices | None = None, today: str = "") -> 
                  "name a file after --log, or set logging.path and restart the router")
     try:
         data = read_log(path)
+        read_shadow(data, path)
     except LogError as err:
         sys.exit(f"eval-routes: {err}")
     s = summarise(cfg, data.records, prices or Prices(), data.served)

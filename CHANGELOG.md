@@ -4,6 +4,7 @@
 
 **Claude Code**
 - Claude Code can run through Trioditis: set `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`, or start it with `scripts/claude-t`. Requests go to Anthropic unchanged with your own claude.ai login, and the answer streams back unchanged. Each call's token counts go to plan usage, merged with `plan import --claude-code`, so `usage --plan` also shows calls the transcripts leave out. Calls made with an API key count as spend. Trioditis doesn't choose the model here. [docs/claude-code.md](docs/claude-code.md)
+- Opt-in shadow counts: with `route_picker: {shadow_claude_code: true}`, the first turn of each Claude Code session is classified by the router and the picker in the background, and one line of numbers (routes, outcome, lengths, never text) goes to `logs/shadow.jsonl`. The request is not changed or held. `eval-routes --log` counts these lines.
 - `/health` now says `"anthropic_gate": true`, so `claude-t` routes only to a router that has the passthrough.
 - The router key is refused when it arrives as `Authorization` or `x-api-key`, bare or after a scheme word such as `Bearer`, so the usual mistake no longer sends it to Anthropic. `claude-t` refuses a `TRIODITIS_URL` that is plain `http` to another machine or has an `@` in it. [docs/security-model.md](docs/security-model.md) and `SECURITY.md` now describe the passthrough: it forwards Claude Code's own credential to Anthropic and runs no privacy detector.
 

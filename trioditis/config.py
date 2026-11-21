@@ -99,12 +99,14 @@ class RoutePicker:
     max_chars: int = 200    # longer prompts skip the picker: the accuracy test's prompts were at most 206
     #                         characters, and on a laptop CPU 2 of 20 calls passed timeout_ms at 200
     #                         characters, 7 of 20 at 250 (docs/route-accuracy.md, "Time by prompt length")
+    shadow_claude_code: bool = False  # also name a route for each Claude Code session's first turn through
+    #                         the gate, logged to shadow.jsonl only: nothing is served from it (trioditis/shadow.py)
     serves: bool = True     # not a config key: False only when the reinforcement loop adopted "the router
     #                         serves" (trioditis/adopted.py); the request then gets the router's own route
 
 
 PICKER_TEXT_CHARS = 4000  # how much of a prompt the picker reads: the same cut the embeddings signal makes
-ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars"}
+ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars", "shadow_claude_code"}
 
 
 @dataclass(frozen=True)
@@ -323,7 +325,7 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
         raise ConfigError("route_picker must be a mapping with provider and model, or absent (off)")
     unknown = set(raw) - ROUTE_PICKER_KEYS
     if unknown:
-        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars")
+        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars, shadow_claude_code")
     prov = raw.get("provider")
     if not isinstance(prov, str) or prov not in providers:
         raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
@@ -345,7 +347,10 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     if without:
         raise ConfigError(f"route {without[0]}: needs a description, because route_picker chooses from the "
                           f"route descriptions")
-    return RoutePicker(prov, model.strip(), timeout, max_chars)
+    shadow = raw.get("shadow_claude_code", False)
+    if not isinstance(shadow, bool):
+        raise ConfigError(f"route_picker.shadow_claude_code must be true or false (got {shadow!r})")
+    return RoutePicker(prov, model.strip(), timeout, max_chars, shadow)
 
 
 def _parse_reinforce(raw) -> Reinforce | None:

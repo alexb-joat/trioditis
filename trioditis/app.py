@@ -30,6 +30,7 @@ from .hardware import ReportCache
 from .localcheck import attempts_text, connection_hint
 from .router import Cooldowns, Decision, Embedder, RoutePickerClient, RoutingError, SessionPins, Signals, all_text, decide
 from .security import check_bearer, fingerprint, host_header_is_local, origin_is_local, router_api_key
+from .shadow import Shadow
 
 _CLIENT_NAME = re.compile(r"[a-z0-9][a-z0-9._-]{0,39}")
 
@@ -298,7 +299,10 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             return _error(e.status, e.message)
         return d.as_dict()
 
+    shadow = Shadow(cfg.logging.path, adopted.current, embedder, picker, _append_private)
+    app.state.shadow = shadow
     gate.mount(app, client=client, metrics=metrics, prices=prices, router_key=router_api_key, caller=client_of,
+               on_message=shadow.offer,
                read_raw=gate.raw_reader(cfg.limits.max_body_bytes,
                                         lambda r: security.write(r, "body too large (streamed past the limit)")))
 

@@ -43,6 +43,17 @@ Counts only, never text: model, message id (hashed with your machine's salt), se
 - **No `x-api-key`** (your claude.ai login): the call goes to plan usage, next to `plan import`. It never counts toward the spending caps, because the plan's meters bill it, not per token.
 - **`x-api-key` present** (an Anthropic API key): the call is billed per token, so it goes with the API calls (`trioditis usage`, route `passthrough`), priced from `prices.json` when the model is there, and counts toward the caps. Trioditis never blocks it, even past a cap; Claude Code would only stall. The caps then stop the router's other cloud calls, not this one.
 
+## Shadow counts (opt-in)
+
+Claude Code's requests are never routed: Anthropic's model answers whatever Trioditis would have picked. To see which route the router and the route picker *would* name for your real prompts, add `shadow_claude_code: true` to the `route_picker:` block and restart the router. Off unless set.
+
+- **What runs:** for the first main request of each Claude Code session, the same classification a routed `auto` request gets (router and picker side by side, with the picker's `max_chars` and `timeout_ms`), in the background. The request goes to Anthropic unchanged and is not held while this runs.
+- **What it calls:** the picker's local model and, if configured, the local embeddings provider. Both must be `local: true`. Nothing leaves the machine.
+- **What it writes:** one line per session to `logs/shadow.jsonl`, beside the decision log, owner-only: the router's route, what the picker did, the prompt's length, the length of the whole message, how many system-reminder blocks were left out, the number of tools, the model name and a hashed session id. Never the prompt text.
+- **What reads it:** `trioditis eval-routes --log` counts these lines with the decision log's. They have no labels either, so they show disagreement, not which side was right. They carry no cost, because nothing was served.
+- **Which request counts:** the first in a session with `x-claude-code-session-id`, no `x-claude-code-agent-id` (subagents are skipped) and a non-empty `tools` list (side calls such as titles send none). Text blocks that are one whole `<system-reminder>` are left out of the prompt. Tools are left out of the classification, because Claude Code's own tool names would match route `code` on every turn. These rules come from reading what Claude Code sends and are not yet checked against many real sessions.
+- **What it costs others:** the picker answers one call at a time, so a routed `auto` request that arrives while a shadow call runs gets the router's route (outcome `busy`), as it would behind any other request.
+
 ## With a router key
 
 If the router has `TRIODITIS_API_KEY`, `Authorization` still belongs to Anthropic, so the router key goes in its own header. `claude-t` sends it when `TRIODITIS_API_KEY` is set; by hand:
