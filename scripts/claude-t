@@ -2,7 +2,7 @@
 # claude-t: Claude Code through Trioditis, for this one process only. Same arguments as `claude`.
 #
 # Your claude.ai login stays the credential: Trioditis passes it to Anthropic untouched and only counts
-# tokens (`trioditis plan report`). If Trioditis isn't answering, Claude Code starts direct, unmetered,
+# tokens (`trioditis usage --plan`). If Trioditis isn't answering, Claude Code starts direct, unmetered,
 # and says so. Nothing outside this process changes; plain `claude` is never routed.
 #
 #   TRIODITIS_URL      the router (default http://127.0.0.1:8787)
