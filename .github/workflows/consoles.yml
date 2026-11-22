@@ -1,0 +1,67 @@
+name: consoles
+
+# Claude Code through the gate, started from every console each OS has (scripts/console_check.py):
+# bash and PowerShell 7 on Linux; bash, zsh and PowerShell 7 on macOS; Windows PowerShell 5.1,
+# PowerShell 7, cmd and Git Bash on Windows. A local https stand-in answers for Anthropic, so no
+# model is called and no key is needed. Runs on a push to the ci-consoles branch, or by hand:
+# gh workflow run consoles.yml --ref <branch>
+on:
+  push:
+    branches: [ci-consoles]
+  workflow_dispatch:
+    inputs:
+      current:
+        description: "Current Claude Code build to test beside 2.1.296"
+        default: "2.1.330"
+
+permissions:
+  contents: read
+
+jobs:
+  consoles:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            require: bash,pwsh
+          - os: macos-latest
+            require: bash,zsh,pwsh
+          # windows-2022 is the Windows 10 generation (kernel 10.0.20348), windows-2025 the
+          # Windows 11 generation (10.0.26100). GitHub has no Windows 10/11 desktop x64 images.
+          - os: windows-2022
+            require: powershell,pwsh,cmd,gitbash
+          - os: windows-2025
+            require: powershell,pwsh,cmd,gitbash
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    env:
+      CURRENT: ${{ inputs.current || '2.1.330' }}
+    steps:
+      # Actions pinned to full commit SHAs, as in ci.yml.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      - name: Install (hash-verified)
+        run: pip install --require-hashes --no-deps -r requirements.txt
+      - name: Claude Code builds (exact versions, the runner's own npm)
+        shell: bash
+        run: |
+          case "$CURRENT" in *[!0-9.]*|"") echo "current must be a version like 2.1.330, got: $CURRENT"; exit 2;; esac
+          for v in 2.1.296 "$CURRENT"; do
+            npm install -g --prefix "$RUNNER_TEMP/cc-$v" --no-fund --no-audit "@anthropic-ai/claude-code@$v"
+          done
+      - name: Shells on this runner
+        shell: bash
+        run: |
+          for s in bash zsh pwsh powershell; do command -v $s >/dev/null && echo "$s: $($s --version 2>/dev/null | head -1)"; done || true
+          [ "$RUNNER_OS" = Windows ] && "/c/Program Files/Git/bin/bash.exe" --version | head -1 || true
+      - name: Console check
+        shell: bash
+        run: |
+          bin() { if [ "$RUNNER_OS" = Windows ]; then cygpath -w "$RUNNER_TEMP/cc-$1"; else echo "$RUNNER_TEMP/cc-$1/bin"; fi; }
+          python scripts/console_check.py --require "${{ matrix.require }}" --old 2.1.296 \
+            --claude "2.1.296=$(bin 2.1.296)" --claude "$CURRENT=$(bin "$CURRENT")"
