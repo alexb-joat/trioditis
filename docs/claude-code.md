@@ -12,6 +12,15 @@ For one terminal session, from a clone of the repository:
 scripts/claude-t            # same arguments as claude
 ```
 
+On Windows, from PowerShell (5.1 or 7) or cmd:
+
+```powershell
+scripts\claude-t.ps1        # PowerShell; if scripts are blocked: powershell -ExecutionPolicy Bypass -File scripts\claude-t.ps1
+scripts\claude-t.cmd        # cmd; runs claude-t.ps1 with Windows PowerShell for this one run
+```
+
+`claude-t.ps1` also runs in PowerShell 7 on macOS and Linux. All three do the same checks.
+
 `claude-t` checks that the router at `http://127.0.0.1:8787` has the passthrough (`/health` says `"anthropic_gate": true`). If it does, it sets `ANTHROPIC_BASE_URL` for that one process, and `ENABLE_TOOL_SEARCH=true` unless you set it yourself (see Limits). If it doesn't, it starts Claude Code direct, without metering, and prints a line saying so. Plain `claude` is never affected.
 
 Without the script, set the variable yourself:
@@ -19,6 +28,8 @@ Without the script, set the variable yourself:
 ```sh
 ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude
 ```
+
+PowerShell: `$env:ANTHROPIC_BASE_URL = "http://127.0.0.1:8787"; claude`. cmd: `set ANTHROPIC_BASE_URL=http://127.0.0.1:8787` and then `claude`. Both last until that window closes.
 
 For the VS Code extension and every terminal, put the same variable in the `env` block of `~/.claude/settings.json`:
 
