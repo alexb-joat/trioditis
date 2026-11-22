@@ -36,7 +36,16 @@ def reply(text):
 
 
 def asker(handler, c=None):
+    """A picker on a mock provider. /api/ps answers 404 (not Ollama) unless the handler is ollama(...)."""
     c = c or pcfg()
+    if not getattr(handler, "ollama", False):
+        chat = handler
+
+        async def handler(req):
+            if req.url.path == "/api/ps":
+                return httpx.Response(404)
+            out = chat(req)
+            return await out if asyncio.iscoroutine(out) else out
     return c, RoutePickerClient(c, httpx.AsyncClient(transport=httpx.MockTransport(handler)))
 
 
@@ -147,6 +156,49 @@ async def test_slow_picker_falls_back_within_the_timeout():
     assert d.picker["ms"] < 1500
     assert ("route picker: no answer in 0.2 s (left to finish; requests with no pinned route that start "
             "after it ends get the picker) -> router chose code") in d.reasons
+    for call in list(p._calls):
+        call.cancel()
+
+
+def ollama(models, chat):
+    """A handler that answers Ollama's /api/ps with these loaded models and sends the rest to chat."""
+    async def handler(req):
+        if req.url.path == "/api/ps":
+            return httpx.Response(200, json={"models": [{"name": m, "model": m} for m in models]})
+        return await chat(req)
+    handler.ollama = True
+    return handler
+
+
+async def stuck(req):
+    await asyncio.sleep(2)
+    return reply("quick")
+
+
+async def test_a_timeout_while_the_model_loads_is_logged_as_cold():
+    # Ollama lists a model in /api/ps only once it has loaded: absent at the timeout = still loading.
+    c, p = asker(ollama([], stuck))
+    d = await decide(c, body("I have a python bug"), picker=p)
+    assert d.route == "code" and d.picker["outcome"] == "cold"
+    assert ("route picker: no answer in 0.2 s: the model was still loading (left to finish; requests with no "
+            "pinned route that start after it ends get the picker) -> router chose code") in d.reasons
+    for call in list(p._calls):
+        call.cancel()
+
+
+@pytest.mark.parametrize("model, listed", [("qwen2.5-coder:7b", "qwen2.5-coder:7b"), ("llama3.2", "llama3.2:latest")])
+async def test_a_timeout_with_the_model_loaded_stays_a_timeout(model, listed):
+    c, p = asker(ollama([listed], stuck), pcfg({"model": model}))
+    d = await decide(c, body("I have a python bug"), picker=p)
+    assert d.picker["outcome"] == "timeout"
+    for call in list(p._calls):
+        call.cancel()
+
+
+async def test_a_provider_that_is_not_ollama_leaves_the_timeout_unlabelled():
+    c, p = asker(stuck)  # /api/ps answers 404
+    d = await decide(c, body("I have a python bug"), picker=p)
+    assert d.picker["outcome"] == "timeout"
     for call in list(p._calls):
         call.cancel()
 

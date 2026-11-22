@@ -253,6 +253,23 @@ class RoutePickerClient:
         words = [w.strip(".,:;`'\"*") for w in reply.strip().lower().split()]
         return next((self.routes[w] for w in words if w in self.routes), None)
 
+    async def loaded(self) -> bool | None:
+        """Whether the provider has the picker's model in memory: Ollama's `GET /api/ps`, beside the
+        `/v1` base URL, lists a model only once it has finished loading. None when the provider isn't
+        Ollama-shaped or doesn't answer within a quarter second; a local call, like the picker's own."""
+        p = self.cfg.route_picker
+        base = self.cfg.providers[p.provider].base_url.rstrip("/")
+        if not base.endswith("/v1"):
+            return None
+        try:
+            r = await asyncio.wait_for(self.client.get(f"{base[:-3]}/api/ps", timeout=0.25), 0.25)
+            r.raise_for_status()
+            models = r.json()["models"]
+            names = {str(m.get(k, "")) for m in models for k in ("name", "model")}
+        except Exception:  # not Ollama's answer, or none: this only labels an outcome, never fails a request
+            return None
+        return p.model in names or f"{p.model}:latest" in names
+
     async def pick(self, text: str) -> str:
         """The route the model names. Raises on timeout, an HTTP error or a reply with no route."""
         p = self.cfg.route_picker
@@ -597,8 +614,10 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
         try:
             done, _ = await asyncio.wait({task}, timeout=p.timeout_ms / 1000)
             if not done:
-                return None, "timeout", (f"no answer in {p.timeout_ms / 1000:g} s (left to finish; "
-                                         "requests with no pinned route that start after it ends get the picker)")
+                left = "left to finish; requests with no pinned route that start after it ends get the picker"
+                if await picker.loaded() is False:
+                    return None, "cold", f"no answer in {p.timeout_ms / 1000:g} s: the model was still loading ({left})"
+                return None, "timeout", f"no answer in {p.timeout_ms / 1000:g} s ({left})"
             return task.result(), "chose", ""
         except asyncio.CancelledError:
             task.cancel()

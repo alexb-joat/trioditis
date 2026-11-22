@@ -165,6 +165,15 @@ def test_a_picker_that_never_named_a_route_stops_before_the_agreement_block(tmp_
     assert "never named a route" in flat(out) and "Where the picker chose" not in out and "Time to answer" not in out
 
 
+def test_cold_starts_are_counted_apart(tmp_path, capsys, prices):
+    log = [rec("quick", "quick", "cold", ms=2500)] * 3 + [rec("quick", "quick", ms=900), rec("code", "quick", ms=700)]
+    _, out = report(tmp_path, log, capsys, prices)
+    text = flat(out)
+    assert "cold 3 (no answer in time while the model was still loading)" in text
+    assert "Asked 5 times, named a route: 2/5 = 40.0%" in text
+    assert "Not counting cold starts: 2/2 = 100.0%" in text
+
+
 def test_two_picker_models_are_listed_and_the_pooling_is_said(tmp_path, capsys, prices):
     other = rec("quick", "quick")
     other["route_picker"]["model"] = "llama3.2:3b"

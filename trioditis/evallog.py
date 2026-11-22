@@ -24,7 +24,8 @@ from trioditis_metrics.stats import quantile
 from .config import Config
 from .evalroutes import _fit, _pct
 
-ASKED = ("chose", "timeout", "no_route", "error")   # the picker was called
+ASKED = ("chose", "timeout", "cold", "no_route", "error")   # the picker was called
+WHY = {"cold": "no answer in time while the model was still loading"}
 NOT_ASKED = {"skipped": "tools matched a route, no text, or the prompt was over max_chars",
              "busy": "another picker call was still running",
              "not_serving": "an adopted setting had the router serve (trioditis reinforce)"}
@@ -228,9 +229,13 @@ def format_report(data: LogData, s: Summary, config_path: str, today: str, picke
     out += ["", f"What the picker did (n = {s.n:,})"]
     width = max(len(o) for o in s.outcomes)
     for outcome, k in s.outcomes.most_common():
-        why = f"   ({NOT_ASKED[outcome]})" if outcome in NOT_ASKED else ""
+        why = NOT_ASKED.get(outcome) or WHY.get(outcome)
+        why = f"   ({why})" if why else ""
         out.append(f"  {outcome:<{width}}  {k:>6,}{why}")
     out.append(f"  Asked {s.asked:,} times, named a route: {_pct(s.chose, s.asked)}")
+    if s.outcomes["cold"]:
+        warm = s.asked - s.outcomes["cold"]
+        out.append(f"  Not counting cold starts: {_pct(s.chose, warm)}" if warm else "  Every call was a cold start.")
     if s.ms:
         out.append(f"  Time to answer: median {quantile(s.ms, 0.5) / 1000:.2f} s, 95th percentile "
                    f"{quantile(s.ms, 0.95) / 1000:.2f} s (n = {len(s.ms):,})")

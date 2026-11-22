@@ -272,7 +272,10 @@ length 78 characters, at most 206). On 20 November the first
 call `trioditis check` made took 17.8 s and the next 0.34 s (n = 1; the gap fits the model being loaded
 into memory, which was not checked, and the second call repeated the first one's text). Later that day three cold starts took 16–21 s, and one more, with
 no model loaded (`ollama ps`, which lists the models in memory, was empty), 19.7 s; in the router check below it was 15.6 s. A request that arrives while the model loads falls back to the router at the
-default 2.5 s timeout; the call goes on, so the model finishes loading. One picker call runs at a
+default 2.5 s timeout; the call goes on, so the model finishes loading. Since 22 November 2026 such a
+timeout is logged as outcome `cold` when Ollama's `/api/ps` doesn't list the model yet (it lists a model
+only once it has loaded), and `eval-routes --log` also gives the picker's rate without cold starts; the
+three timeouts in the first shadow counts were all cold. One picker call runs at a
 time: until that call ends, other requests skip the picker (outcome `busy` in the decision log); after
 it, they get the picker. A turn counts as a first turn when nothing is pinned for its conversation, and
 a conversation is known by its session id (`X-Session-Id` or `user`) or, for a request with tools, by
