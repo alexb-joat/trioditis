@@ -23,6 +23,10 @@ esac
 
 if curl -fsS --max-time 2 "$url/health" 2>/dev/null | grep -q '"anthropic_gate":true'; then
     export ANTHROPIC_BASE_URL="$url"
+    # Claude Code 2.1.296 (not 2.1.322, .325 or .330) turns tool search off for any base URL that isn't Anthropic's
+    # and sends every tool in full: 289 tools, about 375k tokens a turn, on 21 Nov 2026. The gate passes the
+    # tool_reference blocks through, so tool search can stay on. A value you set yourself is kept.
+    export ENABLE_TOOL_SEARCH="${ENABLE_TOOL_SEARCH:-true}"
     if [ -n "${TRIODITIS_API_KEY:-}" ]; then
         nl='
 '

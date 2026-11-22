@@ -12,7 +12,7 @@ For one terminal session, from a clone of the repository:
 scripts/claude-t            # same arguments as claude
 ```
 
-`claude-t` checks that the router at `http://127.0.0.1:8787` has the passthrough (`/health` says `"anthropic_gate": true`). If it does, it sets `ANTHROPIC_BASE_URL` for that one process. If it doesn't, it starts Claude Code direct, without metering, and prints a line saying so. Plain `claude` is never affected.
+`claude-t` checks that the router at `http://127.0.0.1:8787` has the passthrough (`/health` says `"anthropic_gate": true`). If it does, it sets `ANTHROPIC_BASE_URL` for that one process, and `ENABLE_TOOL_SEARCH=true` unless you set it yourself (see Limits). If it doesn't, it starts Claude Code direct, without metering, and prints a line saying so. Plain `claude` is never affected.
 
 Without the script, set the variable yourself:
 
@@ -74,4 +74,5 @@ Without the header, the router answers 401, and Claude Code keeps retrying inste
 - The privacy detectors don't run on this path: what Claude Code sends goes to Anthropic as it is.
 - `claude-t` trusts whatever answers `/health` at `TRIODITIS_URL`. On a machine other people log in to, another local process could take the port while the router is down and would receive your login token. It refuses a URL that is plain `http` to another machine, or that has an `@` in it.
 - A stream you interrupt is recorded with the token counts that had arrived by then, so its output count is too low.
+- Claude Code 2.1.296 turns tool search off for any base URL that isn't Anthropic's, and then sends every tool's full definition on every turn: with many MCP tools that was 289 tools and about 1.4 MB a request, and autocompact kept refilling (tested 21–22 November 2026). Versions 2.1.322, 2.1.325 and 2.1.330 keep tool search on. On an older version, set `ENABLE_TOOL_SEARCH=true` (`claude-t` does); the gate passes tool search's blocks through unchanged.
 - Request bodies over `limits.max_body_bytes` (20 MiB by default) are refused with a 413. Raise it in `config.yaml` if long sessions with images hit it.
