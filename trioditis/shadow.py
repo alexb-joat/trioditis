@@ -16,10 +16,14 @@ upstream call has started); send anything off this machine (the picker and the e
 must be local, config.py checks both); write prompt text (counts, routes, a session fingerprint).
 
 Which request counts as the first turn: the first one in a session that carries `x-claude-code-session-id`,
-no `x-claude-code-agent-id` (a subagent) and a non-empty `tools` list (Claude Code's side calls, such
-as titles, send none). Text blocks that are a whole `<system-reminder>` are left out of the prompt:
-they are Claude Code's context, not what the person typed. Both are this module's reading of what
-Claude Code sends, to be checked against real sessions (docs/claude-code.md, "Shadow counts").
+no `x-claude-code-agent-id` (a subagent), a non-empty `tools` list (Claude Code's side calls, such
+as titles, send none) and no assistant message yet (so after a restart, a chat that is mid-task is
+not counted again; its session is remembered without a line). Text blocks that are a whole
+`<system-reminder>` are left out of the prompt, and so are Claude Code's own wrappers wherever they
+sit (the notice and command lines after /clear or another local command, IDE selections, task
+notifications): they are Claude Code's context, not what the person typed. Both are this module's
+reading of what Claude Code sends, to be checked against real sessions (docs/claude-code.md,
+"Shadow counts").
 """
 
 from __future__ import annotations
@@ -39,17 +43,31 @@ from .security import fingerprint
 SHADOW_LOG_MAX = 10 * 1024 * 1024   # one line per session: years of use before the first rotation
 SEEN_MAX = 10_000                    # sessions remembered, oldest forgotten first
 _REMINDER = re.compile(r"\s*<system-reminder>.*</system-reminder>\s*", re.S)
+# Claude Code's wrappers: what a local command (/clear, /model, ...) printed, the IDE's selection and
+# open file, a background task's notice. Removed by tag, as separate blocks or inside typed text.
+_WRAPPERS = re.compile(r"<(local-command-caveat|local-command-stdout|local-command-stderr|command-name|"
+                       r"command-message|command-args|ide_selection|ide_opened_file|task-notification)>"
+                       r".*?</\1>", re.S)
+
+
+def _unwrapped(text: str) -> str:
+    """The text without Claude Code's wrappers; typed text without any stays exactly as sent."""
+    out = _WRAPPERS.sub("", text)
+    return out.strip() if out != text else text
 
 
 def prompt_of(body: dict) -> tuple[str, int, int]:
     """(the prompt to classify, characters of the whole last user message, reminder blocks left out).
-    The prompt is the last user message's text blocks, minus blocks that are one whole system reminder."""
+    The prompt is the last user message's text blocks, minus blocks that are one whole system reminder
+    and minus Claude Code's wrappers (_WRAPPERS)."""
     for m in reversed(body.get("messages") or []):
         if isinstance(m, dict) and m.get("role") == "user":
             texts = [str(p.get("text", "")) for p in _parts(m.get("content"))
                      if isinstance(p, dict) and p.get("type") in ("text", "input_text")]
             kept = [t for t in texts if not _REMINDER.fullmatch(t)]
-            return "\n".join(kept), len("\n".join(texts)), len(texts) - len(kept)
+            reminders = len(texts) - len(kept)
+            kept = [t for t in (_unwrapped(t) for t in kept) if t]
+            return "\n".join(kept), len("\n".join(texts)), reminders
     return "", 0, 0
 
 
@@ -88,6 +106,9 @@ class Shadow:
             self.seen[sid] = None  # no await since the check above: two requests can't both count
             while len(self.seen) > SEEN_MAX:
                 self.seen.popitem(last=False)
+            messages = body.get("messages") if isinstance(body.get("messages"), list) else []
+            if any(isinstance(m, dict) and m.get("role") == "assistant" for m in messages):
+                return  # mid-task (the router restarted since this session began): not a first turn
             text, message_chars, reminders = prompt_of(body)
             # Tools are left out on purpose: Claude Code always sends its own (Bash, Edit, ...), which
             # would match route code's tool keywords on every turn and skip the picker.
@@ -97,6 +118,7 @@ class Shadow:
             rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "shadow": True, "source": "claude-code",
                    "router_route": router_route, "route_picker": info,
                    "prompt_chars": len(text), "message_chars": message_chars, "reminder_blocks": reminders,
+                   "messages": len(messages),
                    "tools": len(body["tools"]) if isinstance(body["tools"], list) else None,
                    "model": model[:100] if isinstance(model, str) else None, "session_fp": fingerprint(sid)}
             self.append(self.path, json.dumps(rec), SHADOW_LOG_MAX)
