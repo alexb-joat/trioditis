@@ -131,6 +131,10 @@ class Summary:
     cost: Cost
     first: str
     last: str
+    late: Counter = field(default_factory=Counter)        # shadow lines that waited past the timeout: outcome -> n
+    late_ms: list[int] = field(default_factory=list)      # their time to answer, where they named a route
+    late_agreed: int = 0
+    late_pairs: Counter = field(default_factory=Counter)  # (router's route, picker's late route), disagreements
 
     @property
     def chose(self) -> int:
@@ -163,12 +167,26 @@ def summarise(cfg: Config, records: list[dict], prices: Prices,
     ms: list[int] = []
     agreed = 0
     cost = Cost()
+    late_outcomes: Counter = Counter()
+    late_pairs: Counter = Counter()
+    late_ms: list[int] = []
+    late_agreed = 0
     days = sorted(str(r.get("ts", ""))[:10] for r in records if r.get("ts"))
     for rec in records:
         info = rec["route_picker"]
         outcome = str(info.get("outcome") or "unknown")
         outcomes[outcome] += 1
         pickers[(str(info.get("model")), str(info.get("instruction")))] += 1
+        late = info.get("late")
+        if rec.get("shadow") is True and isinstance(late, dict):
+            late_outcomes[str(late.get("outcome") or "unknown")] += 1
+            if late.get("outcome") == "chose":
+                if isinstance(late.get("ms"), int):
+                    late_ms.append(late["ms"])
+                if late.get("route") == rec.get("router_route"):
+                    late_agreed += 1
+                else:
+                    late_pairs[(rec.get("router_route"), str(late.get("route")))] += 1
         if outcome != "chose":
             continue
         if isinstance(info.get("ms"), int):
@@ -193,11 +211,34 @@ def summarise(cfg: Config, records: list[dict], prices: Prices,
         cost.served += served
         cost.router += other
     return Summary(n=len(records), outcomes=outcomes, pickers=pickers, ms=ms, agreed=agreed, pairs=pairs,
-                   cost=cost, first=days[0] if days else "", last=days[-1] if days else "")
+                   cost=cost, first=days[0] if days else "", last=days[-1] if days else "",
+                   late=late_outcomes, late_ms=late_ms, late_agreed=late_agreed, late_pairs=late_pairs)
 
 
 def _usd(x: float) -> str:
     return f"${x:,.4f}"
+
+
+def _late_lines(s: Summary) -> list[str]:
+    """Shadow counts that waited for a picker call past its timeout: what it named once it ended."""
+    n = sum(s.late.values())
+    if not n:
+        return []
+    named = s.late["chose"]
+    out = ["", f"Late answers: shadow counts that missed the timeout and waited for the picker (n = {n:,})",
+           f"  named a route: {_pct(named, n)}"]
+    other = ", ".join(f"{o} {k:,}" for o, k in s.late.most_common() if o != "chose")
+    if other:
+        out.append(f"  the rest: {other}")
+    if named:
+        out.append(f"  same route as the router: {_pct(s.late_agreed, named)}")
+        out += [f"  {a} -> {b}  {k:,}" for (a, b), k in s.late_pairs.most_common()]
+    if s.late_ms:
+        out.append(f"  Time to answer, from the call's start: median {quantile(s.late_ms, 0.5) / 1000:.2f} s, "
+                   f"95th percentile {quantile(s.late_ms, 0.95) / 1000:.2f} s (n = {len(s.late_ms):,})")
+    out.append("  None of these was in time for a served request; they show what the picker would choose, "
+               "not what it served.")
+    return out
 
 
 def format_report(data: LogData, s: Summary, config_path: str, today: str, picker_on: bool) -> list[str]:
@@ -239,6 +280,7 @@ def format_report(data: LogData, s: Summary, config_path: str, today: str, picke
     if s.ms:
         out.append(f"  Time to answer: median {quantile(s.ms, 0.5) / 1000:.2f} s, 95th percentile "
                    f"{quantile(s.ms, 0.95) / 1000:.2f} s (n = {len(s.ms):,})")
+    out += _late_lines(s)
     if not s.chose:
         out += ["", "The picker never named a route, so there is no disagreement to count. "
                     "`trioditis check` says whether it answers."]

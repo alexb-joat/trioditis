@@ -167,6 +167,28 @@ def test_a_slow_picker_never_delays_the_answer(home):
         drained(app, client)
     [rec] = lines(home)
     assert rec["route_picker"]["outcome"] == "timeout"  # as a served request would have had it
+    assert rec["route_picker"]["route"] is None and rec["router_route"] == "code"
+    late = rec["route_picker"]["late"]  # the shadow waited, so the line also says what it would have named
+    assert late["outcome"] == "chose" and late["route"] == "code" and 1500 <= late["ms"] < 3000
+
+
+def test_a_late_answer_that_names_no_route_is_counted_as_such(home):
+    app, calls = make_app(home, picker_answer="banana", picker_delay=0.5, timeout_ms=100)
+    with TestClient(app, base_url="http://127.0.0.1:8787") as client:
+        post(client, cc_body())
+        drained(app, client)
+    [rec] = lines(home)
+    assert rec["route_picker"]["outcome"] == "timeout"
+    assert rec["route_picker"]["late"]["outcome"] == "no_route" and rec["route_picker"]["late"]["route"] is None
+
+
+def test_a_picker_in_time_has_no_late_entry(home):
+    app, calls = make_app(home)
+    with TestClient(app, base_url="http://127.0.0.1:8787") as client:
+        post(client, cc_body())
+        drained(app, client)
+    [rec] = lines(home)
+    assert rec["route_picker"]["outcome"] == "chose" and "late" not in rec["route_picker"]
 
 
 def test_a_long_prompt_is_counted_as_skipped(home):
@@ -223,3 +245,27 @@ def test_eval_routes_log_on_the_shadow_log_itself_reads_it_once(tmp_path):
     s = summarise(pcfg(), data.records, Prices(tmp_path / "prices.json"), data.served)
     report = "\n".join(format_report(data, s, "config.yaml", "2026-11-21", True))
     assert "3 of the 3 are shadow counts" in report and "shadow.jsonl + " not in report
+
+
+def test_eval_routes_log_reports_late_answers_apart(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    def line(router, outcome, late=None):
+        info = {"model": "qwen2.5-coder:7b", "instruction": 1, "outcome": outcome, "route": None, "ms": 2500}
+        if late:
+            info["late"] = {"outcome": late[0], "route": late[1], "ms": late[2]}
+        return {"shadow": True, "router_route": router, "route_picker": info}
+    shadow = [line("code", "cold", ("chose", "code", 13000)), line("writing", "cold", ("chose", "quick", 15000)),
+              line("quick", "timeout", ("no_route", None, 4000)), line("code", "timeout"),  # older line: no late
+              line("code", "skipped")]
+    (logs / "shadow.jsonl").write_text("".join(json.dumps(x) + "\n" for x in shadow))
+    data = read_log(logs / "shadow.jsonl")
+    read_shadow(data, logs / "shadow.jsonl")
+    s = summarise(pcfg(), data.records, Prices(tmp_path / "prices.json"), data.served)
+    assert s.chose == 0 and s.late == {"chose": 2, "no_route": 1}
+    assert s.late_agreed == 1 and s.late_pairs == {("writing", "quick"): 1} and sorted(s.late_ms) == [13000, 15000]
+    report = "\n".join(format_report(data, s, "config.yaml", "2026-11-23", True))
+    assert "missed the timeout and waited for the picker (n = 3)" in report
+    assert "the rest: no_route 1" in report and "writing -> quick  1" in report
+    assert "median 14.00 s" in report
+    assert report.index("Late answers") < report.index("The picker never named a route")

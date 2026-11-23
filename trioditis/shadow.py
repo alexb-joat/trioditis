@@ -6,6 +6,11 @@ session is also classified in the background, the same way a routed `auto` reque
 picker side by side, the picker's limits and timeout included), and one line of numbers is written to
 `shadow.jsonl` beside the decision log. `trioditis eval-routes --log` counts those lines with the rest.
 
+When the picker misses its timeout (`cold` or `timeout`, usually a model still loading), the line also
+waits for the call to end and records its late answer under `route_picker.late` ({outcome, route, ms}).
+The outcome stays what a served request would have had; `late` adds which route the picker would have
+named, so its choices can be judged before anyone pays (memory, a smaller model) to make it faster.
+
 What it never does: change, hold or delay the request (the body is parsed in a thread after the
 upstream call has started); send anything off this machine (the picker and the embeddings provider
 must be local, config.py checks both); write prompt text (counts, routes, a session fingerprint).
@@ -86,7 +91,8 @@ class Shadow:
             text, message_chars, reminders = prompt_of(body)
             # Tools are left out on purpose: Claude Code always sends its own (Bash, Edit, ...), which
             # would match route code's tool keywords on every turn and skip the picker.
-            _, router_route, info = await _classify_with_picker(cfg, text, self.embedder, self.picker, [], tools=None)
+            _, router_route, info = await _classify_with_picker(cfg, text, self.embedder, self.picker, [], tools=None,
+                                                                late=True)
             model = body.get("model")
             rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "shadow": True, "source": "claude-code",
                    "router_route": router_route, "route_picker": info,

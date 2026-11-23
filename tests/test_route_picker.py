@@ -154,6 +154,7 @@ async def test_slow_picker_falls_back_within_the_timeout():
     d = await decide(c, body("I have a python bug"), picker=p)
     assert d.route == "code" and d.picker["outcome"] == "timeout"
     assert d.picker["ms"] < 1500
+    assert "late" not in d.picker  # a served request never waits for the late answer
     assert ("route picker: no answer in 0.2 s (left to finish; requests with no pinned route that start "
             "after it ends get the picker) -> router chose code") in d.reasons
     for call in list(p._calls):

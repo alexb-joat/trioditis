@@ -583,11 +583,32 @@ async def _classify(cfg: Config, text: str, embedder: Embedder | None, reasons: 
     return cfg.default_route
 
 
+async def _late_answer(task: asyncio.Task, t0: float) -> dict:
+    """What a picker call that missed timeout_ms answered once it ended: {outcome, route, ms}, ms counted
+    from the call's start. Waits at most PICKER_LOAD_S, the call's own cap, and never cancels the call."""
+    route, outcome = None, "timeout"
+    done, _ = await asyncio.wait({task}, timeout=PICKER_LOAD_S)
+    if done and task.cancelled():
+        outcome = "error"
+    elif done:
+        try:
+            route, outcome = task.result(), "chose"
+        except (TimeoutError, httpx.TimeoutException):
+            outcome = "timeout"
+        except PickerNoRoute:
+            outcome = "no_route"
+        except Exception:  # only counted; the call is over either way
+            outcome = "error"
+    return {"outcome": outcome, "route": route, "ms": int((time.monotonic() - t0) * 1000)}
+
+
 async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | None, picker: RoutePickerClient,
-                                reasons: list[str], tools: list[str] | None = None
+                                reasons: list[str], tools: list[str] | None = None, *, late: bool = False
                                 ) -> tuple[str, str, dict]:
     """(route served, route the router alone chose, what the picker did). The router always runs and
-    catches every picker failure; both run at once, so a fallback adds no wait beyond the picker's."""
+    catches every picker failure; both run at once, so a fallback adds no wait beyond the picker's.
+    With `late` (shadow counts only: nobody waits on them), a call that missed timeout_ms is also waited
+    for, and its answer goes in `info["late"]`; the outcome and the returned routes stay as they were."""
     p = cfg.route_picker
     info: dict = {"model": p.model, "instruction": ROUTE_PICKER_INSTRUCTION, "outcome": "", "route": None, "ms": None}
     # A coding agent's tool list is a structural fact, and the held-out test had no tools: when the
@@ -640,6 +661,8 @@ async def _classify_with_picker(cfg: Config, text: str, embedder: Embedder | Non
         raise
     route, outcome, why = await asking
     info["outcome"] = outcome
+    if late and outcome in ("cold", "timeout"):
+        info["late"] = await _late_answer(task, t0)
     if route is None:
         reasons.append(f"route picker: {why} -> router chose {router}")
         return router, router, info
