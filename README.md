@@ -11,7 +11,7 @@
 [![codeql](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml)
 ![python](https://img.shields.io/badge/python-3.11%2B-3776AB)
 ![platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-555)
-[![license](https://img.shields.io/badge/license-MIT-green)](https://github.com/alexb-joat/trioditis/blob/main/LICENSE)
+[![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](https://github.com/alexb-joat/trioditis/blob/main/LICENSE)
 
 [Quick start](#quick-start) &nbsp;·&nbsp; [How it routes](#how-a-request-is-routed) &nbsp;·&nbsp; [Connect your tools](#connect-your-tools) &nbsp;·&nbsp; [Security](#security-at-a-glance) &nbsp;·&nbsp; [Docs](#documentation)
 
@@ -195,4 +195,10 @@ Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/t
 
 ## License
 
-[MIT](https://github.com/alexb-joat/trioditis/blob/main/LICENSE). Not affiliated with Anthropic, OpenAI, Ollama, OpenRouter or any model provider; their names refer only to their public APIs.
+[GNU AGPL-3.0-or-later](https://github.com/alexb-joat/trioditis/blob/main/LICENSE). Copyright (C) 2026 Alex Bubnov.
+
+Trioditis is used over a network, so the AGPL's network clause applies: if you run a modified version as a service for others, you must offer them your modified source under the same licence. Released versions up to v0.6.0 remain under their original MIT terms.
+
+**Name:** "Trioditis" is the project name, not part of the code licence. A fork must use a different name and must not imply endorsement by or affiliation with this project.
+
+Not affiliated with Anthropic, OpenAI, Ollama, OpenRouter or any model provider; their names refer only to their public APIs.

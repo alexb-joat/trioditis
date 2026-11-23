@@ -7,7 +7,7 @@ name = "trioditis"
 dynamic = ["version"]      # from trioditis/__init__.py, the one place it is written
 description = "Security-first LLM router: one OpenAI-compatible endpoint that picks the right model per prompt."
 readme = "README.md"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi",
