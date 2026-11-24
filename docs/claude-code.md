@@ -76,7 +76,7 @@ ANTHROPIC_CUSTOM_HEADERS="X-Trioditis-Key: <your router key>" ANTHROPIC_BASE_URL
 
 A request that carries the router key in `Authorization` or `x-api-key` is refused before anything is sent, whether it is the whole value or follows a word such as `Bearer`. The key inside a longer string, or encoded, is not recognised.
 
-Without the header, the router answers 401, and Claude Code keeps retrying instead of showing the error (16 tries in 90 seconds when tested on 18 November 2026). If Claude Code seems to hang with a router key set, check `logs/security.jsonl` for `invalid or missing router key`.
+Without the header, with a wrong key, or with the key in a credential header, the router answers 407 (Proxy Authentication Required) and says which it was. Not 401: Claude Code reads a 401, and also a 403, as its own claude.ai login failing. It refreshes the login and tries again, and the VS Code chat then opens its sign-in picker. Before this change, a router key change sent every open chat into that picker until VS Code was closed. A 407 is shown once, as written, with no retry and no sign-in (checked with Claude Code 2.1.330 on 24 November 2026). The one exception is `CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER`: if you set it, Claude Code hands the 407 to your proxy helper. After you change `TRIODITIS_API_KEY`, chats that are already open keep sending the old key and get `wrong router key` until you restart them. Each refusal is logged in `logs/security.jsonl`.
 
 ## Limits
 

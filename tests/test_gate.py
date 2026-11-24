@@ -248,13 +248,31 @@ def test_with_a_router_key_the_gate_takes_it_in_its_own_header(home, monkeypatch
     app, _ = make_app(home, lambda req: seen.append(dict(req.headers)) or sse_response())
     c = client_for(app)
     r = c.post("/v1/messages", content=BODY, headers=CLAUDE_HEADERS)
-    assert r.status_code == 401 and seen == [] and r.headers["x-should-retry"] == "false"
+    assert r.status_code == 407 and seen == [] and r.headers["x-should-retry"] == "false"
+    assert r.json()["error"]["message"].startswith("missing router key")
+    r = c.post("/v1/messages", content=BODY, headers={**CLAUDE_HEADERS, "x-trioditis-key": "an-old-key"})
+    assert r.status_code == 407 and seen == [] and r.json()["error"]["message"].startswith("wrong router key")
     r = c.post("/v1/messages", content=BODY, headers={**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY})
     assert r.status_code == 200 and seen[0]["authorization"] == f"Bearer {TOKEN}" and "x-trioditis-key" not in seen[0]
     # The router key sent as Authorization would travel to Anthropic: refused before anything goes out.
     r = c.post("/v1/messages", content=BODY, headers={**CLAUDE_HEADERS, "authorization": f"Bearer {ROUTER_KEY}",
                                                       "x-trioditis-key": ROUTER_KEY})
-    assert r.status_code == 401 and len(seen) == 1 and "X-Trioditis-Key" in r.json()["error"]["message"]
+    assert r.status_code == 407 and len(seen) == 1 and "X-Trioditis-Key" in r.json()["error"]["message"]
+
+
+def test_a_router_key_refusal_is_never_a_401(home, monkeypatch):
+    # Claude Code reads a 401 (and a 403) as its own claude.ai login failing: it refreshes the login, tries
+    # again, and the VS Code chat opens its sign-in picker. After a key change that looped until VS Code was
+    # closed (23 Nov 2026). A 407 is shown once as written. The header is the one HTTP requires with a 407.
+    monkeypatch.setenv("TRIODITIS_API_KEY", ROUTER_KEY)
+    app, _ = make_app(home, lambda req: sse_response())
+    c = client_for(app)
+    for headers in (CLAUDE_HEADERS, {**CLAUDE_HEADERS, "x-trioditis-key": "an-old-key"},
+                    {**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY, "x-api-key": ROUTER_KEY}):
+        r = c.post("/v1/messages", content=BODY, headers=headers)
+        assert r.status_code == 407 and r.headers["proxy-authenticate"].startswith("x-trioditis-key")
+        assert r.json()["error"]["type"] == "authentication_error" and ROUTER_KEY not in r.text
+        assert "an-old-key" not in r.text
 
 
 @pytest.mark.parametrize("carrier", [
@@ -270,7 +288,7 @@ def test_the_router_key_never_travels_in_a_credential_header(home, monkeypatch, 
     app, _ = make_app(home, lambda req: seen.append(1) or sse_response())
     r = client_for(app).post("/v1/messages", content=BODY,
                              headers={**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY, **carrier})
-    assert r.status_code == 401 and seen == []
+    assert r.status_code == 407 and seen == []
     assert f"it arrived in {next(iter(carrier))}" in r.json()["error"]["message"]
     assert ROUTER_KEY not in r.text
 
@@ -282,13 +300,13 @@ def test_the_router_key_is_caught_in_a_second_header_and_with_a_space_in_it(home
     twice = [(k, v) for k, v in {**CLAUDE_HEADERS, "x-trioditis-key": ROUTER_KEY}.items()]
     twice += [("x-api-key", "sk-ant-other"), ("x-api-key", ROUTER_KEY)]
     r = client_for(app).post("/v1/messages", content=BODY, headers=twice)
-    assert r.status_code == 401 and seen == []
+    assert r.status_code == 407 and seen == []
     spaced = "a router key with spaces, long enough to bind"
     monkeypatch.setenv("TRIODITIS_API_KEY", spaced)
     app, _ = make_app(home, lambda req: seen.append(1) or sse_response())
     r = client_for(app).post("/v1/messages", content=BODY,
                              headers={**CLAUDE_HEADERS, "x-trioditis-key": spaced, "authorization": f"Bearer {spaced}"})
-    assert r.status_code == 401 and seen == []
+    assert r.status_code == 407 and seen == []
 
 
 def test_a_compressed_answer_keeps_its_content_encoding(home):

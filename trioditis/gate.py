@@ -83,13 +83,23 @@ def key_ok(headers, expected: str) -> bool:
     return bool(got) and hmac.compare_digest(got.encode(), expected.encode())
 
 
-def anthropic_error(status: int, message: str, etype: str = "api_error") -> JSONResponse:
+def anthropic_error(status: int, message: str, etype: str = "api_error", headers: dict | None = None) -> JSONResponse:
     """Errors Trioditis itself raises, in Anthropic's shape so Claude Code shows the message. A refusal says
-    x-should-retry: false, which Claude Code's gateway guide says it reads. On a 401 it retries anyway (seen
-    18 Nov 2026: 16 tries in 90 s), so a missing router key shows as a long wait, not an error."""
-    headers = {"x-should-retry": "false"} if 400 <= status < 500 else None
+    x-should-retry: false, which Claude Code's gateway guide says it reads."""
+    extra = {"x-should-retry": "false"} if 400 <= status < 500 else {}
     return JSONResponse({"type": "error", "error": {"type": etype, "message": message}}, status_code=status,
-                        headers=headers)
+                        headers={**extra, **(headers or {})} or None)
+
+
+def router_key_refusal(message: str) -> JSONResponse:
+    """A missing, wrong or misplaced router key, answered 407 (Proxy Authentication Required: the router is the
+    proxy and it wants its own key), never 401. Claude Code reads any 401 as its own login failing: it refreshes
+    the claude.ai login, tries again, and the VS Code chat then opens its sign-in picker, which after a key
+    change looped until VS Code was closed (23 Nov 2026). It files 403 as a failed login too. A 407 is shown
+    once as written, with no retry and no sign-in (checked with Claude Code 2.1.330, 24 Nov 2026), unless
+    CLAUDE_CODE_ENABLE_PROXY_AUTH_HELPER is set, which hands the 407 to the user's proxy helper."""
+    return anthropic_error(407, message, "authentication_error",
+                           {"proxy-authenticate": f'{ROUTER_KEY_HEADER} realm="trioditis"'})
 
 
 class Meter:
@@ -216,9 +226,9 @@ def mount(app: FastAPI, *, client: httpx.AsyncClient, metrics: MetricsDB, prices
         carrier = next((name for name in _CREDENTIAL_HEADERS for value in request.headers.getlist(name)
                         if key and _carries(value, key)), None)
         if carrier:
-            return anthropic_error(401, f"the router key goes in {ROUTER_KEY_HEADER} only "
-                                        f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); it arrived in "
-                                        f"{carrier}, which is passed to Anthropic", "authentication_error")
+            return router_key_refusal(f"the router key goes in {ROUTER_KEY_HEADER} only "
+                                      f"(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: ...\"); it arrived in "
+                                      f"{carrier}, which is passed to Anthropic")
         raw = await read_raw(request)
         if raw is None:
             return anthropic_error(413, read_raw.refusal(), "request_too_large")

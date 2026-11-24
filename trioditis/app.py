@@ -212,9 +212,15 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                 return _error(403, "forbidden origin", "auth_error")
         elif request.url.path in gate.PATHS:
             if not gate.key_ok(request.headers, key):  # Authorization there is Anthropic's credential, not ours
-                security.write(request, f"invalid or missing router key ({gate.ROUTER_KEY_HEADER})")
-                return gate.anthropic_error(401, f"invalid or missing router key: send it in {gate.ROUTER_KEY_HEADER} "
-                                                 f"(ANTHROPIC_CUSTOM_HEADERS)", "authentication_error")
+                if request.headers.get(gate.ROUTER_KEY_HEADER):
+                    security.write(request, f"wrong router key ({gate.ROUTER_KEY_HEADER})")
+                    return gate.router_key_refusal(
+                        f"wrong router key in {gate.ROUTER_KEY_HEADER}: if TRIODITIS_API_KEY was changed, "
+                        "restart Claude Code so it sends the new one (ANTHROPIC_CUSTOM_HEADERS)")
+                security.write(request, f"missing router key ({gate.ROUTER_KEY_HEADER})")
+                return gate.router_key_refusal(
+                    f"missing router key: send it in {gate.ROUTER_KEY_HEADER} "
+                    "(ANTHROPIC_CUSTOM_HEADERS=\"X-Trioditis-Key: <key>\")")
         elif request.url.path != "/health" and not check_bearer(request.headers.get("authorization"), key):
             security.write(request, "invalid or missing API key")
             return _error(401, "invalid or missing API key", "auth_error")
