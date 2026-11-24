@@ -265,7 +265,7 @@ def summary_lines(plan: dict | None) -> list[str]:
             top = ", ".join(f"{g} ({n:,})" for g, n in list(m["unmeasured"].items())[:4])
             lines.append(f"    never alone in a quiet stretch: {top}")
     if not plan["signals"]:
-        lines.append("  result signals: none recorded yet (Claude Code's transcripts carry none; Euboulia's events will)")
+        lines.append("  result signals: none recorded yet (Claude Code's transcripts carry none; plan-usage.v1 events can)")
     return lines
 
 

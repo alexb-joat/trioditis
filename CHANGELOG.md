@@ -26,6 +26,7 @@
 - The README's size and privacy claims now match the code: about 7,700 lines (it said 3,400), four direct dependencies and 18 pinned packages (it said four), and the privacy line names its two limits (detectors are patterns; the Claude Code passthrough is relayed unread). Tests fail if the numbers drift again.
 - "Every network call" in the README, and the full list in the security model. The list now includes two background calls it left out: the account readouts (every 5 minutes, to a cloud provider's own account API, when its key is set) and Ollama's model list (every 10 minutes).
 - The README no longer mentions a Sponsor button; the repository has none.
+- Examples use `/path/to/provider-facts.json` in place of a path in the author's home folder, and no longer say Euboulia exports `plan-usage.v1` files: it doesn't yet.
 
 **Fixed**
 - Calls to local models no longer go through a proxy. With `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY` set and no `NO_PROXY` entry for the local server, the router sent every call to a `local: true` provider (chat, embeddings, the route picker, the installed-model list) to that proxy, including prompts the privacy check had kept local. Those calls now ignore proxy variables. Cloud calls still use the proxy. If you reach a `local: true` server through a proxy on purpose, that stops working: give the router a direct address.

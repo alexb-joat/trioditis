@@ -10,6 +10,8 @@ How Trioditis keeps cloud spend bounded, what it records, and what each provider
 
 Every request is also stored in a small SQLite database, `~/.hlidskjalv/metrics.db` (owner-only, metadata only: route, model, tokens, cost, latency, the calling tool's name and a hash of the session id; never prompt text). `logs/decisions.jsonl` stays as it is.
 
+The data folder is `~/.hlidskjalv` on every system. It keeps that name, the earlier name of [Lunete](https://github.com/alexb-joat/lunete), because renaming it would cut existing installs off from their data. Set `HLIDSKJALV_HOME` to put it somewhere else.
+
 Before any cloud call, Trioditis checks today's and this month's spend against your caps in `~/.hlidskjalv/budget.json` (defaults if the file is missing: $1/day, $15/month):
 
 ```json
@@ -93,7 +95,7 @@ A subscription (Claude, ChatGPT) has usage meters instead of a bill. To learn ho
 ```bash
 trioditis plan import --claude-code --dry-run   # what would be imported, nothing written
 trioditis plan import --claude-code             # token counts from Claude Code's transcripts
-trioditis plan import events.json               # a plan-usage.v1 file (Euboulia exports one)
+trioditis plan import events.json               # a plan-usage.v1 events file (format below)
 trioditis plan import --meter meter.json        # plan meter readings
 trioditis usage --plan --since 7d               # messages and tokens per model and effort, meter rise
 ```

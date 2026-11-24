@@ -1,5 +1,5 @@
-"""`trioditis plan import`: plan usage from Claude Code's transcripts, from a plan-usage.v1 events file
-(Euboulia exports one), and plan meter readings from a file.
+"""`trioditis plan import`: plan usage from Claude Code's transcripts, from a plan-usage.v1 events file,
+and plan meter readings from a file.
 
 What is kept: token counts, model, effort, speed, whether a subagent sent it, the time, the message's
 position and context size in its thread, and salted hashes of the message and session ids. What is

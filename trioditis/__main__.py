@@ -116,7 +116,7 @@ def main(argv: list[str] | None = None) -> None:
     pl_sub = pl.add_subparsers(dest="plan_cmd", required=True)
     pi = pl_sub.add_parser("import", help="import token counts and meter readings; with no arguments, what the "
                                           "config's plan: section names (the daily timer runs it that way)")
-    pi.add_argument("file", nargs="?", help="a plan-usage.v1 events file (Euboulia exports one)")
+    pi.add_argument("file", nargs="?", help="a plan-usage.v1 events file")
     pi.add_argument("--claude-code", action="store_true",
                     help="token counts from Claude Code's transcripts (~/.claude, or $CLAUDE_CONFIG_DIR); no text is kept")
     pi.add_argument("--claude-home", default=None, help=argparse.SUPPRESS)

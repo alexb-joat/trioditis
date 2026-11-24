@@ -47,7 +47,7 @@ Given a plan-usage ledger ([`plan import`](spending-and-limits.md#plan-usage)), 
 - **Relative weights**: each model and effort against the one with most stretches, with an interval on the log scale.
 - A weight needs 3 quiet stretches and 10 points of rise; until then it says "not enough data" and what it needs. Models that never ran alone (subagents running beside the main model, say) are listed but get no weight.
 
-The same section carries result-signal rates per model and effort, from events that record them (Euboulia's: suggestion followed, answer regenerated, asked again, up votes), with Wilson intervals. Claude Code's transcripts carry none.
+The same section carries result-signal rates per model and effort, from `plan-usage.v1` events that record them (suggestion followed, answer regenerated, asked again, up votes), with Wilson intervals. Claude Code's transcripts carry none.
 
 A measured weight is a proposal. Its `evidence` block (`kind: measured`, `status: proposed`) is shaped for the team rules file, and it goes there only after you review it. Nothing is applied, and the notebook gets one line when a weight first becomes measurable (and again if its token measure changes).
 
@@ -56,7 +56,7 @@ A measured weight is a proposal. Its `evidence` block (`kind: measured`, `status
 Add the path of a `provider-facts.v1` file to `config.yaml`:
 
 ```yaml
-facts: ~/euboulia/src/catalog/provider-facts.json
+facts: /path/to/provider-facts.json
 ```
 
 Then `trioditis check`, the startup log and `refit` report:
