@@ -49,8 +49,9 @@ jobs:
 
   pypi:
     needs: build
-    # Off until the PyPI project trusts this workflow (a pending publisher on pypi.org); then set the
-    # repository variable PYPI_PUBLISH=true and run this workflow on the tag to publish that release.
+    # Publishes through PyPI's trusted publishing (no token exists) while the repository variable
+    # PYPI_PUBLISH is true. Give the `pypi` environment a required reviewer, so a pushed tag waits
+    # for a person before anything reaches PyPI.
     if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_PUBLISH == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10

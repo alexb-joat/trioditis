@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+**Licence**
+- Trioditis is now under the GNU AGPL-3.0-or-later, from this version on. Versions up to 0.6.0 were released under MIT and stay MIT. If you run a modified Trioditis as a service for other people, the AGPL asks you to offer them your modified source. "Trioditis" is the project's name and not part of the licence: a fork needs its own name.
+
 **Claude Code**
 - Claude Code can run through Trioditis: set `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`, or start it with `scripts/claude-t`. Requests go to Anthropic unchanged with your own claude.ai login, and the answer streams back unchanged. Each call's token counts go to plan usage, merged with `plan import --claude-code`, so `usage --plan` also shows calls the transcripts leave out. Calls made with an API key count as spend. Trioditis doesn't choose the model here. [docs/claude-code.md](docs/claude-code.md)
 - Opt-in shadow counts: with `route_picker: {shadow_claude_code: true}`, the first turn of each Claude Code session is classified by the router and the picker in the background, and one line of numbers (routes, outcome, lengths, never text) goes to `logs/shadow.jsonl`. The request is not changed or held. `eval-routes --log` counts these lines. When the picker misses its timeout, the line also waits for the call to end and records the route it would have named (`route_picker.late`), which `eval-routes --log` reports apart; served requests never wait for it.
