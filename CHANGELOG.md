@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.0 (2026-11-24)
 
 **Licence**
 - Trioditis is now under the GNU AGPL-3.0-or-later, from this version on. Versions up to 0.6.0 were released under MIT and stay MIT. If you run a modified Trioditis as a service for other people, the AGPL asks you to offer them your modified source. "Trioditis" is the project's name and not part of the licence: a fork needs its own name.
