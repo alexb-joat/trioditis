@@ -1,0 +1,74 @@
+name: bench
+
+# Runs `trioditis results` for one picker model on a GitHub shared runner and keeps the JSON as an
+# artifact. Started by hand only (gh workflow run bench.yml -f model=llama3.2:3b), a few runs at a time,
+# for the comparison set out in advance in docs/route-accuracy.md ("Which small picker model").
+# Accuracy counts carry over between machines; the timings are this runner's: 4 shared cores, no GPU.
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Picker model, as named in the Ollama library (for example qwen2.5-coder:7b)"
+        required: true
+        default: "qwen2.5-coder:7b"
+      repeat:
+        description: "Which run of this model it is (1 or 2); only labels the artifact"
+        required: true
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bench-${{ github.ref }}-${{ inputs.model }}
+  cancel-in-progress: false
+
+jobs:
+  results:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300   # a 7B model on 4 cores: about 1 to 3 hours for 315 prompts (my estimate, not measured)
+    services:
+      ollama:
+        # The same Ollama version as the 231/315 baseline run, pinned by digest (tags can be moved).
+        image: ollama/ollama:0.40.0@sha256:1bef639749741b375e9a1eb2c1346fb57ce52f5432de1f74846e44ccc18e1687
+        ports: ["11434:11434"]
+    env:
+      MODEL: ${{ inputs.model }}
+      REPEAT: ${{ inputs.repeat }}
+    steps:
+      - name: Check the inputs
+        run: |
+          [[ "$MODEL" =~ ^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$ ]] || { echo "::error::model name '$MODEL' has characters a model name never has"; exit 1; }
+          [[ "$REPEAT" =~ ^[12]$ ]] || { echo "::error::repeat must be 1 or 2"; exit 1; }
+          echo "ARTIFACT=results-$(echo "$MODEL" | tr ':/' '--')-run$REPEAT" >> "$GITHUB_ENV"
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install (hash-verified)
+        run: pip install --require-hashes --no-deps -r requirements.txt
+      - name: Pull the picker and embeddings models
+        run: |
+          for _ in $(seq 30); do curl -sf http://localhost:11434/api/version && break; sleep 2; done
+          for m in "$MODEL" nomic-embed-text; do
+            jq -n --arg m "$m" '{model: $m, stream: false}' \
+              | curl -sSf --max-time 3600 http://localhost:11434/api/pull -d @- | jq -c .
+          done
+      - name: Run trioditis results
+        run: python -m trioditis results --model "$MODEL" --no-share --out "$ARTIFACT.json"
+      - name: Label the run
+        run: |
+          jq -n --arg cores "$(nproc)" --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" \
+            '{where: "GitHub shared runner, no GPU", cores: ($cores | tonumber), commit: $sha, run_id: $run,
+              note: "accuracy counts carry over between machines; timings are indicative only"}' > "$ARTIFACT.runner.json"
+          cat "$ARTIFACT.runner.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.ARTIFACT }}
+          path: |
+            ${{ env.ARTIFACT }}.json
+            ${{ env.ARTIFACT }}.runner.json
+          if-no-files-found: error
+          retention-days: 90
