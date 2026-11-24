@@ -4,6 +4,16 @@ Trioditis can sit between Claude Code and Anthropic on your own machine. Request
 
 What you get: every call's input, output and cache tokens in `trioditis usage --plan`, including the calls Claude Code makes that its transcripts don't record. A later `trioditis plan import --claude-code` merges into the same rows instead of counting them twice.
 
+## Your own login, on your own machine
+
+The passthrough is built for one case: you run Trioditis on your own computer and point your own Claude Code at it. Your login travels from Claude Code to Anthropic exactly as Claude Code sent it. Trioditis never asks you to sign in, never stores or logs the credential, and sends it nowhere but `https://api.anthropic.com`.
+
+Don't use it for anything else. Anthropic's page on [authentication and credential use](https://code.claude.com/docs/en/legal-and-compliance#authentication-and-credential-use) (read 24 November 2026) says:
+
+> Anthropic does not permit third-party developers to offer Claude.ai login into their own applications, or to route requests through Free, Pro, Max, or Ultra plan credentials on behalf of their users. Moreover, developers may not collect, store, or intermediate Claude.ai credentials or session tokens
+
+So don't run a router that other people's Claude Code logins pass through, and don't build a product or service on this path. This page describes what Trioditis does. It doesn't say what your plan allows: that is between you and Anthropic, and if your case is anything other than your own login on your own machine, ask them.
+
 ## Attach
 
 For one terminal session, from a clone of the repository:
@@ -81,7 +91,7 @@ Without the header, with a wrong key, or with the key in a credential header, th
 ## Limits
 
 - Trioditis can't send Claude Code to a local or non-Claude model. Anthropic doesn't support routing Claude Code to non-Claude models through any gateway, and the base URL changes where requests go, not which model answers ([source](https://code.claude.com/docs/en/llm-gateway), read 18 November 2026).
-- It's for your own machine and your own login. The router binds `127.0.0.1`; don't share one router between people's logins.
+- It's for your own machine and your own login ([above](#your-own-login-on-your-own-machine)). The router binds `127.0.0.1`; don't share one router between people's logins.
 - Fast mode's availability check and WebFetch's domain check call `api.anthropic.com` directly, so they don't pass through Trioditis and aren't counted.
 - The privacy detectors don't run on this path: what Claude Code sends goes to Anthropic as it is.
 - `claude-t` trusts whatever answers `/health` at `TRIODITIS_URL`. On a machine other people log in to, another local process could take the port while the router is down and would receive your login token. It refuses a URL that is plain `http` to another machine, or that has an `@` in it.

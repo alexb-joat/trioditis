@@ -126,7 +126,7 @@ Responses carry `X-Trioditis-Route` and `X-Trioditis-Model`. `POST /v1/route` or
 | **OpenAI SDKs** | `OpenAI(base_url="http://127.0.0.1:8787/v1", api_key="<your TRIODITIS_API_KEY>")` |
 | **Claude Code** | `ANTHROPIC_BASE_URL=http://127.0.0.1:8787 claude`, or `scripts/claude-t` from a clone, which goes direct if the router is down. Recipe: [docs/claude-code.md](https://github.com/alexb-joat/trioditis/blob/main/docs/claude-code.md) |
 
-Trioditis speaks the OpenAI chat-completions format, which most tools support, and routes those requests. Claude Code speaks Anthropic's Messages format: Trioditis passes those requests to Anthropic unchanged with your own login and counts their tokens. It doesn't route them, and Claude Code picks the model.
+Trioditis speaks the OpenAI chat-completions format, which most tools support, and routes those requests. Claude Code speaks Anthropic's Messages format: Trioditis passes those requests to Anthropic unchanged with your own login and counts their tokens. It doesn't route them, and Claude Code picks the model. This is for your own login on your own machine: Trioditis is not a hosted service and must not sit in front of other people's subscriptions ([whose login](https://github.com/alexb-joat/trioditis/blob/main/docs/claude-code.md#your-own-login-on-your-own-machine)).
 
 ## Spending and limits
 
