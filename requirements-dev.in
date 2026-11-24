@@ -1,5 +1,6 @@
 # The runtime packages come in through -r, so one input compiles the whole dev lockfile (Dependabot reads one).
 -r requirements.in
 -c requirements.txt
+hypothesis
 pytest
 ruff
