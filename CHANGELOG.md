@@ -6,6 +6,9 @@
 - `trioditis results` measures the route picker and the router on your machine: the picker on the 315 held-out prompts (now shipped with the package), the router at the shipped settings on the same prompts, and the picker's waiting time at 100 to 2,000 characters. It uses the shipped config, not yours, so results from different machines measure the same thing; you choose the picker model (`--model`, default `qwen2.5-coder:7b`). With `--own-labels FILE` it also runs both on your labelled prompts and reports counts only. Everything goes to the local server at `--base-url`; an address not on this machine is refused.
 - It writes `trioditis-results.json` (schema `trioditis-results.v1`) and prints it in full: numbers, model names and digests, versions, a hardware summary and the date. Never prompt text, file paths, user or host names, or times finer than the date. Then it asks once whether to share the numbers on GitHub, default No. Yes opens the form in your browser with the numbers filled in; Trioditis itself sends nothing, and you press Submit. It doesn't ask with `--no-share` or outside a terminal.
 
+**Fixed**
+- `scripts/claude-t.ps1` waits up to 5 s for the router's `/health` answer (was 2 s). On a Windows CI runner it once started Claude Code direct, most likely because a cold PowerShell's first call took longer than 2 s. A router that is down still answers at once.
+
 **Changed**
 - The held-out labels moved from `tests/fixtures/routes-heldout.csv` to `trioditis/data/routes-heldout.csv`, unchanged, so the installed package carries them. The dated run records in `docs/route-accuracy/` keep the old path they were run with.
 - `scripts/route_study.py model-baseline` sends the route picker's own request (the router's code), and both study scripts use the package's local-only address check.

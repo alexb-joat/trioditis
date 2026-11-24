@@ -29,7 +29,9 @@ function Test-Gate([string]$base) {
     $handler.UseProxy = $false
     $handler.AllowAutoRedirect = $false
     $client = New-Object System.Net.Http.HttpClient($handler)
-    $client.Timeout = [TimeSpan]::FromSeconds(2)
+    # 5 s, not 2: on 24 Nov a Windows CI runner once started Claude Code direct, most likely because a cold
+    # PowerShell's first call took over 2 s. A router that is down refuses at once, so this costs nothing then.
+    $client.Timeout = [TimeSpan]::FromSeconds(5)
     try {
         $r = $client.GetAsync("$base/health").GetAwaiter().GetResult()
         if (-not $r.IsSuccessStatusCode) { return $false }
