@@ -144,7 +144,6 @@ privacy:
   builtin_detectors: true          # emails, card numbers, IBANs, API keys, private keys...
   keywords: [confidential, internal only, under nda]
   patterns: []
-  on_no_local_model: reject        # reject | allow_cloud
 
 limits:
   max_body_bytes: 20971520

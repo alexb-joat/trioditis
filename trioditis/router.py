@@ -481,7 +481,7 @@ async def decide(
         candidates = _cooled_last(cfg, candidates, signals.cooldowns, reasons)
 
     if not candidates:
-        if sensitive and cfg.privacy.on_no_local_model == "reject":
+        if sensitive:
             raise RoutingError(
                 422,
                 "Sensitive content detected and no local model can serve this request. "

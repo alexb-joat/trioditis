@@ -34,7 +34,7 @@ SOMETIMES = st.sampled_from([False, False, True])  # weights keep most requests 
 
 
 @st.composite
-def configs(draw, on_no_local="reject"):
+def configs(draw):
     names = draw(st.lists(st.sampled_from(MODEL_NAMES), min_size=1, max_size=6, unique=True))
     models = {
         n: {
@@ -58,7 +58,6 @@ def configs(draw, on_no_local="reject"):
         "models": models,  # a model no route lists is "by name only": fallback must never reach it
         "routes": routes,
         "default_route": draw(st.sampled_from(sorted(routes))),
-        "privacy": {"on_no_local_model": on_no_local},
         "limits": {"max_fallbacks": draw(st.integers(0, 3))},
         "logging": {"path": None},
     }
@@ -123,7 +122,7 @@ def test_sensitive_content_reaches_only_local_models(data):
         if err:
             assert err.status in (404, 422, 503)
             if req["secret"]:
-                assert err.status != 503, "sensitive content with no local model must be refused with 422 (reject)"
+                assert err.status != 503, "sensitive content with no local model must be refused with 422"
             return
         if req["secret"]:
             assert decision.sensitive and decision.local_only

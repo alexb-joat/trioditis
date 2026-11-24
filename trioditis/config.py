@@ -125,8 +125,6 @@ class Privacy:
     builtin_detectors: bool = True
     keywords: tuple[str, ...] = ()
     patterns: tuple[re.Pattern, ...] = ()
-    # What to do when a prompt is sensitive but no local model can take it.
-    on_no_local_model: str = "reject"  # reject | allow_cloud
 
 
 @dataclass(frozen=True)
@@ -286,15 +284,11 @@ def parse_config(raw: dict) -> Config:
                          threshold_given="threshold" in e)
 
     pv = raw.get("privacy") or {}
-    on_no_local = pv.get("on_no_local_model", "reject")
-    if on_no_local not in ("reject", "allow_cloud"):
-        raise ConfigError("privacy.on_no_local_model must be reject or allow_cloud")
     privacy = Privacy(
         enabled=bool(pv.get("enabled", True)),
         builtin_detectors=bool(pv.get("builtin_detectors", True)),
         keywords=tuple(k.lower() for k in pv.get("keywords") or []),
         patterns=_compile(pv.get("patterns"), "privacy"),
-        on_no_local_model=on_no_local,
     )
 
     lm = raw.get("limits") or {}

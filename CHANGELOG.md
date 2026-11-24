@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+**Removed**
+- `privacy.on_no_local_model` is gone. Its `allow_cloud` value never sent a sensitive prompt to a cloud model; it only turned the 422 refusal into a 503. A sensitive prompt that no local model can take is now always refused with 422. A leftover `on_no_local_model:` line is ignored.
+
 ## 0.7.0 (2026-11-24)
 
 **Licence**
