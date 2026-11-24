@@ -13,7 +13,27 @@ Trioditis sits between your apps and every LLM you use, so it sees all prompts a
 - **Clients are not trusted to choose destinations.** Upstream URLs come only from the config file. The passthrough has one destination, `https://api.anthropic.com`; only the router's own environment can change it (`TRIODITIS_GATE_UPSTREAM`, https only, no user or password in the URL), never a request. Plain `http` is only allowed for local hosts, URLs with embedded credentials are rejected, and HTTP redirects are not followed.
 - **Logs leak.** Decision logs and the metrics database contain metadata and a SHA-256 prefix of the prompt, never the prompt itself, unless `logging.log_prompts: true`. The session id (`X-Session-Id` or `user`) is stored only as a SHA-256 prefix too; the calling tool is stored by name only (`X-Trioditis-Client`, or the first word of `User-Agent`, kept only if it is a short lower-case name). Both files are created with mode `0600`.
 - **Upstream providers are separate trust zones.** Each provider receives only its own key; the client's `Authorization` header and the session id are never forwarded. The passthrough is the one path that forwards the caller's credential: Claude Code's `Authorization` or `x-api-key` goes to Anthropic unchanged, because it is Anthropic's to check. The router key is refused if it arrives as either of those headers, bare or after a word such as `Bearer`.
-- **Which outbound calls exist.** Requests you send go to the providers your config names; Claude Code's requests through the passthrough go to `https://api.anthropic.com`; with `route_picker.shadow_claude_code: true`, each session's first turn is also classified by the local picker and the local embeddings provider (both must be `local: true`), and nothing more leaves the machine. `trioditis check` makes one read-only `GET {base_url}/models` to each *local* provider (2-second timeout, no proxy, no redirects) and nothing to cloud providers; `trioditis hardware` asks local providers for `GET /api/tags`. With `route_picker:` configured, the router sends the first turn of each `auto` conversation (every turn, for a client that sends no session id and no tools; sensitive prompts too, at most 4,000 characters) to that provider's `/chat/completions`, which must be `local: true`; when that call outlives `timeout_ms`, one `GET /api/ps` to the same provider (beside its `/v1` base URL, a quarter-second limit) asks Ollama whether the model was still loading; and `trioditis check` sends it two calls on a made-up message. `trioditis reinforce run` sends each prompt of your labelled gate set to the config's local embeddings provider and local route picker, and nowhere else. No telemetry, update checks or remote config.
+
+## Which outbound calls exist
+
+No telemetry, update checks or remote config. Every connection Trioditis opens is in this list.
+
+While `trioditis serve` runs:
+
+- **Requests you send** go to the providers your config names. Cloud calls obey `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` if you set them. Calls to `local: true` providers never do: a proxy would otherwise receive the prompts the privacy check kept on this machine.
+- **Claude Code's requests through the passthrough** go to `https://api.anthropic.com`.
+- **The route picker.** With `route_picker:` configured, the router sends the first turn of each `auto` conversation (every turn, for a client that sends no session id and no tools; sensitive prompts too, at most 4,000 characters) to that provider's `/chat/completions`, which must be `local: true`. When that call outlives `timeout_ms`, one `GET /api/ps` to the same provider (beside its `/v1` base URL, a quarter-second limit) asks Ollama whether the model was still loading. With `route_picker.shadow_claude_code: true`, each Claude Code session's first turn is also classified by the local picker and the local embeddings provider (both must be `local: true`).
+- **Embeddings.** With `embeddings:` configured, prompts and each route's examples go to that provider's `/embeddings`, which must be `local: true`.
+- **Installed models.** Every 10 minutes, and when `/v1/hardware` is asked, `GET /api/tags` to each `local: true` provider. The answer goes to `hardware.json` in the data folder (`~/.hlidskjalv`, or `HLIDSKJALV_HOME`).
+- **Account readouts.** Every 5 minutes, and when `/v1/accounts` is asked, read-only `GET` requests to a cloud provider's own account API, on the host in that provider's `base_url`. This runs only when a cloud provider with a key is one of `openrouter.ai`, `api.anthropic.com` or `api.openai.com`. OpenRouter: `/api/v1/key` with your normal key, and `/api/v1/credits` if `admin_key_env` holds a management key. Anthropic: `/v1/organizations/cost_report`, only with an Admin API key in `admin_key_env`. OpenAI: `/v1/organization/costs`, only with an admin key in `admin_key_env`. Without the admin key nothing is sent to those two. The answers go to `accounts.json` in the data folder and never affect routing.
+
+Commands:
+
+- `trioditis check` makes one read-only `GET {base_url}/models` to each *local* provider (2-second timeout, no proxy, no redirects) and nothing to cloud providers. With a route picker configured it also sends that local provider two calls on a made-up message.
+- `trioditis hardware` asks local providers for `GET /api/tags`.
+- `trioditis eval-routes` sends your labelled prompts to the config's local embeddings provider, and nowhere else.
+- `trioditis reinforce run` sends each prompt of your labelled gate set to the config's local embeddings provider and local route picker, and nowhere else.
+- Every other command reads and writes local files only.
 
 ## Controls at a glance
 

@@ -30,7 +30,7 @@
 
 | Private by default | Cost-aware | Small and auditable | Explains itself |
 |---|---|---|---|
-| Prompts with emails, cards, keys or passwords go to a local model or are rejected. They are never sent to a cloud API by accident. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 3,400 lines and four hash-pinned dependencies. No LiteLLM, no LangChain, no telemetry. | Every response names its route and model. A log records the reasons, with no prompt text. |
+| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 7,700 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Every response names its route and model. A log records the reasons, with no prompt text. |
 
 ## Quick start
 
@@ -47,6 +47,8 @@ pipx install trioditis
 trioditis init --dir ~/trioditis     # writes config.yaml and .env there (owner-only); never overwrites
 cd ~/trioditis                       # config.yaml, .env and logs/ are read from the current folder
 ```
+
+Version 0.7.0 and later are under the [GNU AGPL-3.0-or-later](#license). Versions up to 0.6.0 were released under MIT and stay MIT.
 
 <details>
 <summary>Or from a clone, with every package checked against the lockfile's hashes</summary>
@@ -138,13 +140,24 @@ Each call records why its answer ended, retries and cache use, so `trioditis usa
 
 | Risk | Control |
 |---|---|
-| Hijacked dependency | Four direct dependencies, hash-pinned (`--require-hashes`), `pip-audit` in CI, Dependabot with a 7-day hold |
+| Hijacked dependency | Four direct dependencies, 18 packages in the lockfile, each hash-pinned (`--require-hashes`, from a clone; `pipx` takes the newest releases), `pip-audit` in CI, Dependabot with a 7-day hold |
 | Router exposed to the network | Binds `127.0.0.1`; refuses any other bind without a 32+ character API key |
 | A web page in your browser reaching the router | Foreign `Host` (DNS rebinding) or `Origin` gets 403 and a log line; POST bodies must be JSON |
 | Sensitive data sent to the cloud | Detectors force local-only routing or reject (not for Claude Code through the passthrough, which is relayed unread) |
 | Key and prompt leakage | Keys only in environment variables; the client's router key is never forwarded; logs hold metadata and a hash, not prompt text. The Claude Code passthrough forwards your own Anthropic credential to `https://api.anthropic.com` only, and never stores or logs it |
 | Open proxy and SSRF | Upstream URLs come only from `config.yaml`; no redirects followed |
 | Supply chain | Actions pinned to commit SHAs, read-only workflows, CodeQL and dependency review on every pull request |
+
+### Every network call
+
+Trioditis has no telemetry, no update check and no remote config. While `trioditis serve` runs, it connects to:
+
+- **The providers in your `config.yaml`**, for the requests you send. Cloud calls use your proxy variables if you set any.
+- **`https://api.anthropic.com`**, for Claude Code's requests through the passthrough.
+- **Your local model servers** (`local: true`), never through a proxy: the answers themselves, the embeddings and route-picker calls if you configure them, Ollama's model list (`GET /api/tags`, every 10 minutes) and, after a slow picker call, `GET /api/ps`.
+- **Each cloud provider's own account API**, every 5 minutes, only for a provider whose key is set: OpenRouter's key usage with your normal key; Anthropic's and OpenAI's cost reports only if you set an admin key (`admin_key_env`). Read-only `GET` requests that fill the spend readout.
+
+The commands that connect anywhere (`check`, `hardware`, `eval-routes`, `reinforce run`) ask local servers only. The full list is in the [security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md#which-outbound-calls-exist).
 
 Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat/trioditis/blob/main/SECURITY.md). The full design and its limits are in [docs/security-model.md](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md).
 
@@ -191,7 +204,7 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 
 ## Contributing
 
-Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/trioditis/blob/main/CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`. If Trioditis saves you money or time, the **Sponsor** button at the top of the repository supports it.
+Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/trioditis/blob/main/CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`.
 
 ## License
 
