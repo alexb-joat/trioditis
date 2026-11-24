@@ -1,4 +1,4 @@
-"""Command line entry point: python -m trioditis [init|serve|check|explain|eval-routes|hardware|usage|plan|prices|refit]."""
+"""Command line entry point: python -m trioditis [init|serve|check|explain|eval-routes|results|hardware|usage|plan|prices|refit]."""
 
 from __future__ import annotations
 
@@ -17,6 +17,9 @@ from . import __version__
 from .config import ConfigError, load_config
 from .envvars import env
 from .security import assert_safe_bind
+
+DEFAULT_PICKER = "qwen2.5-coder:7b"            # `results`: the picker the example config suggests
+DEFAULT_LOCAL_URL = "http://localhost:11434/v1"
 
 _ENV_LINE = re.compile(r"^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
 
@@ -92,6 +95,26 @@ def main(argv: list[str] | None = None) -> None:
     ev.add_argument("--compare-threshold", type=float, default=None, metavar="VALUE",
                     help="instead of the sweep, score this embeddings.threshold against the config's on every row "
                          "(for a value chosen on other labels; nothing is proposed or written)")
+
+    rs = sub.add_parser("results", help="measure the route picker and the router on this machine and write the numbers "
+                                        "to a file you may share (local server only; no config needed)",
+                        description="Run the route picker and the router on the public held-out set (315 labelled prompts "
+                                    "shipped with Trioditis) with the shipped settings, time the picker by prompt length, and "
+                                    "write the numbers to a JSON file, printed in full. Every prompt goes to the local server "
+                                    "at --base-url and nowhere else; your config.yaml is not read. The file holds numbers, "
+                                    "model names and digests, versions, a hardware summary and the date; never prompts, "
+                                    "paths, user or host names. At the end it asks whether to share the numbers on GitHub "
+                                    "(default No): yes opens the filled-in form in your browser and you press Submit.")
+    rs.add_argument("--model", default=DEFAULT_PICKER, metavar="MODEL",
+                    help="the picker model on the local server (default: %(default)s; pull it first with ollama pull)")
+    rs.add_argument("--base-url", default=DEFAULT_LOCAL_URL, metavar="URL",
+                    help="the local OpenAI-style server; must be on this machine (default: %(default)s)")
+    rs.add_argument("--own-labels", default=None, metavar="FILE",
+                    help="also run both on your own labelled prompts (CSV with prompt, expected_route using the routes "
+                         "code, reasoning, writing, quick); only counts go in the file")
+    rs.add_argument("--out", default="trioditis-results.json", metavar="FILE",
+                    help="where the results go; an earlier file there is replaced (default: %(default)s)")
+    rs.add_argument("--no-share", action="store_true", help="don't ask about sharing (it is never asked when not run in a terminal)")
 
     h = sub.add_parser("hardware", help="detect hardware and suggest local models (no config change)")
     h.add_argument("--json", action="store_true", help="machine-readable output")
@@ -172,6 +195,9 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(plan_run(args, settings))
     if args.cmd == "init":  # creates the config: obviously works without one
         sys.exit(init_folder(Path(args.dir)))
+    if args.cmd == "results":  # measures with the shipped settings: never reads config.yaml
+        from .measure import run as results_run
+        sys.exit(results_run(args))
     try:
         cfg = load_config(args.config)
     except (OSError, ConfigError) as err:

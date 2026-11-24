@@ -41,6 +41,7 @@ jobs:
           /tmp/clean/bin/trioditis --version
           /tmp/clean/bin/trioditis init
           /tmp/clean/bin/trioditis check
+          /tmp/clean/bin/python -c "import csv; from trioditis.measure import heldout_path; n = len(list(csv.DictReader(open(heldout_path(), encoding='utf-8')))); assert n == 315, n; print('held-out set in the wheel:', n, 'prompts')"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dist

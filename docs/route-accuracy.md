@@ -137,8 +137,8 @@ second-set row is against the writer's label; [Results](#results) has the score 
 **Settling.** The maintainer decided the seven second-set rows where the two labels differ
 ([`settled.csv`](route-accuracy/settled.csv)): six decisions follow the second labeller, one follows the
 writer, and no row was dropped. `python scripts/route_study.py heldout` then wrote the test labels,
-[`tests/fixtures/routes-heldout.csv`](../tests/fixtures/routes-heldout.csv): 315 prompts, 76 code, 78
-reasoning, 83 writing and 78 quick. They were committed (`30d3080`) before the router was run on them.
+[`trioditis/data/routes-heldout.csv`](../trioditis/data/routes-heldout.csv): 315 prompts, 76 code, 78
+reasoning, 83 writing and 78 quick. They were committed (`30d3080`) before the router was run on them. (They lived in `tests/fixtures/` until 0.8.0, which moved them into the package unchanged; the dated records below name the old path.)
 
 ## Results
 
@@ -207,8 +207,8 @@ held-out figure.
 
 ```
 python scripts/route_study.py heldout docs/route-accuracy/labels.csv \
-    --settled docs/route-accuracy/settled.csv --out tests/fixtures/routes-heldout.csv
-trioditis eval-routes --labels tests/fixtures/routes-heldout.csv --config config.example.yaml \
+    --settled docs/route-accuracy/settled.csv --out trioditis/data/routes-heldout.csv
+trioditis eval-routes --labels trioditis/data/routes-heldout.csv --config config.example.yaml \
     --compare-threshold 0.55
 ```
 
@@ -370,7 +370,7 @@ config before the commented `route_picker:` block was added; the routes are unch
 **To reproduce** (sends the prompts only to the local server):
 
 ```
-python scripts/route_study.py model-baseline tests/fixtures/routes-heldout.csv \
+python scripts/route_study.py model-baseline trioditis/data/routes-heldout.csv \
     --model qwen2.5-coder:7b --config config.example.yaml
 ```
 
@@ -439,3 +439,16 @@ lint or other model call of ours ran beside it, and what the laptop's other prog
 recorded. The texts were slices of Markdown docs (500 characters were 200 to 297 tokens). The limits
 written before the run hold too: the picker's call alone was timed, and longer calls keep the picker
 busy for longer, which this run does not measure.
+
+## Measuring on other machines: `trioditis results` (0.8.0)
+
+The numbers above come from one laptop. `trioditis results` runs the same test anywhere: the picker and the
+router on these 315 held-out prompts with the shipped settings (fixed in advance; nothing is swept or tuned on
+them, so the set stays a test set), and the picker's waiting time at 100, 200, 500, 1,000 and 2,000 characters,
+three calls each, on slices of the held-out prompts sent before the accuracy run. It writes the counts to
+`trioditis-results.json` and asks whether to share them through GitHub's results form (default No).
+
+What shared results can show: how picker models rank on this public set (accuracy barely depends on the
+machine), and how long the picker takes across real hardware. What they cannot show: accuracy on real use.
+These prompts were written for the test, so a ranking on them is a ranking on them, not on anyone's own
+prompts. `--own-labels` adds counts on a person's own labelled prompts, never the prompts.

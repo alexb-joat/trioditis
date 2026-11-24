@@ -30,7 +30,7 @@
 
 | Private by default | Cost-aware | Small and auditable | Explains itself |
 |---|---|---|---|
-| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 7,700 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Every response names its route and model. A log records the reasons, with no prompt text. |
+| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 8,200 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Every response names its route and model. A log records the reasons, with no prompt text. |
 
 ## Quick start
 
@@ -157,7 +157,7 @@ Trioditis has no telemetry, no update check and no remote config. While `triodit
 - **Your local model servers** (`local: true`), never through a proxy: the answers themselves, the embeddings and route-picker calls if you configure them, Ollama's model list (`GET /api/tags`, every 10 minutes) and, after a slow picker call, `GET /api/ps`.
 - **Each cloud provider's own account API**, every 5 minutes, only for a provider whose key is set: OpenRouter's key usage with your normal key; Anthropic's and OpenAI's cost reports only if you set an admin key (`admin_key_env`). Read-only `GET` requests that fill the spend readout.
 
-The commands that connect anywhere (`check`, `hardware`, `eval-routes`, `reinforce run`) ask local servers only. The full list is in the [security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md#which-outbound-calls-exist).
+The commands that connect anywhere (`check`, `hardware`, `eval-routes`, `reinforce run`, `results`) ask local servers only; `results` can also open GitHub's form in your browser, filled in, if you say yes. The full list is in the [security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md#which-outbound-calls-exist).
 
 Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat/trioditis/blob/main/SECURITY.md). The full design and its limits are in [docs/security-model.md](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md).
 

@@ -93,7 +93,7 @@ def test_heldout_stops_on_an_open_wrong_or_stray_decision_and_writes_nothing(tmp
 
 
 def test_the_held_out_labels_are_what_the_study_files_give(tmp_path, capsys):
-    """tests/fixtures/routes-heldout.csv is built from labels.csv and settled.csv, and eval-routes reads it."""
+    """trioditis/data/routes-heldout.csv (shipped in the package) is built from labels.csv and settled.csv, and eval-routes reads it."""
     import yaml
 
     from trioditis.evalroutes import read_labels
@@ -101,7 +101,7 @@ def test_the_held_out_labels_are_what_the_study_files_give(tmp_path, capsys):
     args = SimpleNamespace(file=str(study / "labels.csv"), settled=str(study / "settled.csv"),
                            out=str(tmp_path / "h.csv"), set="second", a="writer_route", b="second_route")
     assert rs.heldout(args) == 0
-    shipped = REPO / "tests" / "fixtures" / "routes-heldout.csv"
+    shipped = REPO / "trioditis" / "data" / "routes-heldout.csv"
     assert (tmp_path / "h.csv").read_text(encoding="utf-8") == shipped.read_text(encoding="utf-8")
     assert "315 prompts, both labels the same on 308, 7 decided by the maintainer" in capsys.readouterr().out
     routes = list(yaml.safe_load((REPO / "config.example.yaml").read_text(encoding="utf-8"))["routes"])
