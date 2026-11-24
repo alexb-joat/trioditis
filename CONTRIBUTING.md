@@ -36,6 +36,7 @@ Thanks for helping. Trioditis sits between people and every model they use, so t
 - Trioditis is under the [GNU AGPL-3.0-or-later](LICENSE), and your contribution is distributed under it.
 - Code and documentation also need the [contributor agreement](CLA.md): you keep your copyright and give the maintainer a licence to use, distribute and sublicense what you contribute. Read it, then tick its box in your first pull request. It covers your later ones too.
 - A pull request without the tick is not merged. Reporting a bug or suggesting a change in an issue needs no agreement.
+- Results you share through the "Share results" issue form are public and released under [CC0](https://creativecommons.org/publicdomain/zero/1.0/): anyone may use the numbers, with no credit needed. The form's box says so before you submit, and `scripts/collect_results.py` adds only issues with the box ticked to `docs/community-results.csv`.
 
 ## Style
 

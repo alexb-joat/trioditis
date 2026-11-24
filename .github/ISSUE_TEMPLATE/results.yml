@@ -1,0 +1,30 @@
+name: Share results
+description: Numbers from `trioditis results` on your machine (public, CC0)
+title: "Results: "
+labels: [results]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `trioditis results` fills this form for you when you answer yes. To fill it by hand, paste the whole
+        `trioditis-results.json` below. It holds counts, timings, version numbers and hardware names only:
+        no prompts, paths, user or host names. Read it before you press Submit.
+  - type: textarea
+    id: results
+    attributes:
+      label: Results file
+      description: The full contents of trioditis-results.json, unchanged
+      render: json
+    validations: {required: true}
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Sharing
+      options:
+        - label: "I understand this issue is public, and I release these numbers under CC0 (anyone may use them, no credit needed). It holds numbers only."
+          required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything unusual about the run? (optional)
+      description: "For example: another program used the GPU, or the laptop ran on battery"
