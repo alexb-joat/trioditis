@@ -30,7 +30,6 @@ import statistics
 import sys
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 
@@ -38,9 +37,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from trioditis.config import ConfigError, RoutePicker, load_config  # noqa: E402
+from trioditis.measure import MeasureError, require_local  # noqa: E402
 from trioditis.router import PICKER_TEXT_CHARS, RoutePickerClient  # noqa: E402
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 TEXT_FILES = ["README.md", "CHANGELOG.md", "docs/route-accuracy.md"]
 
 
@@ -66,9 +65,10 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--out", help="write one row per call to this CSV")
     a = ap.parse_args(argv)
 
-    if urlsplit(a.base_url).hostname not in LOCAL_HOSTS:
-        sys.exit(f"--base-url {a.base_url} is not on this machine; the texts are sent only to a local server "
-                 f"(use one of: {', '.join(sorted(LOCAL_HOSTS))})")
+    try:
+        require_local(a.base_url)
+    except MeasureError as err:
+        sys.exit(str(err))
     try:
         lengths = list(dict.fromkeys(int(x) for x in a.lengths.split(",")))
     except ValueError:

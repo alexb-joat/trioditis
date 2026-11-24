@@ -41,6 +41,33 @@ def test_the_model_baseline_only_talks_to_this_machine(tmp_path):
     assert "not on this machine" in str(err.value)
 
 
+def test_the_model_baseline_sends_the_route_pickers_own_request(tmp_path, monkeypatch, capsys):
+    import json
+
+    import httpx
+
+    from trioditis.config import RoutePicker, load_config
+    from trioditis.router import RoutePickerClient
+    sent = []
+
+    def answer(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json={"choices": [{"message": {"content": "Route: Writing."}}]})
+
+    real = httpx.Client
+    monkeypatch.setattr(rs.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(answer), **kw))
+    labels = tmp_path / "l.csv"
+    labels.write_text("prompt,expected_route\nwrite a poem,writing\nfix this bug,code\n", encoding="utf-8")
+    config = str(REPO / "config.example.yaml")
+    args = SimpleNamespace(file=str(labels), model="m", base_url="http://127.0.0.1:11434/v1", config=config,
+                           label="expected_route", by="", out=None)
+    assert rs.model_baseline(args) == 0
+    import dataclasses
+    picker = RoutePickerClient(dataclasses.replace(load_config(config), route_picker=RoutePicker("local", "m")), None)
+    assert sent == [picker.body("write a poem"), picker.body("fix this bug")]
+    assert "accuracy 1/2 = 50.0%" in capsys.readouterr().out
+
+
 def test_the_study_record_holds_both_labels_for_every_prompt():
     rows = rs.read(str(REPO / "docs" / "route-accuracy" / "labels.csv"), ["set", "prompt", "writer_route", "second_route"])
     routes = {"code", "reasoning", "writing", "quick"}

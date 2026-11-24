@@ -3,13 +3,14 @@
     python scripts/route_study.py agreement docs/route-accuracy/labels.csv
     python scripts/route_study.py model-baseline docs/route-accuracy/labels.csv --model llama3.2:3b
     python scripts/route_study.py heldout docs/route-accuracy/labels.csv --settled docs/route-accuracy/settled.csv \
-        --out tests/fixtures/routes-heldout.csv
+        --out trioditis/data/routes-heldout.csv
 
 `agreement` reads a CSV with two label columns and prints how often the two labellers agree, Cohen's
 kappa with a 95% interval, and a table of who said what. It makes no network call.
 
 `model-baseline` asks a LOCAL model server to pick a route for every prompt from the route descriptions
-in the config, and prints how often it matches a label column. The one network call is to --base-url,
+in the config, with the route picker's own request (trioditis/router.py `RoutePickerClient`), and prints
+how often it matches a label column. The one network call is to --base-url,
 which must be on this machine: every prompt in the file is sent there and nowhere else.
 
 `heldout` writes the label file for `trioditis eval-routes` from one set of the study: the route both
@@ -24,16 +25,17 @@ import csv
 import sys
 from collections import Counter
 from pathlib import Path
-from urllib.parse import urlsplit
 
 import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trioditis.config import load_config  # noqa: E402
-from trioditis_metrics.stats import cohen_kappa, wilson  # noqa: E402
+import dataclasses  # noqa: E402
 
-LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
+from trioditis.config import RoutePicker, load_config  # noqa: E402
+from trioditis.measure import MeasureError, require_local  # noqa: E402
+from trioditis.router import RoutePickerClient  # noqa: E402
+from trioditis_metrics.stats import cohen_kappa, wilson  # noqa: E402
 
 
 def read(path: str, columns: list[str]) -> list[dict]:
@@ -83,37 +85,31 @@ def agreement(args) -> int:
     return 0
 
 
-def ask(client: httpx.Client, url: str, model: str, system: str, prompt: str) -> str:
-    body = {"model": model, "temperature": 0, "seed": 0, "max_tokens": 8,
-            "messages": [{"role": "system", "content": system},
-                         {"role": "user", "content": f"Message:\n<<<\n{prompt}\n>>>\nRoute:"}]}
-    reply = client.post(url, json=body, timeout=300)
+def ask(client: httpx.Client, url: str, picker: RoutePickerClient, prompt: str) -> str:
+    """The route picker's own request (`RoutePickerClient.body`), so this baseline grades what the router sends."""
+    reply = client.post(url, json=picker.body(prompt), timeout=300)
     reply.raise_for_status()
     return reply.json()["choices"][0]["message"]["content"] or ""
 
 
 def model_baseline(args) -> int:
-    host = urlsplit(args.base_url).hostname
-    if host not in LOCAL_HOSTS:
-        sys.exit(f"route_study: --base-url {args.base_url} is not on this machine; this command sends every prompt "
-                 f"in the file to that address, so it only talks to localhost")
+    try:
+        require_local(args.base_url)
+    except MeasureError as err:
+        sys.exit(f"route_study: {err}")
     cfg = load_config(args.config)
     routes = list(cfg.routes)
     without = [r for r in routes if not cfg.routes[r].description]
     if without:
         sys.exit(f"route_study: route {without[0]!r} has no description in {args.config}; the model chooses from "
                  f"the descriptions, so add one")
-    system = ("You sort messages for a router. Routes:\n"
-              + "".join(f"- {r}: {cfg.routes[r].description}\n" for r in routes)
-              + "Reply with one word: the name of the route that fits the message best.")
+    picker = RoutePickerClient(dataclasses.replace(cfg, route_picker=RoutePicker("local", args.model)), None)
     rows = read(args.file, ["prompt", args.label])
     url = args.base_url.rstrip("/") + "/chat/completions"
     answers: list[str] = []
     with httpx.Client(follow_redirects=False, trust_env=False) as client:
         for i, r in enumerate(rows, 1):
-            text = ask(client, url, args.model, system, r["prompt"]).strip().lower()
-            words = [w.strip(".,:;`'\"*") for w in text.split()]
-            answers.append(next((w for w in words if w in routes), ""))  # "" = no route name in the reply
+            answers.append(picker.parse(ask(client, url, picker, r["prompt"])) or "")  # "" = no route name in the reply
             if i % 50 == 0:
                 print(f"  {i}/{len(rows)} asked", file=sys.stderr)
     if args.out:

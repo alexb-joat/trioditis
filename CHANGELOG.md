@@ -8,6 +8,7 @@
 
 **Changed**
 - The held-out labels moved from `tests/fixtures/routes-heldout.csv` to `trioditis/data/routes-heldout.csv`, unchanged, so the installed package carries them. The dated run records in `docs/route-accuracy/` keep the old path they were run with.
+- `scripts/route_study.py model-baseline` sends the route picker's own request (the router's code), and both study scripts use the package's local-only address check.
 
 **Removed**
 - `privacy.on_no_local_model` is gone. Its `allow_cloud` value never sent a sensitive prompt to a cloud model; it only turned the 422 refusal into a 503. A sensitive prompt that no local model can take is now always refused with 422. A leftover `on_no_local_model:` line is ignored.
