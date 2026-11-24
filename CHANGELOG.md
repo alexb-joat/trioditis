@@ -21,6 +21,9 @@
 - First half of an opt-in reinforcement loop (`reinforce:` block, absent = off). `trioditis reinforce run --dry-run` scores "should the route picker's route be served?" on your own labelled prompts and prints the verdict: the candidate passes only when it is right on more rows and the 95% interval of the paired difference stays above -5 points. `trioditis reinforce revert` (and `--all`) takes adopted values back. Adopted values live in `~/.hlidskjalv/trioditis-adopted.json`, never in `config.yaml`; the running router picks up a change without a restart, `check` lists each value with the layer that set it (default, `config.yaml` or adopted, with the date), and `explain` names an adopted value among its reasons. Not in this version: adopting (`run` without `--dry-run` refuses until the watch that reverts an adoption exists) and threshold steps proposed from traffic. [docs/staying-current.md](docs/staying-current.md#the-reinforcement-loop-opt-in-the-gate-and-the-undo-are-built-adopting-is-not-yet)
 - An `embeddings:` block without `threshold` now uses 0.45, the value the example config sets and the held-out test chose (was 0.55). Configs that set `threshold` are unchanged.
 
+**Fixed**
+- Calls to local models no longer go through a proxy. With `HTTP_PROXY`, `HTTPS_PROXY` or `ALL_PROXY` set and no `NO_PROXY` entry for the local server, the router sent every call to a `local: true` provider (chat, embeddings, the route picker, the installed-model list) to that proxy, including prompts the privacy check had kept local. Those calls now ignore proxy variables. Cloud calls still use the proxy. If you reach a `local: true` server through a proxy on purpose, that stops working: give the router a direct address.
+
 ## 0.6.0 (2026-11-16)
 
 Measured rather than assumed: outcome rates per model, a ledger of plan usage, and the router's accuracy on held-out prompts. The first release on PyPI.

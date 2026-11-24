@@ -128,14 +128,21 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                metrics: MetricsDB | None = None, budget: BudgetGuard | None = None,
                prices: Prices | None = None, hardware_file: Path | None = None,
                accounts_file: Path | None = None) -> FastAPI:
-    client = httpx.AsyncClient(
-        transport=transport,
-        timeout=httpx.Timeout(cfg.limits.upstream_timeout_s, connect=10.0),
-        follow_redirects=False,  # never let an upstream bounce us elsewhere
-        trust_env=True,
-    )
-    embedder = Embedder(cfg, client) if cfg.embeddings else None
-    picker = RoutePickerClient(cfg, client) if cfg.route_picker else None  # local only (config checks)
+    def new_client(trust_env: bool) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            transport=transport,
+            timeout=httpx.Timeout(cfg.limits.upstream_timeout_s, connect=10.0),
+            follow_redirects=False,  # never let an upstream bounce us elsewhere
+            trust_env=trust_env,
+        )
+
+    # Two clients. Cloud calls obey HTTP_PROXY and friends: on a network that needs a proxy they
+    # have no other way out. Calls to `local: true` providers never do: a proxy variable would
+    # hand the proxy the very prompts the privacy check kept on this machine.
+    client = new_client(trust_env=True)
+    local_client = new_client(trust_env=False)
+    embedder = Embedder(cfg, local_client) if cfg.embeddings else None  # local only (config checks)
+    picker = RoutePickerClient(cfg, local_client) if cfg.route_picker else None  # local only (config checks)
     adopted = Layer(cfg)  # cfg itself unless `reinforce:` is on and the loop has adopted a routing value
     pins = SessionPins(cfg.limits.session_ttl_s)
     cooldowns = Cooldowns()
@@ -154,7 +161,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         suggestions without needing this router's API key."""
         while True:
             try:
-                rep = await hw_cache.get(cfg, client)
+                rep = await hw_cache.get(cfg, local_client)
                 _write_private(hardware_file, json.dumps({**rep, "generated_at": time.time()}))
             except Exception:  # noqa: S110 -- best-effort: a report must never take the router down; the next round retries
                 pass
@@ -188,6 +195,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         for t in tasks:
             t.cancel()
         await client.aclose()
+        await local_client.aclose()
 
     # No interactive docs / schema endpoints: less surface, nothing to fingerprint.
     app = FastAPI(title="trioditis", docs_url=None, redoc_url=None, openapi_url=None,
@@ -291,7 +299,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
     @app.get("/v1/hardware")
     async def hardware():
         """Hardware + local-model suggestions. Only local providers are queried."""
-        return await hw_cache.get(cfg, client)
+        return await hw_cache.get(cfg, local_client)
 
     @app.post("/v1/route")
     async def explain(request: Request):
@@ -355,9 +363,10 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                 if prov.api_key():
                     headers["Authorization"] = f"Bearer {prov.api_key()}"
                 url = f"{prov.base_url}/chat/completions"
+                upstream = local_client if prov.local else client
                 try:
-                    req = client.build_request("POST", url, json=upstream_body, headers=headers)
-                    resp = await client.send(req, stream=stream)
+                    req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
+                    resp = await upstream.send(req, stream=stream)
                 except httpx.HTTPError as e:
                     attempts.append({"model": model, "error": type(e).__name__})
                     continue
@@ -367,8 +376,8 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                     if b"stream_options" in detail:  # a provider that doesn't know the option: once more without it
                         upstream_body.pop("stream_options", None)
                         try:
-                            req = client.build_request("POST", url, json=upstream_body, headers=headers)
-                            resp = await client.send(req, stream=stream)
+                            req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
+                            resp = await upstream.send(req, stream=stream)
                         except httpx.HTTPError as e:
                             attempts.append({"model": model, "error": type(e).__name__})
                             continue

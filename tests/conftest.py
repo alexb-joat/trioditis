@@ -1,8 +1,15 @@
-"""Shared test setup: the suite never touches the network or the developer's own .env."""
+"""Shared test setup: the suite never touches the network, the developer's own .env or their data folder."""
 from __future__ import annotations
 
-import httpx
-import pytest
+import os
+import tempfile
+
+# Before anything imports trioditis: its default files (metrics database, prices, budget) are
+# resolved at import time, and a test that forgets to pass its own would write to the developer's.
+os.environ["HLIDSKJALV_HOME"] = tempfile.mkdtemp(prefix="trioditis-test-home-")
+
+import httpx  # noqa: E402
+import pytest  # noqa: E402
 
 
 def _refused(request: httpx.Request) -> httpx.Response:
