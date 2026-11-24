@@ -4,6 +4,7 @@
 
 **Licence**
 - Trioditis is now under the GNU AGPL-3.0-or-later, from this version on. Versions up to 0.6.0 were released under MIT and stay MIT. If you run a modified Trioditis as a service for other people, the AGPL asks you to offer them your modified source. "Trioditis" is the project's name and not part of the licence: a fork needs its own name.
+- Contributions now need a contributor agreement (`CLA.md`, adapted from the Apache Software Foundation's individual agreement): you keep your copyright and license your contribution to the maintainer. `CONTRIBUTING.md` says how.
 
 **Claude Code**
 - Claude Code can run through Trioditis: set `ANTHROPIC_BASE_URL=http://127.0.0.1:8787`, or start it with `scripts/claude-t`. Requests go to Anthropic unchanged with your own claude.ai login, and the answer streams back unchanged. Each call's token counts go to plan usage, merged with `plan import --claude-code`, so `usage --plan` also shows calls the transcripts leave out. Calls made with an API key count as spend. Trioditis doesn't choose the model here. [docs/claude-code.md](docs/claude-code.md)

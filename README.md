@@ -204,7 +204,7 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 
 ## Contributing
 
-Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/trioditis/blob/main/CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`.
+Pull requests are welcome; see [CONTRIBUTING.md](https://github.com/alexb-joat/trioditis/blob/main/CONTRIBUTING.md). Run the checks with `pip install --require-hashes --no-deps -r requirements-dev.txt && python -m pytest -q`. Code and documentation contributions need the [contributor agreement](https://github.com/alexb-joat/trioditis/blob/main/CLA.md).
 
 ## License
 

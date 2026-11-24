@@ -7,6 +7,7 @@
 - [ ] `python -m pytest -q` passes
 - [ ] `python scripts/smoke.py` passes
 - [ ] Tests added or updated for the change
+- [ ] I have read [CLA.md](https://github.com/alexb-joat/trioditis/blob/main/CLA.md) and agree to it for this and my later contributions
 
 ## Security (tick all that apply, explain below)
 
