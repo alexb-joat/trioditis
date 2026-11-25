@@ -57,7 +57,7 @@ jobs:
               | curl -sSf --max-time 3600 http://localhost:11434/api/pull -d @- | jq -c .
           done
       - name: Run trioditis results
-        run: python -m trioditis results --model "$MODEL" --no-share --out "$ARTIFACT.json"
+        run: python -m trioditis results --model "$MODEL" --no-share --out "$ARTIFACT.json" --answers "$ARTIFACT.answers.json"
       - name: Label the run
         run: |
           jq -n --arg cores "$(nproc)" --arg sha "$GITHUB_SHA" --arg run "$GITHUB_RUN_ID" \
@@ -69,6 +69,7 @@ jobs:
           name: ${{ env.ARTIFACT }}
           path: |
             ${{ env.ARTIFACT }}.json
+            ${{ env.ARTIFACT }}.answers.json
             ${{ env.ARTIFACT }}.runner.json
           if-no-files-found: error
           retention-days: 90

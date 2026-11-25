@@ -65,7 +65,7 @@ class Server:
 
 
 def args(tmp_path, **kw) -> SimpleNamespace:
-    base = {"model": "tiny:1b", "base_url": "http://127.0.0.1:11434/v1", "own_labels": None,
+    base = {"model": "tiny:1b", "base_url": "http://127.0.0.1:11434/v1", "own_labels": None, "answers": None,
             "out": str(tmp_path / "trioditis-results.json"), "no_share": False}
     return SimpleNamespace(**{**base, **kw})
 
@@ -137,6 +137,95 @@ def test_the_file_holds_no_prompt_path_host_or_time_of_day(tmp_path, capsys):
     assert not re.search(r"\d\d:\d\d", text)            # the date only, no time of day
     own = json.loads(text)["own_labels"]
     assert own["n"] == 12 and own["router"]["n"] == 12 and set(own) >= {"picker", "router", "picker_vs_router"}
+
+
+def own_labels_file(folder, n: int = 12):
+    labels = folder / "mine.csv"
+    with open(labels, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["prompt", "expected_route"])
+        for i, route in enumerate(["code", "writing", "quick", "reasoning"] * (n // 4)):
+            w.writerow([f"{MARKER} please write item {i} for {HOST}", route])
+    return labels
+
+
+def test_the_answers_file_holds_the_rows_and_the_routes_named_and_nothing_else(tmp_path):
+    answers = tmp_path / "a.json"
+    run(tmp_path, Server(), answers=str(answers))
+    doc = json.loads(answers.read_text(encoding="utf-8"))
+    results = json.loads((tmp_path / "trioditis-results.json").read_text(encoding="utf-8"))
+    assert set(doc) == {"schema", "trioditis", "heldout_sha256_16", "picker", "answers"}
+    assert doc["schema"] == "trioditis-answers.v1" and doc["picker"] == "tiny:1b"
+    assert doc["trioditis"] == results["trioditis"] and doc["heldout_sha256_16"] == results["settings"]["heldout_sha256_16"]
+    assert all(set(a) == {"row", "route"} for a in doc["answers"])
+    assert [a["row"] for a in doc["answers"]] == list(range(2, 317))          # the header is row 1; 315 prompts follow
+    assert {a["route"] for a in doc["answers"]} <= {*results["settings"]["routes"], measure.NO_ROUTE}
+    held = list(csv.DictReader(open(measure.heldout_path(), encoding="utf-8")))
+    right = sum(a["route"] == h["expected_route"] for a, h in zip(doc["answers"], held, strict=True))
+    assert right == results["heldout"]["picker"]["right"]                      # the same answers the counts came from
+
+
+def test_a_reply_with_no_route_is_a_dash_in_the_answers(tmp_path):
+    answers = tmp_path / "a.json"
+    run(tmp_path, Server(reply=lambda text: "I am not sure"), answers=str(answers))
+    assert {a["route"] for a in json.loads(answers.read_text(encoding="utf-8"))["answers"]} == {"-"}
+
+
+def test_the_answers_file_holds_no_prompt_path_host_or_own_row_and_never_the_own_labels(tmp_path, capsys):
+    """The marker-string test of the results file, on the answers file: own labels, their folder and the hardware
+    notes must not reach it, and it has the 315 public rows whether or not own labels were given."""
+    folder = tmp_path / f"home-{MARKER}-folder"
+    folder.mkdir()
+    labels = own_labels_file(folder)
+    answers = folder / "answers.json"
+    run(tmp_path, Server(), own_labels=str(labels), out=str(folder / "r.json"), answers=str(answers))
+    text = answers.read_text(encoding="utf-8")
+    printed = capsys.readouterr()
+    for secret in (MARKER, HOST, str(tmp_path), "mine.csv", "please write item", "answers.json", "r.json"):
+        assert secret not in text
+    for prompt_text in ("please write item", HOST):      # the terminal names the files it wrote, never a prompt
+        assert prompt_text not in printed.out and prompt_text not in printed.err
+    held = list(csv.DictReader(open(measure.heldout_path(), encoding="utf-8")))
+    assert not any(r["prompt"] in text for r in held)
+    assert not re.search(r"\d\d:\d\d|\d{4}-\d\d-\d\d", text)                    # no time of day, no date
+    assert len(json.loads(text)["answers"]) == 315                                # the 12 own rows are not in it
+    assert json.loads((folder / "r.json").read_text(encoding="utf-8"))["own_labels"]["n"] == 12
+
+
+def test_no_answers_file_is_written_unless_asked_for(tmp_path):
+    run(tmp_path, Server())
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["trioditis-results.json"]
+
+
+def test_a_failed_run_writes_no_answers_file(tmp_path):
+    answers = tmp_path / "a.json"
+    with pytest.raises(SystemExit):
+        run(tmp_path, Server(fail_chat=lambda n: n > 100), answers=str(answers))
+    assert not answers.exists() and not (tmp_path / "trioditis-results.json").exists()
+
+
+@pytest.mark.parametrize("where, words", [("folder", "is a folder"), ("missing", "its folder does not exist"),
+                                          ("same", "name the same file")])
+def test_a_bad_answers_path_is_found_before_the_first_call(tmp_path, where, words):
+    target = {"folder": tmp_path, "missing": tmp_path / "no-such" / "a.json", "same": tmp_path / "trioditis-results.json"}[where]
+    server = Server()
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, server, answers=str(target))
+    assert "--answers" in str(e.value) and words in str(e.value) and server.requests == []
+
+
+def test_an_answers_file_that_cannot_be_written_says_the_results_file_was_written(tmp_path, monkeypatch):
+    real = measure.Path.write_text
+
+    def refuse_answers(self, *a, **k):
+        if self.name == "a.json":
+            raise PermissionError(13, "Permission denied")
+        return real(self, *a, **k)
+    monkeypatch.setattr(measure.Path, "write_text", refuse_answers)
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, Server(), answers=str(tmp_path / "a.json"))
+    assert "cannot write --answers" in str(e.value) and "results file was written" in str(e.value)
+    assert (tmp_path / "trioditis-results.json").exists()
 
 
 def test_a_server_that_is_not_on_this_machine_is_refused_before_any_call(tmp_path):
@@ -275,8 +364,8 @@ def test_the_command_line_reaches_the_command_without_a_config(tmp_path, monkeyp
         main(["results", "--model", "tiny:1b", "--no-share"])
     assert e.value.code == 0
     a = seen["args"]
-    assert (a.model, a.base_url, a.out, a.no_share, a.own_labels) == ("tiny:1b", "http://localhost:11434/v1",
-                                                                      "trioditis-results.json", True, None)
+    assert (a.model, a.base_url, a.out, a.no_share, a.own_labels, a.answers) == (
+        "tiny:1b", "http://localhost:11434/v1", "trioditis-results.json", True, None, None)
 
 
 def test_the_held_out_set_ships_in_the_package():

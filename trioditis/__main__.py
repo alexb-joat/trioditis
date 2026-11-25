@@ -114,6 +114,10 @@ def main(argv: list[str] | None = None) -> None:
                          "code, reasoning, writing, quick); only counts go in the file")
     rs.add_argument("--out", default="trioditis-results.json", metavar="FILE",
                     help="where the results go; an earlier file there is replaced (default: %(default)s)")
+    rs.add_argument("--answers", default=None, metavar="FILE",
+                    help="also write the route the picker named for each public held-out prompt, by row number, to compare "
+                         "two models prompt by prompt (no prompt text; never your own labelled prompts; not shared; "
+                         "default: not written)")
     rs.add_argument("--no-share", action="store_true", help="don't ask about sharing (it is never asked when not run in a terminal)")
 
     h = sub.add_parser("hardware", help="detect hardware and suggest local models (no config change)")

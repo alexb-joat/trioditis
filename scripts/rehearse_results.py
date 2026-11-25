@@ -4,8 +4,9 @@
     python scripts/rehearse_results.py --python PATH --installed      # a wheel installed in PATH's environment
 
 It starts scripts/fake_ollama.py on a free port (127.0.0.1 only) as a child it stops by its own handle, runs
-`PATH -m trioditis results --no-share --model tiny:1b --base-url ... --out ...` over real sockets, then checks
-the file with `scripts/collect_results.py check`, the way a shared submission is checked. The child runs in an
+`PATH -m trioditis results --no-share --model tiny:1b --base-url ... --out ... --answers ...` over real sockets,
+then checks the file with `scripts/collect_results.py check`, the way a shared submission is checked, and the
+answers file for the shape the comparison reads. The child runs in an
 isolated environment: its own HLIDSKJALV_HOME and TRIODITIS_ENV_FILE inside a temporary folder, and proxy
 variables pointing at a dead address to show that the run ignores them. Your environment is not passed on.
 
@@ -86,6 +87,20 @@ def wait_until_up(url: str, proc: subprocess.Popen, log: Path) -> None:
     raise RehearsalError(f"the stand-in server did not answer {url} within 15 s")
 
 
+def check_answers(answers: dict, doc: dict) -> None:
+    """The `--answers` file has the shape the comparison reads and refers to the same held-out set as the results."""
+    if set(answers) != {"schema", "trioditis", "heldout_sha256_16", "picker", "answers"}:
+        raise RehearsalError(f"the answers file has unexpected keys: {sorted(answers)}")
+    if answers["heldout_sha256_16"] != doc["settings"]["heldout_sha256_16"] or answers["picker"] != doc["models"]["picker"]:
+        raise RehearsalError("the answers file and the results file name a different held-out set or picker")
+    rows = answers["answers"]
+    n = doc["heldout"]["n"]
+    if [r.get("row") for r in rows] != list(range(2, n + 2)) or any(set(r) != {"row", "route"} for r in rows):
+        raise RehearsalError(f"the answers file does not hold one {{row, route}} entry for each of the {n} rows")
+    if not {r["route"] for r in rows} <= {*doc["settings"]["routes"], "-"}:
+        raise RehearsalError("the answers file names a route that is not one of the shipped routes")
+
+
 def rehearse(python: str, mode: str, repo: Path = ROOT) -> str:
     """The one-line result when the run passed; RehearsalError otherwise. `mode` is "source tree" or "installed wheel"."""
     if mode not in ("source tree", "installed wheel"):
@@ -95,6 +110,7 @@ def rehearse(python: str, mode: str, repo: Path = ROOT) -> str:
         work = repo if mode == "source tree" else home / "work"
         work.mkdir(exist_ok=True)
         out = home / "trioditis-results.json"
+        answers_out = home / "trioditis-answers.json"
         env = child_env(home)
 
         where = run([python, "-c", "import json, trioditis; print(json.dumps({'file': trioditis.__file__, "
@@ -115,7 +131,8 @@ def rehearse(python: str, mode: str, repo: Path = ROOT) -> str:
             try:
                 wait_until_up(f"http://127.0.0.1:{port}/api/version", server, log)
                 r = run([python, "-m", "trioditis", "results", "--no-share", "--model", MODEL,
-                         "--base-url", f"http://127.0.0.1:{port}/v1", "--out", str(out)], cwd=work, env=env)
+                         "--base-url", f"http://127.0.0.1:{port}/v1", "--out", str(out),
+                         "--answers", str(answers_out)], cwd=work, env=env)
             finally:
                 server.terminate()
                 try:
@@ -129,6 +146,9 @@ def rehearse(python: str, mode: str, repo: Path = ROOT) -> str:
             raise RehearsalError(f"`trioditis results` exited 0 but wrote no file at {out}")
 
         doc = json.loads(out.read_text(encoding="utf-8"))
+        if not answers_out.is_file():
+            raise RehearsalError(f"`trioditis results --answers` exited 0 but wrote no file at {answers_out}")
+        check_answers(json.loads(answers_out.read_text(encoding="utf-8")), doc)
         c = run([python, str(COLLECTOR), "check", str(out)], cwd=work, env=env)
         if c.returncode != 0 or ": ok," not in c.stdout:
             raise RehearsalError(f"the collector did not accept the file: {tail(c.stdout + c.stderr)}")

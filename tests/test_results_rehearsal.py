@@ -124,6 +124,20 @@ def test_the_rehearsal_stops_the_stand_in_it_started(monkeypatch):
         c.get(f"http://127.0.0.1:{port}/api/version")
 
 
+def test_the_rehearsal_checks_the_answers_file_too(tmp_path):
+    run(tmp_path, Server(), answers=str(tmp_path / "a.json"))
+    doc = json.loads((tmp_path / "trioditis-results.json").read_text(encoding="utf-8"))
+    answers = json.loads((tmp_path / "a.json").read_text(encoding="utf-8"))
+    rehearse_results.check_answers(answers, doc)                                  # what the real command writes passes
+    for mutate in (lambda a: a.update(extra=1), lambda a: a.update(heldout_sha256_16="0" * 16),
+                   lambda a: a["answers"].pop(), lambda a: a["answers"][0].update(route="poetry"),
+                   lambda a: a["answers"][0].update(row=99), lambda a: a["answers"][0].update(prompt="text")):
+        bad = json.loads(json.dumps(answers))
+        mutate(bad)
+        with pytest.raises(rehearse_results.RehearsalError):
+            rehearse_results.check_answers(bad, doc)
+
+
 def test_the_child_gets_a_small_environment_and_dead_proxies(monkeypatch, tmp_path):
     monkeypatch.setenv("ZQX_SECRET_MARKER", "do-not-pass-on")
     env = rehearse_results.child_env(tmp_path)

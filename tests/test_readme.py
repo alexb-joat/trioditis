@@ -74,7 +74,7 @@ def test_the_help_measure_block_names_a_registered_command_and_flags_that_exist(
     code, help_text = cli_help(*commands, capsys=capsys)
     assert code == 0
     flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]*)", block))
-    assert {"--model", "--base-url", "--out", "--own-labels", "--no-share"} <= flags
+    assert {"--model", "--base-url", "--out", "--own-labels", "--answers", "--no-share"} <= flags
     missing = sorted(f for f in flags if f not in help_text)
     assert missing == [], f"the README names options `trioditis results` does not have: {missing}"
 

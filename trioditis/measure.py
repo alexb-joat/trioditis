@@ -10,6 +10,9 @@ What it runs, on a LOCAL model server only (the same host rule as `eval-routes`,
    shipped threshold when the embeddings model answers. Fixed settings only: nothing is swept or tuned on
    this set (docs/route-accuracy.md, "The held-out test").
 4. With `--own-labels FILE`: the router and the picker on your labelled prompts, reported as counts only.
+5. With `--answers FILE`: a second file with the route the picker named for each public held-out prompt, by row
+   number, to compare two models prompt by prompt. Never your own prompts, never prompt text, not part of the
+   results file or the share form.
 
 Every setting comes from the example config shipped in the package, never from your config.yaml, so results
 from different machines measure the same thing. The one thing you choose is the picker model.
@@ -51,6 +54,7 @@ from .hardware import Hardware, detect
 from .router import PICKER_TEXT_CHARS, Embedder, PickerNoRoute, RoutePickerClient
 
 SCHEMA = "trioditis-results.v1"
+ANSWERS_SCHEMA = "trioditis-answers.v1"
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 PROVIDER = "ollama"                    # the example config's local provider
 TIMING_LENGTHS = (100, 200, 500, 1000, 2000)
@@ -351,7 +355,8 @@ async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, tra
                           "router": score(routes, own, own_routed),
                           "router_uses_embeddings": memo is not None,
                           "picker_vs_router": paired(own, own_picked, own_routed)}
-    return {"timing": timing, "heldout": result_heldout, "own_labels": result_own, "server": facts}
+    return {"timing": timing, "heldout": result_heldout, "own_labels": result_own, "server": facts,
+            "heldout_picks": picked}      # for --answers only: never part of the results file
 
 
 # ---------------------------------------------------------------- the file and the form
@@ -380,6 +385,16 @@ def results_doc(cfg: Config, measured: dict, hw: Hardware, today: str, config_by
         "heldout": measured["heldout"],
         "own_labels": measured["own_labels"],
     }
+
+
+def answers_doc(cfg: Config, heldout: list[Row], picked: list[str], labels_bytes: bytes) -> dict:
+    """`--answers`: the route the picker named for each public held-out prompt, by its row in the shipped file
+    (`trioditis/data/routes-heldout.csv`, the header being row 1), so two models can be compared prompt by prompt.
+    The file name, the version and the held-out fingerprint say what the rows refer to; nothing else goes in.
+    Never the person's own labelled prompts, and never any prompt text."""
+    return {"schema": ANSWERS_SCHEMA, "trioditis": __version__, "heldout_sha256_16": _short_hash(labels_bytes),
+            "picker": cfg.route_picker.model,
+            "answers": [{"row": r.number, "route": p} for r, p in zip(heldout, picked, strict=True)]}
 
 
 def form_url(doc: dict) -> str | None:
@@ -457,10 +472,13 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
     except (MeasureError, LabelsError) as err:
         sys.exit(f"results: {err}" + (" (your labels must use the shipped routes)" if isinstance(err, LabelsError) and args.own_labels else ""))
     out = Path(args.out)
-    if out.is_dir():  # found out now, not after a run of an hour or more
-        sys.exit(f"results: --out {args.out} is a folder; give it a file name")
-    if not out.resolve().parent.is_dir():
-        sys.exit(f"results: cannot write --out {args.out}: its folder does not exist; create it or pass another --out")
+    for flag, value in (("--out", args.out), ("--answers", args.answers)):  # found out now, not after a run of an hour or more
+        if value and Path(value).is_dir():
+            sys.exit(f"results: {flag} {value} is a folder; give it a file name")
+        if value and not Path(value).resolve().parent.is_dir():
+            sys.exit(f"results: cannot write {flag} {value}: its folder does not exist; create it or pass another {flag}")
+    if args.answers and Path(args.answers).resolve() == out.resolve():
+        sys.exit("results: --answers and --out name the same file; give them different names")
     try:
         measured = asyncio.run(measure(cfg, heldout, own, transport=transport))
     except MeasureError as err:
@@ -476,6 +494,14 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
     print(text, end="")
     print("\n".join(summary(doc)))
     print(f"Wrote {args.out}: the whole file is printed above.")
+    if args.answers:
+        try:
+            Path(args.answers).write_text(json.dumps(answers_doc(cfg, heldout, measured["heldout_picks"], labels.read_bytes())) + "\n",
+                                          encoding="utf-8")
+        except OSError as err:
+            sys.exit(f"results: cannot write --answers {args.answers}: {err.strerror or err} (the results file was written)")
+        print(f"Wrote {args.answers}: the route the picker named for each of the {len(heldout)} public held-out prompts, "
+              "by row number. No prompt text; your own labelled prompts are never in it. The share form does not take it.")
     interactive = isatty() if isatty else (sys.stdin.isatty() and sys.stdout.isatty())
     if not args.no_share and interactive:
         ask_to_share(doc, ask=ask, opener=opener, out_name=args.out)
