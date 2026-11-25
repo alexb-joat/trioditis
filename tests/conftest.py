@@ -28,5 +28,8 @@ def _no_real_probe(monkeypatch):
 def _no_real_env_file(monkeypatch, tmp_path):
     """The CLI loads .env from the working directory into os.environ, where it would stay for the
     rest of the run (a developer's router key then turns later requests into 401s). Point it at a
-    file that does not exist; a test of the .env loader sets TRIODITIS_ENV_FILE itself."""
+    file that does not exist; a test of the .env loader sets TRIODITIS_ENV_FILE itself. A router key
+    already in the developer's shell (set for their own router) is left out the same way; a test that
+    needs a key sets TRIODITIS_API_KEY itself."""
     monkeypatch.setenv("TRIODITIS_ENV_FILE", str(tmp_path / "no-such.env"))
+    monkeypatch.delenv("TRIODITIS_API_KEY", raising=False)
