@@ -106,6 +106,20 @@ curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/
 
 Cloud models are optional: add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY` to `.env` and they join the routes. A cloud provider without a key is simply skipped.
 
+## Help measure
+
+Trioditis ships 315 labelled prompts, the public held-out set. One command runs its route picker and its router on them on your machine and writes the numbers to a file you may share:
+
+```bash
+trioditis results
+```
+
+It needs a local [Ollama](https://ollama.com/download) with two models pulled, as in step 1 of the quick start: the picker, `qwen2.5-coder:7b` unless you choose another with `--model`, and the embeddings model `nomic-embed-text`. The fixed prompts and fixed settings are explained in [the held-out test](https://github.com/alexb-joat/trioditis/blob/main/docs/route-accuracy.md).
+
+- **Where the prompts go:** only to the local server at `--base-url` (default `http://localhost:11434/v1`). A server that is not on this machine is refused, proxy variables are ignored, and your `config.yaml` is not read: the settings come from the example config shipped in the package, so results from different machines measure the same thing.
+- **What the file holds:** numbers, model names and digests, versions, a hardware summary and the date. It never holds prompt text, file paths, user or host names, or times finer than the date. The whole file is printed, and written to `trioditis-results.json` (choose another name with `--out`; an earlier file there is replaced). With `--own-labels FILE` it also scores your own labelled prompts, as counts only.
+- **Sharing:** the last question is whether to share the numbers publicly on GitHub, and the default is No. Yes opens GitHub's form in your browser with the numbers filled in; you read them and press Submit, and nothing is sent before that. The program itself sends nothing anywhere except to your local server. Shared numbers are public and released under CC0. `--no-share` skips the question, and it is never asked when the command is not run in a terminal.
+
 ## How a request is routed
 
 1. **Privacy check.** Built-in detectors (emails, card numbers, IBANs, API keys, private keys, passwords) plus your own keywords and regexes. A hit restricts the request to local models; if none can serve it, it is rejected rather than leaked.

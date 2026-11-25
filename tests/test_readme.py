@@ -2,6 +2,8 @@
 import re
 from pathlib import Path
 
+import pytest
+
 README = (Path(__file__).resolve().parent.parent / "README.md").read_text(encoding="utf-8")
 
 
@@ -50,6 +52,56 @@ def test_the_background_intervals_are_the_ones_in_the_code():
     from trioditis.app import HARDWARE_EVERY_S
     assert f"`GET /api/tags`, every {HARDWARE_EVERY_S // 60} minutes" in README
     assert f"own account API**, every {ACCOUNTS_EVERY_S // 60} minutes" in README
+
+
+def help_measure_block() -> str:
+    parts = re.split(r"(?m)^## ", README)
+    [block] = [p for p in parts if p.startswith("Help measure")]
+    return block
+
+
+def cli_help(*argv: str, capsys) -> tuple[int, str]:
+    from trioditis.__main__ import main
+    with pytest.raises(SystemExit) as e:
+        main([*argv, "--help"])
+    return e.value.code, capsys.readouterr().out
+
+
+def test_the_help_measure_block_names_a_registered_command_and_flags_that_exist(capsys):
+    block = help_measure_block()
+    commands = re.findall(r"(?m)^trioditis ([a-z-]+)", block)
+    assert commands == ["results"]
+    code, help_text = cli_help(*commands, capsys=capsys)
+    assert code == 0
+    flags = set(re.findall(r"(?<![\w-])(--[a-z][a-z-]*)", block))
+    assert {"--model", "--base-url", "--out", "--own-labels", "--no-share"} <= flags
+    missing = sorted(f for f in flags if f not in help_text)
+    assert missing == [], f"the README names options `trioditis results` does not have: {missing}"
+
+
+def test_the_help_measure_block_would_fail_on_an_unknown_command_or_flag(capsys):
+    code, _ = cli_help("no-such-command", capsys=capsys)
+    assert code == 2                                     # an unregistered command exits 2, so the check above can fail
+    _, help_text = cli_help("results", capsys=capsys)
+    assert "--no-such-flag" not in help_text
+
+
+def test_the_help_measure_block_names_the_models_the_program_asks_for():
+    from trioditis import measure
+    from trioditis.__main__ import DEFAULT_PICKER
+    from trioditis.config import load_config
+    block = help_measure_block()
+    assert f"`{DEFAULT_PICKER}`" in block
+    assert f"`{load_config(measure.shipped_config_path()).embeddings.model}`" in block
+
+
+def test_the_help_measure_block_keeps_the_promises_the_program_keeps():
+    block = help_measure_block()
+    assert "default is No" in block and "CC0" in block and "nothing is sent before that" in block
+    assert "only to the local server" in block and "never holds prompt text" in block
+    assert block.count("```") == 2, "one command, no pictures, no tables of figures"
+    assert not re.search(r"\d+(\.\d+)?\s*%|\bpassed\b|\b\d+/\d+\b", block), "no figures from model runs in this block"
+    assert README.count("Help measure") == 1
 
 
 def test_no_sponsor_button_is_promised_without_a_funding_file():
