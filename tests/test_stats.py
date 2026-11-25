@@ -6,14 +6,18 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from trioditis_metrics.stats import (
+    _rejection_cutoff,
     beta_mean,
     cohen_kappa,
+    discordant_needed,
     ewma,
     ewma_chart,
     mcnemar,
+    paired_power,
     quantile,
     ratio_estimate,
     sign_test,
+    sign_test_power,
     wilson,
 )
 
@@ -272,3 +276,119 @@ def test_mcnemar_is_symmetric_and_its_p_values_are_ordered(b, c):
     elif b + c:
         pmf = binomial_half_pmf(b + c)
         assert out["mid_p"] == pytest.approx(float(2 * sum(pmf[: min(b, c) + 1]) - pmf[min(b, c)]), abs=1e-12)
+
+
+# ---------------------------------------------------------------- power and the disagreements needed
+
+@pytest.mark.parametrize("alpha", [0.05, 0.01, 0.10])
+def test_the_rejection_region_is_exactly_where_sign_test_rejects(alpha):
+    """For every number of disagreements m up to 200: the splits k (of m) that `sign_test(k, m - k)` calls
+    significant at alpha are exactly k <= cutoff and k >= m - cutoff, where the cutoff comes from one pass over
+    whole-number counts and never calls sign_test."""
+    for m in range(201):
+        cutoff = _rejection_cutoff(m, alpha)
+        by_sign_test = {k for k in range(m + 1) if sign_test(k, m - k) < alpha}
+        assert by_sign_test == {k for k in range(m + 1) if k <= cutoff or k >= m - cutoff}, m
+
+
+def test_power_matches_the_three_figures_the_study_plan_printed_before_its_data_existed():
+    """docs/route-accuracy.md, "What this n can show" (written 13 Nov 2026, before the held-out prompts were
+    labelled): 115 disagreements find a 65:35 split with 89% and a 60:40 split with 54%; 80 find a 65:35 split
+    with 72%. Held here to the printed whole percent."""
+    assert round(100 * sign_test_power(115, 0.65)) == 89
+    assert round(100 * sign_test_power(115, 0.60)) == 54
+    assert round(100 * sign_test_power(80, 0.65)) == 72
+    assert [round(sign_test_power(115, s), 3) for s in (0.65, 0.60)] + [round(sign_test_power(80, 0.65), 3)] == [0.888, 0.54, 0.724]
+
+
+def test_power_is_a_saw_tooth_not_a_smooth_curve():
+    """At share 0.65, 114 disagreements give 0.902 and 115 give 0.888: one more disagreement, less power."""
+    assert round(sign_test_power(114, 0.65), 3) == 0.902 and round(sign_test_power(115, 0.65), 3) == 0.888
+
+
+def test_power_matches_values_computed_with_two_separate_implementations():
+    """Computed on 25 Nov 2026 by the brief's author with two separate implementations (not this one); held to
+    the four decimals printed."""
+    assert round(sign_test_power(48, 0.65), 4) == 0.4699 and round(sign_test_power(48, 0.60), 4) == 0.2146
+    assert round(paired_power(315, 115 / 315, 0.65), 4) == 0.8855
+    assert round(paired_power(100, 0.48, 0.65), 4) == 0.5018
+
+
+def test_disagreements_needed_for_80_percent_power():
+    """Same source as above: at share 0.65 the first count with 80% power is 90 and from 97 on every count has
+    it; at share 0.60 the first is 199 and from 210 on."""
+    assert discordant_needed(0.65) == (90, 97)
+    assert discordant_needed(0.60) == (199, 210)
+    first, stable = discordant_needed(0.65)
+    assert sign_test_power(first, 0.65) >= 0.8 > sign_test_power(first - 1, 0.65)
+    assert sign_test_power(stable - 1, 0.65) < 0.8 and all(sign_test_power(m, 0.65) >= 0.8 for m in range(stable, 400))
+
+
+def test_disagreements_needed_says_none_when_the_limit_does_not_reach_the_power():
+    assert discordant_needed(0.5, limit=300) == (None, None)             # no real difference: it never gets there
+    assert discordant_needed(0.60, limit=150) == (None, None)
+    first, stable = discordant_needed(0.60, limit=205)                   # reached at 199, but not yet to stay
+    assert first == 199 and stable is None
+
+
+def test_power_with_the_exact_fraction_enumeration_of_a_small_case():
+    """m = 10 disagreements, share 7/10, alpha 0.05, worked as exact fractions: the test rejects when the first
+    setting wins k <= 1 or k >= 9 of the 10 (2 * 11 / 1024 = 0.0215 < 0.05, but 2 * 56 / 1024 = 0.109 is not)."""
+    share = Fraction(7, 10)
+    want = sum(math.comb(10, k) * share ** k * (1 - share) ** (10 - k) for k in (0, 1, 9, 10))
+    assert sign_test_power(10, 0.7) == pytest.approx(float(want), abs=1e-12)
+    # by hand: 0.3**10 + 10 * 0.7 * 0.3**9 + 10 * 0.7**9 * 0.3 + 0.7**10
+    #        = 0.0000059049 + 0.0001377810 + 0.1210608210 + 0.0282475249 = 0.1494520318
+    assert float(want) == pytest.approx(0.1494520318, abs=1e-10)
+    # a rate of 1/2 over 10 rows: the number of disagreements m is Binomial(10, 1/2); weigh each m's power
+    exact = sum(Fraction(math.comb(10, m), 2 ** 10) * sum(
+        math.comb(m, k) * share ** k * (1 - share) ** (m - k) for k in range(m + 1) if sign_test(k, m - k) < 0.05)
+        for m in range(11))
+    assert paired_power(10, 0.5, 0.7) == pytest.approx(float(exact), abs=1e-12)
+
+
+def test_the_log_space_sum_matches_a_plain_sum_of_binomial_terms():
+    """For 115 disagreements the plain terms C(115, k) * 0.65**k * 0.35**(115 - k) fit a float, so they check
+    the logarithm version."""
+    plain = sum(math.comb(115, k) * 0.65 ** k * 0.35 ** (115 - k) for k in range(116) if sign_test(k, 115 - k) < 0.05)
+    assert sign_test_power(115, 0.65) == pytest.approx(plain, abs=1e-12)
+
+
+def test_thousands_of_disagreements_do_not_overflow():
+    """C(5000, 2500) is about 10**1503, far beyond a float; the log-space terms stay finite. At share 0.65 the
+    test is all but certain to reject; at 0.5 its chance is the test's size, never above alpha."""
+    assert sign_test_power(5000, 0.65) == pytest.approx(1.0, abs=1e-12)
+    assert 0.0 < sign_test_power(5000, 0.5) <= 0.05
+    assert 0.0 < paired_power(1000, 0.5, 0.55) <= 1.0                    # 0.7 s on 25 Nov 2026; n in the thousands takes seconds
+
+
+def test_power_at_the_edges():
+    assert sign_test_power(0, 0.65) == 0.0                                # nothing to test
+    assert sign_test_power(5, 0.99) == 0.0                                # five straight is p = 0.0625: it cannot reject
+    assert sign_test_power(6, 1.0) == sign_test_power(6, 0.0) == 1.0      # six straight is p = 0.03125, and it happens
+    assert paired_power(50, 0.0, 0.65) == 0.0 and paired_power(0, 0.4, 0.65) == 0.0
+    assert paired_power(115, 1.0, 0.65) == pytest.approx(sign_test_power(115, 0.65))
+
+
+def test_power_refuses_nonsense():
+    for bad in ((-1, 0.6, 0.05), (10, 1.2, 0.05), (10, -0.1, 0.05), (10, 0.6, 0.0), (10, 0.6, 1.0)):
+        with pytest.raises(ValueError):
+            sign_test_power(*bad)
+    with pytest.raises(ValueError):
+        paired_power(10, 1.5, 0.6)
+    with pytest.raises(ValueError):
+        paired_power(-1, 0.5, 0.6)
+    with pytest.raises(ValueError):
+        discordant_needed(0.6, power=0.0)
+
+
+@given(st.integers(min_value=0, max_value=400), st.floats(min_value=0.0, max_value=1.0))
+def test_power_is_a_probability_symmetric_in_the_share(m, share):
+    power = sign_test_power(m, share)
+    assert 0.0 <= power <= 1.0
+    assert power == pytest.approx(sign_test_power(m, 1 - share), abs=1e-9)
+
+
+@given(st.integers(min_value=0, max_value=400))
+def test_with_no_real_difference_the_test_rejects_at_most_alpha_of_the_time(m):
+    assert sign_test_power(m, 0.5) <= 0.05

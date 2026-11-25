@@ -6,10 +6,12 @@ Every rate here comes with its uncertainty: 1 error in 3 calls and 1,000 in
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 import statistics
 from collections import Counter
+from fractions import Fraction
 
 Z95 = 1.959963984540054  # two-sided 95%
 
@@ -97,6 +99,81 @@ def paired_difference(b: int, c: int, n: int, z: float = Z95) -> tuple[float, fl
     centre = (bb - cc) / nn
     half = z * math.sqrt((bb + cc) - (bb - cc) ** 2 / nn) / nn
     return (b - c) / n, max(-1.0, centre - half), min(1.0, centre + half)
+
+
+@functools.cache
+def _rejection_cutoff(m: int, alpha: float) -> int:
+    """The largest k for which `sign_test(k, m - k) < alpha` with k below m / 2 (the same holds for m - k);
+    -1 when no split of m disagreements is lopsided enough. One pass over the running count of fair-coin
+    sequences with at most k heads, in whole numbers: a split k rejects when 2 * that count < alpha * 2**m."""
+    limit = Fraction(alpha) * 2 ** m
+    count, running, cutoff = 1, 0, -1                       # count = C(m, k)
+    for k in range((m + 1) // 2):
+        running += count
+        if 2 * running >= limit:
+            break
+        cutoff = k
+        count = count * (m - k) // (k + 1)
+    return cutoff
+
+
+def _binomial_pmf(n: int, k: int, p: float) -> float:
+    """P(X = k) for X ~ Binomial(n, p). Computed from logarithms (`lgamma`), so n in the thousands does
+    not overflow a float; p of exactly 0 or 1 is handled apart because log(0) is undefined."""
+    if p in (0.0, 1.0):
+        return float(k == (n if p == 1.0 else 0))
+    log_pmf = (math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
+               + k * math.log(p) + (n - k) * math.log1p(-p))
+    return math.exp(log_pmf)
+
+
+def sign_test_power(discordant: int, share: float, alpha: float = 0.05) -> float:
+    """The chance that `sign_test` finds a difference, planned before the data exists.
+
+    Suppose the two settings will disagree on `discordant` rows and that each disagreement goes to the
+    first setting with probability `share` (0.65 for a 65:35 split). The result is the chance that the
+    two-sided exact test then gives p < `alpha`. It is a saw-tooth in `discordant`, not a smooth curve:
+    the test can only reject at whole counts, so one more disagreement can lower it (at share 0.65, 114
+    give 0.902 and 115 give 0.888). With no disagreements it is 0.0."""
+    if discordant < 0 or not 0 <= share <= 1 or not 0 < alpha < 1:
+        raise ValueError(f"need discordant >= 0, 0 <= share <= 1, 0 < alpha < 1; got {discordant}, {share}, {alpha}")
+    cutoff = _rejection_cutoff(discordant, alpha)
+    return min(1.0, math.fsum(_binomial_pmf(discordant, k, share) + _binomial_pmf(discordant, discordant - k, share)
+                              for k in range(cutoff + 1)))
+
+
+def discordant_needed(share: float, power: float = 0.8, alpha: float = 0.05,
+                      limit: int = 1000) -> tuple[int | None, int | None]:
+    """How many disagreements `sign_test` needs to find a `share` split with chance `power`.
+
+    Returns two numbers: the smallest count that reaches `power`, and the smallest count from which every
+    count up to `limit` does. Because the power is a saw-tooth (see `sign_test_power`), the first can be
+    followed by counts that fall short again; plan on the second. A number is None when `limit` does not
+    reach `power` (for the first, at any count; for the second, at `limit` itself)."""
+    if not 0 < power <= 1 or limit < 0:
+        raise ValueError(f"need 0 < power <= 1 and limit >= 0, got power={power}, limit={limit}")
+    powers = [sign_test_power(m, share, alpha) for m in range(limit + 1)]
+    first = next((m for m, p in enumerate(powers) if p >= power), None)
+    stable = None
+    for m in range(limit, -1, -1):
+        if powers[m] < power:
+            break
+        stable = m
+    return first, stable
+
+
+def paired_power(n: int, discordant_rate: float, share: float, alpha: float = 0.05) -> float:
+    """The chance that `sign_test` finds a difference over `n` rows, planned before the data exists.
+
+    Each row is a disagreement with probability `discordant_rate` (the settings differ on that share of
+    rows), and each disagreement goes to the first setting with probability `share`. The number of
+    disagreements is not known in advance, so this weighs `sign_test_power` at every count m by the
+    chance of m disagreements among n rows, Binomial(n, rate). It is exact, so the time grows with the
+    square of n: well under a second for n up to 1,000, seconds for n in the thousands."""
+    if n < 0 or not 0 <= discordant_rate <= 1:
+        raise ValueError(f"need n >= 0 and 0 <= discordant_rate <= 1, got n={n}, discordant_rate={discordant_rate}")
+    return min(1.0, math.fsum(_binomial_pmf(n, m, discordant_rate) * sign_test_power(m, share, alpha)
+                              for m in range(n + 1)))
 
 
 def _kappa(pairs: list[tuple[str, str]]) -> float | None:
