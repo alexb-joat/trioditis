@@ -15,8 +15,11 @@
 - `scripts/fake_ollama.py` and `scripts/rehearse_results.py` (maintainer) run `trioditis results` end to end against a stand-in server that answers like Ollama and measures nothing, from the source tree or from an installed wheel, and check the file with the collector. The stand-in has modes that misbehave (server error, wrong reply shape, missing embeddings, no Ollama API, dropping out mid-run) for the tests of what a stranger sees. The release workflow runs the wheel rehearsal after its clean-install checks.
 - `tests/test_workflows.py` guards what the README and the security model say about the workflows: every `uses:` is a full commit SHA or a local path, every workflow is read-only at the top with write scopes only where listed, no `pull_request_target`, no event or input expression inside a `run:` line, and every service image is pinned by digest.
 - A "Help measure" section in the README: the one command, what it needs, where the prompts go, what the file holds and that sharing defaults to No.
+- `route_picker.keep_alive_minutes` (optional, absent by default): after each answered picker call, an empty Ollama `/api/generate` request keeps the picker's model loaded that many minutes (1 to 1440), so the next first turn finds it warm instead of waiting for a load. The model stays in memory that long. Absent, the picker's requests are exactly as before (docs/claude-code.md, "Keeping the picker loaded"). Not yet checked on a live Ollama server.
+- `scripts/fake_ollama.py` answers `/api/ps` and an empty `/api/generate` the way Ollama does and can load slowly (`--load-delay`, `--keep-alive`, `--per-char`), so the picker's `cold`, `timeout`, `skipped` and `busy` outcomes are reproduced in `tests/test_picker_speed.py`.
 
 **Fixed**
+- The test suite no longer fails when `TRIODITIS_API_KEY` is already set in the developer's shell (21 tests answered 401 or 407).
 - `scripts/claude-t.ps1` waits up to 5 s for the router's `/health` answer (was 2 s). On a Windows CI runner it once started Claude Code direct, most likely because a cold PowerShell's first call took longer than 2 s. A router that is down still answers at once.
 
 **Changed**

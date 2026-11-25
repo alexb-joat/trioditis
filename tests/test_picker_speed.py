@@ -155,8 +155,8 @@ def socket_cfg(port: int, **picker):
         "route_picker": {"provider": "local", "model": "tiny:1b", "timeout_ms": 100, **picker}})
 
 
-@pytest.fixture
-def stand_in():
+def stand_ins():
+    """Start stand-ins on free ports with start(**make_server options); stop() ends them all."""
     servers = []
 
     def start(**kw):
@@ -166,11 +166,19 @@ def stand_in():
         servers.append((server, thread))
         return server
 
+    def stop():
+        for server, thread in servers:
+            server.shutdown()
+            server.server_close()
+            thread.join(5)
+    return start, stop
+
+
+@pytest.fixture
+def stand_in():
+    start, stop = stand_ins()
     yield start
-    for server, thread in servers:
-        server.shutdown()
-        server.server_close()
-        thread.join(5)
+    stop()
 
 
 async def test_the_stand_in_gives_cold_then_warm_then_cold_after_its_keep_alive(stand_in):

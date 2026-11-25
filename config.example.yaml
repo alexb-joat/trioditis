@@ -132,6 +132,10 @@ embeddings:
 #   max_chars: 200                 # longer prompts skip it: at 200, 2 of 20 calls on that laptop passed 2.5 s
 #   shadow_claude_code: false      # true: also classify each Claude Code session's first turn through the
 #                                  # gate, numbers only to logs/shadow.jsonl, nothing served (docs/claude-code.md)
+#   keep_alive_minutes: 30         # absent by default (Ollama's own keep-alive applies, 5 minutes). Set, each
+#                                  # picker call is followed by an empty Ollama /api/generate request that keeps
+#                                  # the model loaded this many minutes (1 to 1440). The cost: the model stays in
+#                                  # memory that long after every call (qwen2.5-coder:7b: 5.9 GB loaded on one laptop)
 
 # Reinforcement loop (optional, off unless this block is here). In this version it only measures:
 # `trioditis reinforce run --dry-run` scores "should the picker's route be served?" on your own

@@ -13,6 +13,9 @@ What it answers, the way Ollama does (shapes as the test double `Server` in test
     GET  /api/ps               {"models": [{"name", "model", "size", "digest", "expires_at", "size_vram"} ...]}
     POST /v1/chat/completions  {"choices": [{"message": {"content": "<route>"}}]}
     POST /v1/embeddings        {"data": [{"index", "embedding"} ...]}
+    POST /api/generate         an empty request only ({"model", "keep_alive"?}, no prompt): loads the model and
+                               keeps it for keep_alive ("30m", "45s", "1h" or seconds; a negative value keeps
+                               it, 0 drops it at once), as Ollama's FAQ describes; {"model", "response": "", "done": true}
 
 It binds 127.0.0.1 only, takes no other address, never logs a request body and keeps nothing on disk.
 Standard library only, so it runs wherever Python does.
@@ -82,6 +85,21 @@ def embed(text: str) -> list[float]:
     return vec
 
 
+def keep_alive_seconds(value) -> float | None:
+    """Ollama's keep_alive: a number of seconds or a duration such as "30m"; negative keeps the model
+    loaded, so it becomes infinity. None when the value is not one of those."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        seconds = float(value)
+    else:
+        m = re.fullmatch(r"(-?\d+(?:\.\d+)?)(ms|s|m|h)?", str(value).strip())
+        if not m:
+            return None
+        seconds = float(m.group(1)) * {"ms": 0.001, "s": 1, "m": 60, "h": 3600, None: 1}[m.group(2)]
+    return float("inf") if seconds < 0 else seconds
+
+
 def _loaded(m: dict, now: float) -> bool:
     """Finished loading, and a request is running or the keep-alive has not run out."""
     return m["ready"] <= now and (m["running"] > 0 or now < m["expires"])
@@ -144,10 +162,10 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(wait)
         return m
 
-    def _end(self, m: dict) -> None:
+    def _end(self, m: dict, keep_alive: float | None = None) -> None:
         with self.server.lock:
             m["running"] -= 1
-            m["expires"] = time.monotonic() + self.server.keep_alive
+            m["expires"] = time.monotonic() + (self.server.keep_alive if keep_alive is None else keep_alive)
 
     def _ps(self) -> dict:
         now, wall = time.monotonic(), datetime.now(UTC)
@@ -192,6 +210,21 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {"object": "list", "data": []})
         elif self.path == "/v1/embeddings" and mode == "no-embeddings":
             self._send(404, {"error": "model not found"})
+        elif self.path == "/api/generate" and mode == "no-api":
+            self._send(404, {"error": "not found"})
+        elif self.path == "/api/generate":
+            keep = keep_alive_seconds(body["keep_alive"]) if "keep_alive" in body else self.server.keep_alive
+            name = str(body.get("model") or "")[:100]
+            if body.get("prompt") or not name:
+                self._send(400, {"error": "the stand-in answers only an empty generate request with a model"})
+            elif keep is None:
+                self._send(400, {"error": "keep_alive must be a number of seconds or a duration such as 30m"})
+            else:
+                m = self._begin(name, self.server.load_delay)
+                self._end(m, keep)
+                with self.server.lock:
+                    self.server.keep_alive_requests.append(body.get("keep_alive"))
+                self._send(200, {"model": name, "response": "", "done": True})
         elif self.path == "/v1/chat/completions":
             messages = body.get("messages")
             text = messages[-1].get("content", "") if isinstance(messages, list) and messages and isinstance(messages[-1], dict) else ""
@@ -229,6 +262,7 @@ def make_server(port: int, mode: str = "ok", after: int = 0, *, load_delay: floa
     server.load_delay, server.keep_alive, server.per_char = load_delay, keep_alive, per_char
     server.request_count, server.lock = 0, threading.Lock()      # tests read request_count and loads
     server.models, server.loads = {}, 0                           # in memory only, like everything else here
+    server.keep_alive_requests = []                               # the keep_alive value of each empty generate
     return server
 
 

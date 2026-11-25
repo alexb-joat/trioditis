@@ -218,6 +218,7 @@ class RoutePickerClient:
         self.client = client
         self.routes = {n.lower(): n for n in cfg.routes}
         self._calls: set[asyncio.Task] = set()  # running calls: at most one (see start)
+        self._keeping: set[asyncio.Task] = set()  # keep-alive requests still in flight (see keep_alive_body)
 
     def busy(self) -> bool:
         """A call is running: another request's, or one that outlived timeout_ms and was left to
@@ -249,6 +250,31 @@ class RoutePickerClient:
                 "messages": [{"role": "system", "content": self.system()},
                              {"role": "user", "content": f"Message:\n<<<\n{text[:PICKER_TEXT_CHARS]}\n>>>\nRoute:"}]}
 
+    def keep_alive_body(self) -> dict | None:
+        """With route_picker.keep_alive_minutes: the request sent after each answered call, so the model is
+        still loaded for the next first turn. Ollama's /v1/chat/completions documents no keep_alive field;
+        its FAQ documents keep_alive on /api/generate and that an empty request (no prompt) only loads the
+        model (docs.ollama.com/faq, read 25 November 2026). The minutes are 1 or more (config.py), so this
+        never asks Ollama to unload a model. None when the setting is absent: no request is sent."""
+        minutes = self.cfg.route_picker.keep_alive_minutes
+        return None if minutes is None else {"model": self.cfg.route_picker.model, "keep_alive": f"{minutes}m"}
+
+    def _keep_loaded(self, headers: dict) -> None:
+        body = self.keep_alive_body()
+        if body is None:
+            return
+        base = self.cfg.providers[self.cfg.route_picker.provider].base_url.rstrip("/")[:-3]
+
+        async def send() -> None:
+            try:
+                await self.client.post(f"{base}/api/generate", json=body, headers=headers, timeout=PICKER_LOAD_S)
+            except Exception:  # noqa: S110 -- only keeps a model warm; a miss means the next call may be cold
+                pass
+
+        task = asyncio.ensure_future(send())
+        self._keeping.add(task)  # held, so the task is not collected half-way
+        task.add_done_callback(self._keeping.discard)
+
     def parse(self, reply: str) -> str | None:
         words = [w.strip(".,:;`'\"*") for w in reply.strip().lower().split()]
         return next((self.routes[w] for w in words if w in self.routes), None)
@@ -279,6 +305,7 @@ class RoutePickerClient:
         r = await self.client.post(f"{prov.base_url}/chat/completions", json=self.body(text), headers=headers,
                                    timeout=PICKER_LOAD_S)
         r.raise_for_status()
+        self._keep_loaded(headers)  # after the chat ended, so its time is the one that counts; never awaited
         try:
             reply = r.json()["choices"][0]["message"]["content"] or ""
         except (ValueError, KeyError, IndexError, TypeError) as e:

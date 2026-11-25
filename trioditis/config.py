@@ -101,12 +101,16 @@ class RoutePicker:
     #                         characters, 7 of 20 at 250 (docs/route-accuracy.md, "Time by prompt length")
     shadow_claude_code: bool = False  # also name a route for each Claude Code session's first turn through
     #                         the gate, logged to shadow.jsonl only: nothing is served from it (trioditis/shadow.py)
+    keep_alive_minutes: int | None = None  # after each picker call, ask Ollama to keep the model loaded this long
+    #                         (an empty /api/generate request with keep_alive); None: no such request, the
+    #                         server's own keep-alive applies (Ollama's default is 5 minutes)
     serves: bool = True     # not a config key: False only when the reinforcement loop adopted "the router
     #                         serves" (trioditis/adopted.py); the request then gets the router's own route
 
 
 PICKER_TEXT_CHARS = 4000  # how much of a prompt the picker reads: the same cut the embeddings signal makes
-ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars", "shadow_claude_code"}
+ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars", "shadow_claude_code", "keep_alive_minutes"}
+KEEP_ALIVE_MAX_MINUTES = 1440  # a day: longer is not "for a set time" any more
 
 
 @dataclass(frozen=True)
@@ -319,7 +323,8 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
         raise ConfigError("route_picker must be a mapping with provider and model, or absent (off)")
     unknown = set(raw) - ROUTE_PICKER_KEYS
     if unknown:
-        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars, shadow_claude_code")
+        raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars, shadow_claude_code, "
+                          "keep_alive_minutes")
     prov = raw.get("provider")
     if not isinstance(prov, str) or prov not in providers:
         raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
@@ -344,7 +349,14 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     shadow = raw.get("shadow_claude_code", False)
     if not isinstance(shadow, bool):
         raise ConfigError(f"route_picker.shadow_claude_code must be true or false (got {shadow!r})")
-    return RoutePicker(prov, model.strip(), timeout, max_chars, shadow)
+    keep = raw.get("keep_alive_minutes")
+    if keep is not None and (isinstance(keep, bool) or not isinstance(keep, int) or not 1 <= keep <= KEEP_ALIVE_MAX_MINUTES):
+        raise ConfigError(f"route_picker.keep_alive_minutes must be a whole number from 1 to {KEEP_ALIVE_MAX_MINUTES} "
+                          f"(minutes the picker's model stays loaded after each call), or absent; got {keep!r}")
+    if keep is not None and not providers[prov].base_url.rstrip("/").endswith("/v1"):
+        raise ConfigError(f"route_picker.keep_alive_minutes asks Ollama's /api/generate, beside a base_url that "
+                          f"ends in /v1; provider {prov}'s base_url does not, so remove the setting")
+    return RoutePicker(prov, model.strip(), timeout, max_chars, shadow, keep_alive_minutes=keep)
 
 
 def _parse_reinforce(raw) -> Reinforce | None:
