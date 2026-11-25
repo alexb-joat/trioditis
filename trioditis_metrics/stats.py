@@ -176,6 +176,77 @@ def paired_power(n: int, discordant_rate: float, share: float, alpha: float = 0.
                               for m in range(n + 1)))
 
 
+def stratum_allocation(sizes: dict, size: int) -> dict:
+    """How many of `size` rows to draw from each stratum, in proportion to the strata's sizes.
+
+    `sizes` maps each stratum (a route, say) to how many rows it has. Each stratum gets the whole part of
+    size * N_h / N; the units still left go one each to the strata with the largest remainders, ties going
+    to the name that sorts first, so the same input always gives the same answer."""
+    total = sum(sizes.values())
+    if size < 0 or size > total or any(n < 0 for n in sizes.values()):
+        raise ValueError(f"need 0 <= size <= {total} and no negative stratum size, got size={size}")
+    if total == 0:
+        return {name: 0 for name in sizes}
+    base = {name: size * n // total for name, n in sizes.items()}
+    left = size - sum(base.values())
+    by_remainder = sorted(sizes, key=lambda name: (-(size * sizes[name] % total), str(name)))
+    for name in by_remainder[:left]:
+        base[name] += 1
+    return base
+
+
+def stratified_sample(items, key, size: int, seed: int = 0) -> list:
+    """A sample of `size` items that keeps each stratum's share of the whole.
+
+    `key(item)` names an item's stratum (its route, say). Strata get their counts from `stratum_allocation`;
+    inside a stratum the items are a simple random sample without replacement, drawn with a fixed `seed`, so
+    a repeat run gives the same sample. Use it when every stratum must be present in a small sample; a plain
+    random draw of 20 from 4 routes can leave a route out. The result keeps the items' original order.
+    Raises ValueError when `size` is larger than the number of items."""
+    items = list(items)
+    members: dict = {}
+    for index, item in enumerate(items):
+        members.setdefault(key(item), []).append(index)
+    counts = stratum_allocation({name: len(ix) for name, ix in members.items()}, size)
+    rng = random.Random(seed)  # noqa: S311  (drawing a sample, not a secret)
+    chosen = [i for name in sorted(members, key=str) for i in rng.sample(members[name], counts[name])]
+    return [items[i] for i in sorted(chosen)]
+
+
+def stratified_proportion(sample: dict, population_sizes: dict, z: float = Z95) -> dict:
+    """The share of successes in the whole population, estimated from a stratified sample.
+
+    `sample` maps each stratum to its sampled outcomes (1 or 0, True or False); `population_sizes` maps each
+    stratum to how many rows it has in the whole set. The estimate is the sum of W_h * p_h: each stratum's
+    sample share p_h, weighted by the stratum's share W_h = N_h / N of the population. Its standard error is
+    sqrt(sum of W_h^2 * (1 - n_h / N_h) * s_h^2 / n_h), where s_h^2 is the sample variance of the stratum
+    (divisor n_h - 1) and the factor (1 - n_h / N_h) credits sampling without replacement from a finite
+    stratum. The 95% interval is the estimate plus and minus `z` standard errors, kept inside [0, 1].
+    A stratum with fewer than 2 sampled rows has no sample variance (one value has no spread to measure),
+    so `se`, `low` and `high` are then None and only the estimate is given."""
+    if set(sample) != set(population_sizes):
+        raise ValueError(f"the sample and the population need the same strata, got {sorted(map(str, sample))} "
+                         f"and {sorted(map(str, population_sizes))}")
+    total = sum(population_sizes.values())
+    estimate, variance, enough = 0.0, 0.0, True
+    for name, outcomes in sample.items():
+        n_h, big_n = len(outcomes), population_sizes[name]
+        if n_h == 0 or n_h > big_n or any(o not in (0, 1) for o in outcomes):
+            raise ValueError(f"stratum {name!r}: need 1 to {big_n} outcomes, each 0 or 1")
+        weight, p_h = big_n / total, sum(outcomes) / n_h
+        estimate += weight * p_h
+        if n_h < 2:
+            enough = False
+        else:
+            s2 = n_h * p_h * (1 - p_h) / (n_h - 1)                       # sample variance of 0/1 values
+            variance += weight ** 2 * (1 - n_h / big_n) * s2 / n_h
+    out = {"estimate": estimate, "se": None, "low": None, "high": None, "n": sum(map(len, sample.values()))}
+    if enough:
+        se = math.sqrt(variance)
+        out.update(se=se, low=max(0.0, estimate - z * se), high=min(1.0, estimate + z * se))
+    return out
+
+
 def _kappa(pairs: list[tuple[str, str]]) -> float | None:
     n = len(pairs)
     observed = sum(a == b for a, b in pairs) / n

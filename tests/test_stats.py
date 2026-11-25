@@ -18,6 +18,9 @@ from trioditis_metrics.stats import (
     ratio_estimate,
     sign_test,
     sign_test_power,
+    stratified_proportion,
+    stratified_sample,
+    stratum_allocation,
     wilson,
 )
 
@@ -392,3 +395,147 @@ def test_power_is_a_probability_symmetric_in_the_share(m, share):
 @given(st.integers(min_value=0, max_value=400))
 def test_with_no_real_difference_the_test_rejects_at_most_alpha_of_the_time(m):
     assert sign_test_power(m, 0.5) <= 0.05
+
+
+# ---------------------------------------------------------------- stratified sampling by route
+
+def test_allocation_by_largest_remainder_worked_by_hand():
+    """Strata of 10, 30 and 60 rows (N = 100), a sample of 7. The exact quotas are 0.7, 2.1 and 4.2, so the
+    whole parts are 0, 2 and 4 (6 rows) and the one row left goes to the largest remainder, 0.7: stratum a."""
+    assert stratum_allocation({"a": 10, "b": 30, "c": 60}, 7) == {"a": 1, "b": 2, "c": 4}
+    # Three strata of 5, a sample of 10: quotas 3.33 each, whole parts 3, 3, 3; the one row left goes to a tie, so to
+    # the name that sorts first. With two rows left (a sample of 11: quotas 3.67), the first two names take them.
+    assert stratum_allocation({"z": 5, "y": 5, "x": 5}, 10) == {"x": 4, "y": 3, "z": 3}
+    assert stratum_allocation({"z": 5, "y": 5, "x": 5}, 11) == {"x": 4, "y": 4, "z": 3}
+    assert stratum_allocation({"b": 1, "a": 1}, 1) == {"a": 1, "b": 0}
+    assert stratum_allocation({"code": 25, "reasoning": 25, "writing": 25, "quick": 25}, 20) == dict.fromkeys(
+        ("code", "reasoning", "writing", "quick"), 5)
+    assert stratum_allocation({"a": 3, "b": 4}, 0) == {"a": 0, "b": 0}
+    assert stratum_allocation({"a": 3, "b": 4}, 7) == {"a": 3, "b": 4}
+
+
+def test_allocation_refuses_a_sample_larger_than_the_population():
+    with pytest.raises(ValueError, match="size"):
+        stratum_allocation({"a": 3, "b": 4}, 8)
+    with pytest.raises(ValueError):
+        stratum_allocation({"a": 3}, -1)
+
+
+@given(st.dictionaries(st.text(min_size=1, max_size=3), st.integers(min_value=0, max_value=200), min_size=1, max_size=8),
+       st.data())
+def test_allocation_adds_up_stays_within_each_stratum_and_is_a_floor_or_a_ceiling(sizes, data):
+    total = sum(sizes.values())
+    size = data.draw(st.integers(min_value=0, max_value=total))
+    got = stratum_allocation(sizes, size)
+    assert sum(got.values()) == size and set(got) == set(sizes)
+    for name, n in sizes.items():
+        assert 0 <= got[name] <= n
+        if total:
+            assert size * n // total <= got[name] <= -(-size * n // total)
+
+
+def test_a_stratified_sample_keeps_the_allocation_and_repeats_with_its_seed():
+    items = [("code", i) for i in range(10)] + [("writing", i) for i in range(30)] + [("quick", i) for i in range(60)]
+    sample = stratified_sample(items, key=lambda item: item[0], size=7, seed=3)
+    assert len(sample) == 7 and len(set(sample)) == 7 and set(sample) <= set(items)       # a subset, no repeats
+    counts = {name: sum(item[0] == name for item in sample) for name in ("code", "writing", "quick")}
+    assert counts == stratum_allocation({"code": 10, "writing": 30, "quick": 60}, 7)       # 1, 2 and 4
+    assert sample == stratified_sample(items, key=lambda item: item[0], size=7, seed=3)    # same seed, same sample
+    assert [items.index(s) for s in sample] == sorted(items.index(s) for s in sample)      # original order kept
+    assert any(stratified_sample(items, key=lambda item: item[0], size=7, seed=s) != sample for s in range(4, 12))
+
+
+def test_a_stratified_sample_of_everything_or_nothing_and_too_many():
+    items = list(range(12))
+    assert stratified_sample(items, key=lambda x: x % 3, size=12) == items
+    assert stratified_sample(items, key=lambda x: x % 3, size=0) == []
+    with pytest.raises(ValueError):
+        stratified_sample(items, key=lambda x: x % 3, size=13)
+
+
+POPULATION = {"a": [1, 0, 0, 0], "b": [1, 1, 1, 0, 0]}        # two strata of 4 and 5 units, made up
+
+
+def exact_estimate_and_variance(samples):
+    """The stratified estimate and its estimated variance as exact fractions, from the definitions."""
+    total = sum(len(v) for v in POPULATION.values())
+    estimate, variance = Fraction(0), Fraction(0)
+    for name, outcomes in samples.items():
+        big_n, n = len(POPULATION[name]), len(outcomes)
+        mean = Fraction(sum(outcomes), n)
+        s2 = sum((x - mean) ** 2 for x in outcomes) / (n - 1)
+        estimate += Fraction(big_n, total) * mean
+        variance += Fraction(big_n, total) ** 2 * (1 - Fraction(n, big_n)) * s2 / n
+    return estimate, variance
+
+
+def test_the_stratified_estimate_and_its_variance_are_exactly_unbiased_on_a_tiny_population():
+    """Strata of 4 and 5 units, samples of 2 and 2: C(4, 2) * C(5, 2) = 60 equally likely samples. Over all of
+    them, as exact fractions: the mean estimate is the population proportion (4/9); the variance of the
+    estimates is sum of W_h^2 * (1 - n_h/N_h) * S_h^2 / n_h with the population variance S_h^2 (divisor N_h - 1);
+    and the mean of the estimated variances is that same number. Also, for each of the 60 samples the function's
+    float estimate and standard error equal the fractions'."""
+    import itertools
+    total = sum(map(len, POPULATION.values()))
+    truth = Fraction(sum(map(sum, POPULATION.values())), total)
+    assert truth == Fraction(4, 9)
+    estimates, variances = [], []
+    for take_a in itertools.combinations(POPULATION["a"], 2):
+        for take_b in itertools.combinations(POPULATION["b"], 2):
+            samples = {"a": list(take_a), "b": list(take_b)}
+            estimate, variance = exact_estimate_and_variance(samples)
+            got = stratified_proportion(samples, {k: len(v) for k, v in POPULATION.items()})
+            assert got["estimate"] == pytest.approx(float(estimate), abs=1e-12)
+            assert got["se"] == pytest.approx(math.sqrt(variance), abs=1e-12)
+            estimates.append(estimate)
+            variances.append(variance)
+    assert len(estimates) == 60
+    mean_estimate = sum(estimates) / 60
+    assert mean_estimate == truth
+    true_variance = sum(Fraction(len(POPULATION[name]), total) ** 2 * (1 - Fraction(2, len(POPULATION[name])))
+                        * population_variance(POPULATION[name]) / 2 for name in POPULATION)
+    assert sum((e - mean_estimate) ** 2 for e in estimates) / 60 == true_variance
+    assert sum(variances) / 60 == true_variance
+
+
+def population_variance(values):
+    """S^2 of a finite population: squared deviations over N - 1 (not N)."""
+    mean = Fraction(sum(values), len(values))
+    return sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+
+
+def test_the_stratified_proportion_by_hand():
+    """Two strata of 40 and 60 rows. 4 of 10 sampled in the first, 3 of 10 in the second (n_h = 10 each).
+    Estimate = 0.4 * 0.4 + 0.6 * 0.3 = 0.34. Sample variances s_h^2 = 10 * p * (1 - p) / 9 = 0.2666... and 0.2333...
+    Variance = 0.4^2 * (1 - 10/40) * 0.26667 / 10 + 0.6^2 * (1 - 10/60) * 0.23333 / 10
+             = 0.16 * 0.75 * 0.026667 + 0.36 * 0.83333 * 0.023333 = 0.0032 + 0.007 = 0.0102; se = 0.100995."""
+    out = stratified_proportion({"a": [1] * 4 + [0] * 6, "b": [1] * 3 + [0] * 7}, {"a": 40, "b": 60})
+    assert out["estimate"] == pytest.approx(0.34) and out["se"] == pytest.approx(math.sqrt(0.0102))
+    assert out["low"] == pytest.approx(0.34 - 1.959964 * 0.100995, abs=1e-5) and out["n"] == 20
+    assert out["high"] == pytest.approx(0.34 + 1.959964 * 0.100995, abs=1e-5)
+
+
+def test_the_stratified_interval_stays_inside_0_and_1_and_a_census_has_no_error():
+    out = stratified_proportion({"a": [1, 1, 1], "b": [1, 1, 0]}, {"a": 100, "b": 100})
+    assert 0.0 <= out["low"] <= out["estimate"] <= out["high"] <= 1.0
+    everything = stratified_proportion({"a": [1, 0, 0, 0], "b": [1, 1, 1, 0, 0]}, {"a": 4, "b": 5})
+    assert everything["estimate"] == pytest.approx(4 / 9) and everything["se"] == 0.0
+    hot = stratified_proportion({"a": [1] * 9 + [0], "b": [1] * 10}, {"a": 50, "b": 50})
+    assert hot["high"] == 1.0
+
+
+def test_one_sampled_row_in_a_stratum_gives_an_estimate_and_no_standard_error():
+    out = stratified_proportion({"a": [1], "b": [1, 0, 0]}, {"a": 10, "b": 10})
+    assert out["estimate"] == pytest.approx(0.5 * 1 + 0.5 * (1 / 3))
+    assert out["se"] is None and out["low"] is None and out["high"] is None
+
+
+def test_the_stratified_proportion_refuses_a_sample_that_does_not_fit_its_population():
+    with pytest.raises(ValueError, match="same strata"):
+        stratified_proportion({"a": [1, 0]}, {"a": 10, "b": 10})
+    with pytest.raises(ValueError, match="stratum 'a'"):
+        stratified_proportion({"a": []}, {"a": 10})
+    with pytest.raises(ValueError, match="stratum 'a'"):
+        stratified_proportion({"a": [1, 0, 1]}, {"a": 2})
+    with pytest.raises(ValueError, match="stratum 'a'"):
+        stratified_proportion({"a": [1, 2]}, {"a": 10})
