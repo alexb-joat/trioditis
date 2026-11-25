@@ -13,6 +13,7 @@ from trioditis_metrics.stats import (
     ewma,
     ewma_chart,
     mcnemar,
+    paired_counts,
     paired_power,
     quantile,
     ratio_estimate,
@@ -167,6 +168,34 @@ def test_cohen_kappa_at_the_edges():
     full = cohen_kappa([("a", "a"), ("b", "b")] * 10)
     assert full["kappa"] == 1.0 and full["hi"] == 1.0
     assert cohen_kappa([("a", "b"), ("b", "a")] * 10)["kappa"] == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------- the paired table
+
+def test_paired_counts_by_hand():
+    """Eight rows. First right on rows 0-4 (T T T T T F F F), second right on rows 3-6 (F F F T T T T F):
+    both right on 3 and 4 (2 rows); only the first on 0, 1, 2 (3); only the second on 5, 6 (2); both wrong on 7 (1)."""
+    first = [True] * 5 + [False] * 3
+    second = [False] * 3 + [True] * 4 + [False]
+    assert paired_counts(first, second) == {"n": 8, "both_right": 2, "only_first": 3, "only_second": 2, "both_wrong": 1}
+    assert paired_counts(second, first) == {"n": 8, "both_right": 2, "only_first": 2, "only_second": 3, "both_wrong": 1}
+    assert paired_counts([], []) == {"n": 0, "both_right": 0, "only_first": 0, "only_second": 0, "both_wrong": 0}
+    assert paired_counts(iter([True, False]), iter([True, True])) == {
+        "n": 2, "both_right": 1, "only_first": 0, "only_second": 1, "both_wrong": 0}   # any iterable of booleans
+
+
+def test_paired_counts_refuses_rows_that_do_not_line_up():
+    with pytest.raises(ValueError, match="same rows"):
+        paired_counts([True, False], [True])
+
+
+@given(st.lists(st.tuples(st.booleans(), st.booleans()), max_size=200))
+def test_paired_counts_cells_add_up_and_feed_the_tests(pairs):
+    first, second = [a for a, _ in pairs], [b for _, b in pairs]
+    t = paired_counts(first, second)
+    assert t["both_right"] + t["only_first"] + t["only_second"] + t["both_wrong"] == t["n"] == len(pairs)
+    assert t["both_right"] + t["only_first"] == sum(first) and t["both_right"] + t["only_second"] == sum(second)
+    assert mcnemar(t["only_first"], t["only_second"])["exact_p"] == sign_test(t["only_first"], t["only_second"])
 
 
 # ---------------------------------------------------------------- McNemar's test in full

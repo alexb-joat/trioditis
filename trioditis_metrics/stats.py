@@ -47,6 +47,24 @@ def sign_test(b: int, c: int) -> float:
     return min(1.0, 2 * tail / 2 ** n)
 
 
+def paired_counts(first_right, second_right) -> dict:
+    """The paired 2x2 table for two settings scored on the same rows: how often each was right, and together.
+
+    The two sequences hold one True or False per row (the same rows in the same order): was the first
+    setting right on it, was the second. The result counts the rows `both_right`, `only_first`,
+    `only_second` and `both_wrong`, and `n`. `only_first` and `only_second` are the b and c that
+    `sign_test` and `mcnemar` take; the other two cells say nothing about which setting is better.
+    Raises ValueError when the sequences differ in length, since the rows would not line up."""
+    first, second = list(first_right), list(second_right)
+    if len(first) != len(second):
+        raise ValueError(f"the two settings need the same rows, got {len(first)} and {len(second)}")
+    both = sum(x and y for x, y in zip(first, second, strict=True))
+    only_first = sum(x and not y for x, y in zip(first, second, strict=True))
+    only_second = sum(y and not x for x, y in zip(first, second, strict=True))
+    return {"n": len(first), "both_right": both, "only_first": only_first, "only_second": only_second,
+            "both_wrong": len(first) - both - only_first - only_second}
+
+
 def mcnemar(b: int, c: int) -> dict:
     """McNemar's test in its four usual forms, for two settings scored on the same rows: do they differ?
 
