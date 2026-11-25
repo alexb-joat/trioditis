@@ -167,3 +167,40 @@ def test_a_baseline_without_the_columns_is_refused(tmp_path):
     shutil.copy(REPO / "tests" / "fixtures" / "routes.csv", path)
     with pytest.raises(walk.Refused, match="prompt and model_route columns"):
         walk.build(baseline=path)
+
+
+# ---------------------------------------------------------------- the page that teaches it
+
+PAGE = REPO / "docs" / "eval-statistics.md"
+
+
+def test_the_page_holds_the_scripts_output_word_for_word(lines):
+    """docs/eval-statistics.md shows the full output in the one ```text block under "## The worked example";
+    when the script or the data change, this fails until the page is updated."""
+    page = PAGE.read_text(encoding="utf-8")
+    section = page.split("\n## The worked example\n", 1)[1].split("\n## ", 1)[0]
+    blocks = re.findall(r"^```text\n(.*?)\n```$", section, re.MULTILINE | re.DOTALL)
+    assert len(blocks) == 1
+    assert blocks[0].split("\n") == lines
+
+
+def test_the_page_has_a_section_for_each_method():
+    headings = re.findall(r"^## (.+)$", PAGE.read_text(encoding="utf-8"), re.MULTILINE)
+    for name in ("The Wilson interval", "The paired table", "McNemar's test: exact, mid-p and chi-square",
+                 "The paired difference interval", "Power, and why it is a saw-tooth", "Disagreements needed",
+                 "Stratified sampling and its estimate", "Already in place: Holm and Cohen's kappa",
+                 "The worked example", "Limits", "References"):
+        assert name in headings
+
+
+def test_every_function_the_page_names_exists():
+    import compare_results
+
+    from trioditis_metrics import stats
+
+    names = set(re.findall(r"`([a-z_]+)\(", PAGE.read_text(encoding="utf-8")))
+    assert names >= {"wilson", "paired_counts", "mcnemar", "sign_test", "paired_difference", "sign_test_power",
+                     "paired_power", "discordant_needed", "stratum_allocation", "stratified_sample",
+                     "stratified_proportion", "cohen_kappa"}
+    for name in names:
+        assert hasattr(stats, name) or hasattr(compare_results, name), name
