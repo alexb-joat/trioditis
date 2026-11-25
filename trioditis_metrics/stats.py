@@ -75,12 +75,14 @@ def mcnemar(b: int, c: int) -> dict:
     - `exact_p` is `sign_test(b, c)`. It is safe, but with few disagreements it is cautious: it rejects
       less often than its level says. Use it as the stated rule when the rule must never over-claim.
     - `mid_p` is the exact p-value minus the chance of the observed split itself (Fagerland, Lydersen and
-      Laake 2013). It is less cautious and in their trials kept its level, but that is not guaranteed.
-      Use it to see how much of the exact p-value is only caution. It is 1 when b = c.
+      Laake 2013). It is less cautious; in their 9,595 simulated designs it never went over its level,
+      but that is not guaranteed. Use it to see how much of the exact p-value is only caution. It is 1
+      when b = c.
     - `chi2` is (b - c)^2 / (b + c), looked up in a chi-square table with 1 degree of freedom (`chi2_p`).
-      It is a large-sample shortcut; with under about 25 disagreements it is not reliable.
+      It is a large-sample shortcut and the most powerful of the four; in the same study it went over its
+      level in 29% of the designs, though not by much.
     - `chi2_cc` is the same with 1 taken off |b - c| first, the "continuity correction" (`chi2_cc_p`).
-      It lands close to `exact_p`, so it is as cautious.
+      It lands close to `exact_p` and is at least as cautious.
 
     With no disagreements every p is 1.0 and both statistics are 0.0."""
     if b < 0 or c < 0:

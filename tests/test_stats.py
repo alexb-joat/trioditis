@@ -257,21 +257,21 @@ def test_mcnemar_agrees_with_an_independent_brute_force_version(b, c):
 def test_mcnemar_reproduces_the_worked_examples_of_fagerland_lydersen_and_laake():
     """Fagerland MW, Lydersen S, Laake P. The McNemar test for binary matched-pairs data: mid-p and asymptotic
     are better than exact conditional. BMC Medical Research Methodology 2013, 13:91
-    (https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-13-91, opened 25 Nov 2026).
+    (https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-13-91; full text read on 25 Nov 2026
+    from Europe PMC, PMC3716987).
     Table 1 (airway hyper-responsiveness before and after stem cell transplantation, 21 children): the two
-    disagreement cells are 1 and 7. The text prints asymptotic p = 0.034 and exact p = 0.070.
-    Table 2 (complete response before and after consolidation, 161 patients): the disagreement cells are 6 and
-    16. The text prints asymptotic p = 0.033 and exact p = 0.053.
-    "Asymptotic" is the chi-square without a correction. Table 1 and the asymptotic value of Table 2 hold to the
-    printed three decimals. The exact value of Table 2 does not: this function gives 0.052479 (2 * 110056 /
-    2**22), which prints as 0.052, one unit in the last place below the paper's 0.053. Why the paper has 0.053
-    was not checked; the test holds the value to within 0.001. The paper's text prints no mid-p for these
-    tables, so the mid-p values here are not checked against it (the paper defines mid-p as the exact p-value
-    minus half the point probability of the observed result, which is what the brute-force test above uses)."""
-    t1, t2 = mcnemar(1, 7), mcnemar(6, 16)
-    assert round(t1["chi2_p"], 3) == 0.034 and round(t1["exact_p"], 3) == 0.070
-    assert round(t2["chi2_p"], 3) == 0.033
-    assert t2["exact_p"] == pytest.approx(2 * 110056 / 2 ** 22) and abs(t2["exact_p"] - 0.053) < 1e-3
+    disagreement cells are 1 and 7. Table 2 (complete response before and after consolidation, 161 patients):
+    the disagreement cells are 6 and 16. Table 6, "P-values of five tests using data from two published
+    studies", prints four decimals for each form tested here:
+        Table 1: asymptotic 0.0339, with CC 0.0771, exact 0.0703, mid-p 0.0391
+        Table 2: asymptotic 0.0330, with CC 0.0550, exact 0.0525, mid-p 0.0347
+    ("asymptotic" is the chi-square without a correction, "w/CC" with it). The running text rounds the exact
+    p of Table 2 to 0.053; Table 6 shows it is 0.0525 (here 2 * 110056 / 2**22 = 0.052479)."""
+    printed = {(1, 7): (0.0339, 0.0771, 0.0703, 0.0391), (6, 16): (0.0330, 0.0550, 0.0525, 0.0347)}
+    for (b, c), values in printed.items():
+        m = mcnemar(b, c)
+        assert tuple(round(m[k], 4) for k in ("chi2_p", "chi2_cc_p", "exact_p", "mid_p")) == values
+    assert mcnemar(6, 16)["exact_p"] == pytest.approx(2 * 110056 / 2 ** 22)
 
 
 def test_mcnemar_with_no_disagreements_says_there_is_no_evidence():
