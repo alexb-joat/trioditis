@@ -1,0 +1,74 @@
+Route picker speed on one laptop: what it missed, and what a longer keep-alive would have changed, 25 November 2026
+Picker qwen2.5-coder:7b (instruction 1) on Ollama 0.40.0; 14.9 GiB memory (Ollama's "system memory" log line, 141 of 141 loads).
+Data: the shadow log (Claude Code first turns through the gate, classified, never served) and the decision log, 20-25 Nov 2026,
+read on 25 Nov 2026; Ollama's own log of model loads since 21 Nov 2026. Aggregates only: counts, quantiles and dates.
+
+Before: what the picker did, measured from the logs
+  All lines, 20-25 Nov (trioditis eval-routes --log, 25 Nov; n = 131, 130 of them shadow lines):
+    cold 50, chose 38, skipped 29, timeout 8, busy 6
+    asked 96 times, named a route: 38/96 = 39.6% (95% interval 30.4-49.6%)
+    not counting cold starts: 38/46 = 82.6% (95% interval 69.3-90.9%)   <- the log's own "Not counting cold starts" figure
+    time to answer where it chose in time: median 2.11 s, 95th percentile 4.11 s (n = 38)
+  Since the restart on 23 Nov that set timeout_ms 5000 and max_chars 500 (shadow lines, n = 110, 23-25 Nov):
+    cold     47/110 = 42.7% (95% interval 33.9-52.1%)
+    chose    36/110 = 32.7% (95% interval 24.7-41.9%)   <- the baseline: first turns that got the picker's route in time
+    skipped  17/110 = 15.5% (95% interval 9.9-23.4%): 15 over 500 characters, 2 with no text
+    busy      6/110 = 5.5% (95% interval 2.5-11.4%)
+    timeout   4/110 = 3.6% (95% interval 1.4-9.0%)
+    not counting cold starts: 36/40 = 90.0% (95% interval 76.9-96.0%)
+    late answers after a cold start (the call left to finish): median 16.0 s from the call's start, quartiles 13.1 s
+      and 19.2 s, 90th percentile 22.3 s, longest 25.3 s (n = 47); none of them was in time
+  Before that restart (timeout_ms 2500, max_chars 200; shadow lines, n = 20, 21-23 Nov): skipped 12, timeout 4, cold 3, chose 1
+    (chose 1/20 = 5.0%, 95% interval 0.9-23.6%); 9 of the 12 skips were prompts of 201-500 characters.
+  Skipped prompts, all 130 shadow lines: 29 (4 with no text, 9 at 201-500 characters under the 200 limit, 16 over 500;
+    12 of those 16 were 11,681-23,450 characters long).
+  Prompt length, all 130 shadow lines: median 202 characters, quartiles 42 and 464, 90th percentile 938, longest 23,450.
+  Loads of the picker's model in Ollama's log, 21-25 Nov: 66 (per day 4, 3, 12, 24, 23); load time median 12.96 s,
+    90th percentile 18.22 s. Each load is longer than timeout_ms (5 s), so a first turn that finds the model unloaded
+    is counted cold.
+  Why it was unloaded: no cold first turn since the 23 Nov restart had a picker call or a load of its model in the
+    5 minutes before it (0/47, 95% interval 0.0-7.6%). Five minutes is Ollama's default keep-alive, and on 25 Nov
+    /api/ps listed the loaded model with an expiry 5 minutes after the call that had just used it. So that timer
+    alone explains every cold turn; none needs another cause, such as another model pushing it out.
+
+After: an estimate, not measured
+  Replay of the logged times with a keep-alive of K minutes after each call (route_picker.keep_alive_minutes: K).
+  Cold first turns since the 23 Nov restart that would have found the model loaded (n = 47):
+    K = 15: 15/47 = 31.9% (95% interval 20.4-46.2%)
+    K = 30: 26/47 = 55.3% (95% interval 41.2-68.6%)
+    K = 60: 35/47 = 74.5% (95% interval 60.5-84.7%)
+  Hours the model would have stayed loaded (5.9 GB in memory, the size Ollama's /api/ps listed on 25 Nov):
+              23 Nov (from the restart, 13.1 h)   24 Nov (24.0 h)   25 Nov (21.4 h logged)
+    K =  5     0.8 h                                2.8 h             2.2 h     <- today's default, from the same replay
+    K = 15     2.1 h                                6.0 h             5.1 h
+    K = 30     3.7 h                                9.1 h             7.0 h
+    K = 60     6.3 h                               12.3 h             8.4 h
+  If a first turn that found the model loaded did as well as the warm turns did (36/40 in time), first turns with the
+  picker's route in time would go from 36/110 (32.7%) to about 49 (45%) at K = 15, 59 (54%) at K = 30 and 68 (61%)
+  at K = 60. That stacks a second assumption on the replay, so it gets no interval.
+  What the code does, shown on the stand-in (tests/test_picker_keep_alive.py; its times measure nothing): without
+  the setting, a second call after the server's idle time is cold; with it, the same call is warm and the server
+  loaded the model once.
+  This after is not measured. A measured after needs the setting on the live router and a few days of shadow lines,
+  which eval-routes --log now splits by the limits in force.
+
+Method
+  Counts: trioditis eval-routes --log on copies of the two logs, and a short script over the same copies that
+  splits the shadow lines by the restart on 23 Nov (the service journal dates it; the miss times confirm it: every
+  cold or timeout line before it ended at 2.50-2.52 s, every one after at 5.00-5.02 s). Shares carry a Wilson 95%
+  interval (trioditis_metrics.stats.wilson). Ollama loads are its "starting llama-server" line for the picker's
+  model file and the "llama-server started in" line that follows.
+  Replay: a moment of use is a load of the picker's model in Ollama's log, or a shadow or decision line whose
+  picker was asked (written when the call ended). A cold first turn's call started at the line's time minus its
+  late answer's duration. It counts as warm at K minutes when some moment of use lies in the K minutes before that
+  start. Hours loaded are the union of the K-minute windows after each moment of use, cut at midnight.
+
+Limits
+  One laptop, one model (qwen2.5-coder:7b), one Ollama version, one person's sessions over 20-25 Nov; the counts
+  are small (n = 47 cold turns), as the intervals show. The replay assumes the same traffic with the setting on,
+  that each call restarts the model's timer (the FAQ's reading, not checked here), that nothing else unloads the
+  model (another model's load could, on a machine this full), and that the embeddings model loads on its own
+  (nomic-embed-text, 72 loads of its own in the same days, not counted). Uses of the model that wrote no line (a
+  warm call from another program) are invisible to it, so it can only undercount warm turns and hours loaded.
+  The 5-minute row comes from the same replay, not from Ollama. A measured after waits for the live check: the
+  setting on the live router, then a fresh eval-routes --log.
