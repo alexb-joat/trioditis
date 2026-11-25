@@ -197,17 +197,32 @@ async def server_facts(client: httpx.AsyncClient, cfg: Config) -> dict:
     return facts
 
 
+def _is_chat_completion(r: httpx.Response) -> bool:
+    try:
+        r.json()["choices"][0]["message"]["content"]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return False
+    return True
+
+
 async def _first_call(client: httpx.AsyncClient, cfg: Config, picker: RoutePickerClient) -> None:
     url = f"{cfg.providers[PROVIDER].base_url}/chat/completions"
+    model = cfg.route_picker.model
     try:
         r = await client.post(url, json=picker.body("Hello, how are you today?"), timeout=FIRST_CALL_S)
         r.raise_for_status()
     except httpx.HTTPStatusError as err:
-        raise MeasureError(f"{url} answered HTTP {err.response.status_code} for model {cfg.route_picker.model!r}. "
-                           f"Is it pulled? Run: ollama pull {cfg.route_picker.model}") from None
+        code = err.response.status_code
+        if code == 404:
+            raise MeasureError(f"{url} answered HTTP 404 for model {model!r}. Is it pulled? Run: ollama pull {model}") from None
+        raise MeasureError(f"{url} answered HTTP {code} for model {model!r}: the server could not run it. Read the "
+                           "server's own log for the reason, or try another model with --model") from None
     except httpx.HTTPError as err:
         raise MeasureError(f"no answer from {url} ({type(err).__name__}). Start the server (for Ollama: ollama serve) "
                            "or pass its address with --base-url") from None
+    if not _is_chat_completion(r):  # else every prompt would count as "named no route" in a file that looks like a measurement
+        raise MeasureError(f"{url} answered HTTP 200 but not with a chat completion. Is --base-url an OpenAI-style "
+                           "server (for Ollama: http://localhost:11434/v1)?")
 
 
 async def time_picker(client: httpx.AsyncClient, cfg: Config, picker: RoutePickerClient,
@@ -251,6 +266,16 @@ async def pick_all(picker: RoutePickerClient, prompts: list[str], clock: Callabl
         if i % 25 == 0 or i == len(prompts):
             say(f"  {label} {i}/{len(prompts)}")
     return picked, {"no_route": no_route, "failed_after_retry": failed, "seconds_per_call": _seconds(seconds)}
+
+
+def require_answered(calls: dict, n: int, what: str) -> None:
+    """Stops a run whose picker calls mostly failed: counted as wrong, they would make a file that looks like a
+    measurement of the model and is one of the server dropping out. (More than half is my line, not a standard.)"""
+    failed = calls["failed_after_retry"]
+    if 2 * failed > n:
+        raise MeasureError(f"{failed} of {n} picker calls on {what} failed even after a retry, so these numbers would not "
+                           "measure the picker. Nothing was written and nothing is offered for sharing. The server "
+                           "probably stopped answering: check that it is still running, then run this again")
 
 
 async def route_all(cfg: Config, prompts: list[str], embedder) -> list[str]:
@@ -298,6 +323,7 @@ async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, tra
         prompts = [r.prompt for r in heldout]
         say(f"the picker on {len(prompts)} held-out prompts")
         picked, calls = await pick_all(picker, prompts, clock, say, "picker")
+        require_answered(calls, len(prompts), "the held-out prompts")
         keywords = await route_all(cfg, prompts, None)
         say(f"the router with {cfg.embeddings.model}")
         embedder, note = await embedder_or_reason(cfg, client, prompts + [r.prompt for r in own or []])
@@ -317,6 +343,7 @@ async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, tra
             say(f"your {len(own)} labelled prompts")
             own_prompts = [r.prompt for r in own]
             own_picked, own_calls = await pick_all(picker, own_prompts, clock, say, "your prompts")
+            require_answered(own_calls, len(own_prompts), "your prompts")
             own_routed = await route_all(cfg, own_prompts, memo)
             result_own = {"n": len(own),
                           "picker": {**score(routes, own, own_picked), "no_route": own_calls["no_route"],
@@ -378,6 +405,13 @@ def summary(doc: dict) -> list[str]:
            "Picker waiting time on this machine, warm (seconds: median / slowest)"]
     out += [f"  {t['chars']:>5} characters  " + (f"{t['median']:.2f} / {t['max']:.2f}  (n = {t['n']})" if t["n"] else "no successful call")
             for t in doc["timing"]["by_chars"]]
+    timing_calls = doc["timing"]["repeats"] * len(doc["timing"]["by_chars"])
+    dropped = [f"{k} of {n} {what}" for k, n, what in
+               ((h["picker"]["failed_after_retry"], h["n"], "picker calls on the held-out set failed even after a retry "
+                                                           "and count as wrong"),
+                (doc["timing"]["failed"], timing_calls, "timing calls failed and are left out of the times")) if k]
+    if dropped:
+        out.append("Note: " + "; ".join(dropped) + " (the server dropped or refused them)")
     if doc["own_labels"]:
         o = doc["own_labels"]
         out.append(f"Your labelled prompts, {o['n']}: picker {o['picker']['right']}, router {o['router']['right']} right "
@@ -416,12 +450,17 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
         cfg = measured_config(args.model, args.base_url)
         labels = heldout_path()
         heldout = read_labels(labels, cfg.routes)
+        if args.own_labels and not Path(args.own_labels).is_file():  # read_labels would name `--labels`, a flag of eval-routes
+            raise MeasureError(f"--own-labels {args.own_labels} is not a file; pass a CSV with the columns "
+                               "prompt and expected_route")
         own = read_labels(args.own_labels, cfg.routes) if args.own_labels else None
     except (MeasureError, LabelsError) as err:
         sys.exit(f"results: {err}" + (" (your labels must use the shipped routes)" if isinstance(err, LabelsError) and args.own_labels else ""))
     out = Path(args.out)
+    if out.is_dir():  # found out now, not after a run of an hour or more
+        sys.exit(f"results: --out {args.out} is a folder; give it a file name")
     if not out.resolve().parent.is_dir():
-        sys.exit(f"results: cannot write --out {args.out}: its folder does not exist")
+        sys.exit(f"results: cannot write --out {args.out}: its folder does not exist; create it or pass another --out")
     try:
         measured = asyncio.run(measure(cfg, heldout, own, transport=transport))
     except MeasureError as err:
@@ -430,8 +469,10 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
     text = json.dumps(doc, indent=2) + "\n"
     try:
         out.write_text(text, encoding="utf-8")
-    except OSError as err:
-        sys.exit(f"results: cannot write --out {args.out}: {err.strerror or err}")
+    except OSError as err:  # the run may have taken hours: the numbers go to the screen before the error
+        print(text, end="")
+        sys.exit(f"results: cannot write --out {args.out}: {err.strerror or err}. The whole file is printed above; "
+                 "copy it before you close this window")
     print(text, end="")
     print("\n".join(summary(doc)))
     print(f"Wrote {args.out}: the whole file is printed above.")

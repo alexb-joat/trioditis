@@ -5,6 +5,8 @@ The stand-in's numbers measure nothing; these tests check that the pieces fit, n
 
 from __future__ import annotations
 
+import contextlib
+import json
 import subprocess
 import sys
 import threading
@@ -145,6 +147,130 @@ def test_a_failed_rehearsal_says_so_and_exits_1(capsys, tmp_path):
     code = rehearse_results.main(["--python", str(tmp_path / "no-such-python"), "--source-tree"])
     assert code == 1
     assert "results rehearsal FAILED" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- what a stranger meets, over real sockets
+
+@contextlib.contextmanager
+def serving(mode: str = "ok", after: int = 0):
+    server = fake_ollama.make_server(0, mode, after)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
+
+
+def results_cli(tmp_path: Path, port: int, *extra: str, out: Path | None = None):
+    """`python -m trioditis results` as a person runs it: its own process, its own environment, real sockets."""
+    out = out or tmp_path / "r.json"
+    proc = subprocess.run([sys.executable, "-m", "trioditis", "results", "--no-share", "--model", "tiny:1b",
+                           "--base-url", f"http://127.0.0.1:{port}/v1", "--out", str(out), *extra],
+                          cwd=REPO, env=rehearse_results.child_env(tmp_path), capture_output=True, text=True,
+                          timeout=300, check=False)
+    return proc, out
+
+
+def clean_failure(proc, out: Path, *words: str) -> str:
+    """Exit 1, no traceback, no results file, and a last line that starts `results:` and holds each word."""
+    assert proc.returncode == 1, proc.stdout[-500:] + proc.stderr[-500:]
+    assert "Traceback" not in proc.stderr + proc.stdout
+    assert not out.exists()
+    last = [ln for ln in proc.stderr.splitlines() if ln.strip()][-1]
+    assert last.startswith("results: ")
+    for word in words:
+        assert word in last, (word, last)
+    return last
+
+
+def test_nothing_listening_says_to_start_the_server_or_pass_its_address(tmp_path):
+    proc, out = results_cli(tmp_path, rehearse_results.free_port())
+    clean_failure(proc, out, "no answer from", "ollama serve", "--base-url")
+
+
+def test_a_server_error_for_the_picker_model_is_not_blamed_on_a_missing_pull(tmp_path):
+    with serving("chat-500") as server:
+        proc, out = results_cli(tmp_path, server.server_address[1])
+    last = clean_failure(proc, out, "HTTP 500", "server's own log", "--model")
+    assert "ollama pull" not in last
+
+
+@pytest.mark.parametrize("mode", ["chat-not-json", "chat-wrong-shape"])
+def test_a_200_that_is_not_a_chat_completion_stops_the_run_before_any_timing(tmp_path, mode):
+    with serving(mode) as server:
+        proc, out = results_cli(tmp_path, server.server_address[1])
+        calls = server.request_count
+    clean_failure(proc, out, "HTTP 200 but not with a chat completion", "OpenAI-style", "--base-url")
+    assert calls == 3 and "timing the picker" not in proc.stderr       # version, tags, the first call: nothing more
+
+
+def test_a_server_that_hangs_up_on_the_first_call_is_a_no_answer(tmp_path):
+    with serving("close-after", after=2) as server:                      # /api/version and /api/tags, then silence
+        proc, out = results_cli(tmp_path, server.server_address[1])
+    clean_failure(proc, out, "no answer from", "ollama serve")
+
+
+def test_a_server_that_drops_out_mid_run_is_not_a_measurement_and_is_not_offered_for_sharing(tmp_path):
+    with serving("close-after", after=25) as server:                      # 3 setup calls, 15 timing calls, 7 prompts, then silence
+        proc, out = results_cli(tmp_path, server.server_address[1])
+    clean_failure(proc, out, "308 of 315 picker calls", "failed even after a retry", "Nothing was written",
+                  "nothing is offered for sharing", "still running")
+
+
+def test_without_the_embeddings_model_the_run_says_so_and_the_picker_still_counts(tmp_path):
+    with serving("no-embeddings") as server:
+        proc, out = results_cli(tmp_path, server.server_address[1])
+    assert proc.returncode == 0 and "Traceback" not in proc.stderr
+    doc = json.loads(out.read_text(encoding="utf-8"))
+    assert doc["heldout"]["router"] is None and "ollama pull nomic-embed-text" in doc["heldout"]["router_note"]
+    assert "not graded: nomic-embed-text did not answer" in proc.stdout and doc["heldout"]["picker"]["n"] == 315
+
+
+def test_a_server_without_ollamas_api_still_runs_and_the_file_says_the_server_is_unknown(tmp_path):
+    with serving("no-api") as server:
+        proc, out = results_cli(tmp_path, server.server_address[1])
+    assert proc.returncode == 0 and "Traceback" not in proc.stderr
+    models = json.loads(out.read_text(encoding="utf-8"))["models"]
+    assert models["server"] is None and models["picker_digest"] is None and models["embeddings_digest"] is None
+
+
+def test_an_out_folder_that_does_not_exist_is_found_before_the_first_call(tmp_path):
+    with serving() as server:
+        proc, out = results_cli(tmp_path, server.server_address[1], out=tmp_path / "no-such-folder" / "r.json")
+        calls = server.request_count
+    clean_failure(proc, out, "its folder does not exist", "--out", "create it or pass another")
+    assert calls == 0
+
+
+def test_an_out_that_is_a_folder_is_found_before_the_first_call(tmp_path):
+    with serving() as server:
+        proc, _ = results_cli(tmp_path, server.server_address[1], out=tmp_path)
+        calls = server.request_count
+    clean_failure(proc, tmp_path / "never-written.json", "is a folder", "file name")
+    assert calls == 0
+
+
+@pytest.mark.parametrize("name", ["missing.csv", ""])
+def test_own_labels_that_are_not_a_file_name_the_right_flag(tmp_path, name):
+    path = tmp_path / name                                               # "" is the folder itself
+    with serving() as server:
+        proc, out = results_cli(tmp_path, server.server_address[1], "--own-labels", str(path))
+        calls = server.request_count
+    last = clean_failure(proc, out, "--own-labels", "is not a file", "prompt and expected_route")
+    assert "--labels FILE" not in last and calls == 0
+
+
+def test_own_labels_with_other_route_names_say_which_routes_exist(tmp_path):
+    labels = tmp_path / "mine.csv"
+    labels.write_text("prompt,expected_route\nplease debug this,coding\nwrite a poem,poetry\n", encoding="utf-8")
+    with serving() as server:
+        proc, out = results_cli(tmp_path, server.server_address[1], "--own-labels", str(labels))
+        calls = server.request_count
+    last = clean_failure(proc, out, "'coding' is not a route", "code, reasoning, writing, quick", "shipped routes")
+    assert "(did you mean 'code'?)" in last and calls == 0
 
 
 def test_the_two_modes_are_exclusive_and_one_is_required():

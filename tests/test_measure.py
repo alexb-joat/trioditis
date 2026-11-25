@@ -6,14 +6,19 @@ from __future__ import annotations
 import csv
 import json
 import re
+import sys
+from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
 import pytest
 
-from trioditis import measure
-from trioditis.hardware import GPU, Hardware
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+import collect_results as cr  # noqa: E402
+
+from trioditis import measure  # noqa: E402
+from trioditis.hardware import GPU, Hardware  # noqa: E402
 
 MARKER = "ZQX-MARKER-7731"
 HOST = "workstation-of-someone"
@@ -30,10 +35,11 @@ def fake_hardware() -> Hardware:
 class Server:
     """A local Ollama stand-in that remembers every request it got."""
 
-    def __init__(self, *, chat_status: int = 200, embeddings: bool = True, reply=None):
+    def __init__(self, *, chat_status: int = 200, embeddings: bool = True, reply=None, fail_chat=None):
         self.requests: list[httpx.Request] = []
         self.chat_status, self.embeddings = chat_status, embeddings
         self.reply = reply or (lambda text: "writing" if "write" in text.lower() else "code")
+        self.fail_chat, self.chat_calls = fail_chat, 0   # fail_chat(n): the n-th chat call is dropped (n starts at 1)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
@@ -44,6 +50,9 @@ class Server:
             return httpx.Response(200, json={"models": [{"name": "tiny:1b", "digest": PICKER_DIGEST},
                                                         {"name": "nomic-embed-text:latest", "digest": EMBEDDINGS_DIGEST}]})
         if path == "/v1/chat/completions":
+            self.chat_calls += 1
+            if self.fail_chat and self.fail_chat(self.chat_calls):
+                raise httpx.ReadError("the server dropped the call", request=request)
             if self.chat_status != 200:
                 return httpx.Response(self.chat_status, json={"error": "model not found"})
             text = json.loads(request.content)["messages"][1]["content"]
@@ -156,6 +165,66 @@ def test_a_reply_with_no_route_counts_as_wrong(tmp_path):
     run(tmp_path, Server(reply=lambda text: "I am not sure"))
     p = json.loads((tmp_path / "trioditis-results.json").read_text(encoding="utf-8"))["heldout"]["picker"]
     assert p["right"] == 0 and p["no_route"] == 315
+
+
+def test_picker_calls_that_mostly_fail_make_no_file_and_no_offer_to_share(tmp_path, capsys):
+    """A server that drops out leaves 'failed, counted as wrong' calls: not a measurement of the model."""
+    server = Server(fail_chat=lambda n: n > 100)          # 1 first call + 15 timing calls + 84 prompts, then nothing
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, server, answer="y", tty=True)
+    assert "of 315 picker calls on the held-out prompts failed even after a retry" in str(e.value)
+    assert "Nothing was written" in str(e.value) and "nothing is offered for sharing" in str(e.value)
+    assert not (tmp_path / "trioditis-results.json").exists()
+    assert "[y/N]" not in capsys.readouterr().out
+
+
+def test_exactly_half_failed_is_still_a_run_and_one_more_is_not(tmp_path):
+    setup = 1 + 15                                         # the first call and the 15 timing calls come first
+    half = 315 // 2                                        # 157 prompts fail on both tries: 2 x 157 < 315 is not "more than half"
+    run(tmp_path, Server(fail_chat=lambda n: setup < n <= setup + 2 * half))
+    doc = json.loads((tmp_path / "trioditis-results.json").read_text(encoding="utf-8"))
+    assert doc["heldout"]["picker"]["failed_after_retry"] == half
+    with pytest.raises(SystemExit):                        # 158 of 315 is more than half
+        run(tmp_path, Server(fail_chat=lambda n: setup < n <= setup + 2 * (half + 1)))
+
+
+def test_a_few_failed_calls_are_said_plainly_and_the_file_still_passes_the_collector(tmp_path, capsys):
+    run(tmp_path, Server(fail_chat=lambda n: n in (100, 101)))   # one prompt fails, and so does its retry
+    out = capsys.readouterr().out
+    assert "Note: 1 of 315 picker calls on the held-out set failed even after a retry and count as wrong" in out
+    text = (tmp_path / "trioditis-results.json").read_text(encoding="utf-8")
+    assert json.loads(text)["heldout"]["picker"]["failed_after_retry"] == 1
+    assert cr.check(cr.parse(text))["picker_failed"] == 1
+
+
+def test_timing_calls_that_failed_are_said_too(tmp_path, capsys):
+    run(tmp_path, Server(fail_chat=lambda n: n == 5))        # a timing call: no retry, left out of the times
+    assert "1 of 15 timing calls failed and are left out of the times" in capsys.readouterr().out
+
+
+def test_a_run_with_no_failed_call_prints_no_note(tmp_path, capsys):
+    run(tmp_path, Server())
+    assert "Note:" not in capsys.readouterr().out
+
+
+def test_the_numbers_are_printed_before_the_error_when_the_file_cannot_be_written(tmp_path, monkeypatch, capsys):
+    def refuse(self, *a, **k):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(measure.Path, "write_text", refuse)
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, Server())
+    printed = capsys.readouterr().out
+    assert json.loads(printed.split("\nHeld-out set")[0])["schema"] == "trioditis-results.v1"   # the whole file, on screen
+    assert "cannot write --out" in str(e.value) and "Permission denied" in str(e.value) and "printed above" in str(e.value)
+
+
+@pytest.mark.parametrize("body, ok", [({"choices": [{"message": {"content": "code"}}]}, True),
+                                      ({"choices": [{"message": {"content": None}}]}, True),
+                                      ({"choices": []}, False), ({"object": "list"}, False), ([], False),
+                                      ({"choices": [{"text": "code"}]}, False)])
+def test_what_counts_as_a_chat_completion(body, ok):
+    assert measure._is_chat_completion(httpx.Response(200, json=body)) is ok
+    assert measure._is_chat_completion(httpx.Response(200, text="<html>no</html>")) is False
 
 
 @pytest.mark.parametrize("answer", ["", "n", "no", "  ", "maybe"])
