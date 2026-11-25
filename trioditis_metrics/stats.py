@@ -45,6 +45,41 @@ def sign_test(b: int, c: int) -> float:
     return min(1.0, 2 * tail / 2 ** n)
 
 
+def mcnemar(b: int, c: int) -> dict:
+    """McNemar's test in its four usual forms, for two settings scored on the same rows: do they differ?
+
+    `b` rows went right under the first setting only, `c` under the second only (the same counts
+    `sign_test` takes). Only these disagreements matter. Each form gives a p-value; the smaller it is, the
+    less a fair coin would split the disagreements this unevenly.
+
+    - `exact_p` is `sign_test(b, c)`. It is safe, but with few disagreements it is cautious: it rejects
+      less often than its level says. Use it as the stated rule when the rule must never over-claim.
+    - `mid_p` is the exact p-value minus the chance of the observed split itself (Fagerland, Lydersen and
+      Laake 2013). It is less cautious and in their trials kept its level, but that is not guaranteed.
+      Use it to see how much of the exact p-value is only caution. It is 1 when b = c.
+    - `chi2` is (b - c)^2 / (b + c), looked up in a chi-square table with 1 degree of freedom (`chi2_p`).
+      It is a large-sample shortcut; with under about 25 disagreements it is not reliable.
+    - `chi2_cc` is the same with 1 taken off |b - c| first, the "continuity correction" (`chi2_cc_p`).
+      It lands close to `exact_p`, so it is as cautious.
+
+    With no disagreements every p is 1.0 and both statistics are 0.0."""
+    if b < 0 or c < 0:
+        raise ValueError(f"need b >= 0 and c >= 0, got b={b}, c={c}")
+    m = b + c
+    out = {"b": b, "c": c, "discordant": m, "exact_p": sign_test(b, c), "mid_p": 1.0,
+           "chi2": 0.0, "chi2_p": 1.0, "chi2_cc": 0.0, "chi2_cc_p": 1.0}
+    if m == 0:
+        return out
+    low = min(b, c)
+    tail = sum(math.comb(m, i) for i in range(low + 1))                 # P(X <= low) times 2**m
+    out["mid_p"] = (2 * tail - math.comb(m, low)) / 2 ** m             # 2 * (P(X <= low) - P(X = low) / 2)
+    out["chi2"] = (b - c) ** 2 / m
+    out["chi2_cc"] = max(0, abs(b - c) - 1) ** 2 / m
+    out["chi2_p"] = math.erfc(math.sqrt(out["chi2"] / 2))              # chi-square, 1 df: P(Z^2 >= x)
+    out["chi2_cc_p"] = math.erfc(math.sqrt(out["chi2_cc"] / 2))
+    return out
+
+
 def paired_difference(b: int, c: int, n: int, z: float = Z95) -> tuple[float, float, float] | None:
     """(difference, low, high) for two settings scored on the same n rows: the first setting's share
     right minus the second's, as a fraction, with its interval.

@@ -1,6 +1,21 @@
-import pytest
+import math
+from fractions import Fraction
 
-from trioditis_metrics.stats import beta_mean, cohen_kappa, ewma, ewma_chart, quantile, ratio_estimate, sign_test, wilson
+import pytest
+from hypothesis import given
+from hypothesis import strategies as st
+
+from trioditis_metrics.stats import (
+    beta_mean,
+    cohen_kappa,
+    ewma,
+    ewma_chart,
+    mcnemar,
+    quantile,
+    ratio_estimate,
+    sign_test,
+    wilson,
+)
 
 
 def test_wilson_matches_published_values():
@@ -145,3 +160,115 @@ def test_cohen_kappa_at_the_edges():
     full = cohen_kappa([("a", "a"), ("b", "b")] * 10)
     assert full["kappa"] == 1.0 and full["hi"] == 1.0
     assert cohen_kappa([("a", "b"), ("b", "a")] * 10)["kappa"] == pytest.approx(-1.0)
+
+
+# ---------------------------------------------------------------- McNemar's test in full
+
+def binomial_half_pmf(m: int) -> list[Fraction]:
+    """P(X = i) for X ~ Binomial(m, 1/2), i = 0..m, built from the ratio of neighbours (the recurrence
+    P(i + 1) = P(i) * (m - i) / (i + 1)), so it shares no code with `math.comb`."""
+    pmf = [Fraction(1, 2 ** m)]
+    for i in range(m):
+        pmf.append(pmf[-1] * (m - i) / (i + 1))
+    return pmf
+
+
+def chi2_1df_tail(x: float) -> float:
+    """P(chi-square with 1 degree of freedom >= x), from the power series of the regularised incomplete gamma
+    function, P(1/2, y) = y^(1/2) e^-y / Gamma(3/2) * sum_k y^k / ((3/2)(5/2)...(3/2 + k - 1)), with y = x / 2.
+    It uses neither `math.erfc` nor `math.erf`, which is what `mcnemar` uses."""
+    y = x / 2
+    term, total = 1.0, 1.0
+    for k in range(1, 400):
+        term *= y / (1.5 + k - 1)
+        total += term
+    return 1 - math.sqrt(y) * math.exp(-y) / (math.sqrt(math.pi) / 2) * total
+
+
+def test_mcnemar_matches_hand_values_for_20_against_28():
+    """b = 20 rows only the first setting got right, c = 28 only the second (m = 48 disagreements).
+    Derived on 25 Nov 2026 from the definitions, then compared with the function:
+      exact  = 2 * P(X <= 20) for X ~ Binomial(48, 1/2)            = 0.312327
+      mid-p  = exact - P(X = 20)    (b != c)                        = 0.252870
+      chi2   = (20 - 28)^2 / 48 = 64 / 48                           = 1.333333, p = erfc(sqrt(1.333333 / 2)) = 0.248213
+      chi2cc = (|20 - 28| - 1)^2 / 48 = 49 / 48                     = 1.020833, p = erfc(sqrt(1.020833 / 2)) = 0.312321
+    The two chi-square p-values are checked a second way below, by a power series that does not use erfc."""
+    out = mcnemar(20, 28)
+    assert (out["b"], out["c"], out["discordant"]) == (20, 28, 48)
+    assert out["exact_p"] == pytest.approx(0.312327, abs=5e-7)
+    assert out["mid_p"] == pytest.approx(0.252870, abs=5e-7)
+    assert out["chi2"] == pytest.approx(64 / 48) and out["chi2_p"] == pytest.approx(0.248213, abs=5e-7)
+    assert out["chi2_cc"] == pytest.approx(49 / 48) and out["chi2_cc_p"] == pytest.approx(0.312321, abs=5e-7)
+    assert list(out) == ["b", "c", "discordant", "exact_p", "mid_p", "chi2", "chi2_p", "chi2_cc", "chi2_cc_p"]
+
+
+@pytest.mark.parametrize("b, c", [(20, 28), (1, 7), (6, 16), (0, 5), (3, 3), (40, 90)])
+def test_mcnemar_agrees_with_an_independent_brute_force_version(b, c):
+    """Exact and mid-p again, from exact fractions of the Binomial(m, 1/2) probabilities; the chi-square
+    p-values again, from a power series. Equal to 12 decimals."""
+    m, low = b + c, min(b, c)
+    pmf = binomial_half_pmf(m)
+    tail = sum(pmf[: low + 1])
+    exact, mid = min(Fraction(1), 2 * tail), 2 * (tail - pmf[low] / 2)
+    out = mcnemar(b, c)
+    assert out["exact_p"] == pytest.approx(float(exact), abs=1e-12)
+    assert out["mid_p"] == pytest.approx(float(mid), abs=1e-12)
+    for stat, p in (("chi2", "chi2_p"), ("chi2_cc", "chi2_cc_p")):
+        want = chi2_1df_tail(out[stat]) if out[stat] else 1.0
+        assert out[p] == pytest.approx(want, abs=1e-12)
+
+
+def test_mcnemar_reproduces_the_worked_examples_of_fagerland_lydersen_and_laake():
+    """Fagerland MW, Lydersen S, Laake P. The McNemar test for binary matched-pairs data: mid-p and asymptotic
+    are better than exact conditional. BMC Medical Research Methodology 2013, 13:91
+    (https://bmcmedresmethodol.biomedcentral.com/articles/10.1186/1471-2288-13-91, opened 25 Nov 2026).
+    Table 1 (airway hyper-responsiveness before and after stem cell transplantation, 21 children): the two
+    disagreement cells are 1 and 7. The text prints asymptotic p = 0.034 and exact p = 0.070.
+    Table 2 (complete response before and after consolidation, 161 patients): the disagreement cells are 6 and
+    16. The text prints asymptotic p = 0.033 and exact p = 0.053.
+    "Asymptotic" is the chi-square without a correction. Table 1 and the asymptotic value of Table 2 hold to the
+    printed three decimals. The exact value of Table 2 does not: this function gives 0.052479 (2 * 110056 /
+    2**22), which prints as 0.052, one unit in the last place below the paper's 0.053. Why the paper has 0.053
+    was not checked; the test holds the value to within 0.001. The paper's text prints no mid-p for these
+    tables, so the mid-p values here are not checked against it (the paper defines mid-p as the exact p-value
+    minus half the point probability of the observed result, which is what the brute-force test above uses)."""
+    t1, t2 = mcnemar(1, 7), mcnemar(6, 16)
+    assert round(t1["chi2_p"], 3) == 0.034 and round(t1["exact_p"], 3) == 0.070
+    assert round(t2["chi2_p"], 3) == 0.033
+    assert t2["exact_p"] == pytest.approx(2 * 110056 / 2 ** 22) and abs(t2["exact_p"] - 0.053) < 1e-3
+
+
+def test_mcnemar_with_no_disagreements_says_there_is_no_evidence():
+    assert mcnemar(0, 0) == {"b": 0, "c": 0, "discordant": 0, "exact_p": 1.0, "mid_p": 1.0,
+                             "chi2": 0.0, "chi2_p": 1.0, "chi2_cc": 0.0, "chi2_cc_p": 1.0}
+
+
+def test_mcnemar_even_split_and_the_continuity_correction_floor():
+    even = mcnemar(5, 5)
+    assert even["exact_p"] == even["mid_p"] == even["chi2_p"] == even["chi2_cc_p"] == 1.0
+    one = mcnemar(0, 1)                                    # one disagreement: |b - c| - 1 = 0, so no statistic
+    assert one["exact_p"] == 1.0 and one["mid_p"] == 0.5 and one["chi2"] == 1.0 and one["chi2_cc"] == 0.0
+
+
+def test_mcnemar_refuses_negative_counts():
+    for b, c in ((-1, 3), (3, -1)):
+        with pytest.raises(ValueError, match="b >= 0"):
+            mcnemar(b, c)
+
+
+COUNTS = st.integers(min_value=0, max_value=300)
+
+
+@given(COUNTS, COUNTS)
+def test_mcnemar_is_symmetric_and_its_p_values_are_ordered(b, c):
+    out, flipped = mcnemar(b, c), mcnemar(c, b)
+    for key in ("discordant", "exact_p", "mid_p", "chi2", "chi2_p", "chi2_cc", "chi2_cc_p"):
+        assert out[key] == flipped[key]
+    assert 0 <= out["mid_p"] <= out["exact_p"] <= 1
+    assert out["exact_p"] == sign_test(b, c)
+    assert out["chi2_cc"] <= out["chi2"] and out["chi2_p"] <= out["chi2_cc_p"] <= 1
+    if b == c:
+        assert out["mid_p"] == 1.0
+    elif b + c:
+        pmf = binomial_half_pmf(b + c)
+        assert out["mid_p"] == pytest.approx(float(2 * sum(pmf[: min(b, c) + 1]) - pmf[min(b, c)]), abs=1e-12)
