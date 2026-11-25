@@ -98,13 +98,15 @@ async def collect(cfg: Config, rows: list[Row], thresholds: list[float | None], 
     facts = Facts([r.expected for r in rows], router, [None] * len(rows))
     if picker is None:
         return facts
+    p = cfg.route_picker
     for i, r in enumerate(rows):
         text = request_text(r.prompt)
-        if not text.strip() or len(text) > cfg.route_picker.max_chars:
+        if not text.strip() or (len(text) > p.max_chars and p.long_prompts != "cut"):
             continue  # the running router would not ask the picker either
         facts.picker_asked += 1
         try:
-            facts.picker[i] = await picker.pick(text)  # waited for: the gate is about routes, not time
+            # With long_prompts: cut the running router gives it the first max_chars characters; so does this.
+            facts.picker[i] = await picker.pick(text[:p.max_chars])  # waited for: the gate is about routes, not time
         except PickerNoRoute:
             facts.picker_no_route += 1
     return facts
@@ -217,8 +219,11 @@ def run(cfg: Config, args, *, embedder=None, picker=None, path: Path | None = No
         name = "route picker serves" if c[0] == PICKER_SERVES else c[0]
         print(f"candidate: {name} {adopted.show(c[1])}")
         if c[0] == PICKER_SERVES:
-            print(f"  the picker was asked on {facts.picker_asked} of {len(rows)} rows (the others are over max_chars "
-                  f"{cfg.route_picker.max_chars:,} or empty) and named no route on {facts.picker_no_route}")
+            p = cfg.route_picker
+            others = ("empty; long_prompts: cut gave it the first max_chars characters of longer rows"
+                      if p.long_prompts == "cut" else f"over max_chars {p.max_chars:,} or empty")
+            print(f"  the picker was asked on {facts.picker_asked} of {len(rows)} rows (the others are {others}) "
+                  f"and named no route on {facts.picker_no_route}")
         cand_right = facts.right(*setting(force, c))
         v = gate(now_right, cand_right)
         for line in _verdict_lines(v, "the setting in force"):

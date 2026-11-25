@@ -224,8 +224,9 @@ def _limits(lim) -> str:
     if not isinstance(lim, dict):
         return ""
     keep = lim.get("keep_alive_minutes")
+    cut = ", long prompts cut" if lim.get("long_prompts") == "cut" else ""  # absent or skip: the old label
     return (f"timeout_ms {lim.get('timeout_ms')}, max_chars {lim.get('max_chars')}, "
-            f"keep-alive {f'{keep} min' if keep else 'off'}")
+            f"keep-alive {f'{keep} min' if keep else 'off'}{cut}")
 
 
 def _usd(x: float) -> str:

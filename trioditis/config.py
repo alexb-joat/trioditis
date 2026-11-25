@@ -104,12 +104,17 @@ class RoutePicker:
     keep_alive_minutes: int | None = None  # after each picker call, ask Ollama to keep the model loaded this long
     #                         (an empty /api/generate request with keep_alive); None: no such request, the
     #                         server's own keep-alive applies (Ollama's default is 5 minutes)
-    serves: bool = True     # not a config key: False only when the reinforcement loop adopted "the router
+    long_prompts: str = "skip"  # "skip": a prompt over max_chars skips the picker. "cut": the picker reads its
+    #                         first max_chars characters (the router still reads the whole prompt). The wait is
+    #                         that of a max_chars prompt; how often a cut prompt gets the right route is not measured
+    serves: bool = True    # not a config key: False only when the reinforcement loop adopted "the router
     #                         serves" (trioditis/adopted.py); the request then gets the router's own route
 
 
 PICKER_TEXT_CHARS = 4000  # how much of a prompt the picker reads: the same cut the embeddings signal makes
-ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars", "shadow_claude_code", "keep_alive_minutes"}
+ROUTE_PICKER_KEYS = {"provider", "model", "timeout_ms", "max_chars", "shadow_claude_code", "keep_alive_minutes",
+                     "long_prompts"}
+LONG_PROMPTS = ("skip", "cut")
 KEEP_ALIVE_MAX_MINUTES = 1440  # a day: longer is not "for a set time" any more
 
 
@@ -324,7 +329,7 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     unknown = set(raw) - ROUTE_PICKER_KEYS
     if unknown:
         raise ConfigError(f"route_picker: unknown key(s) {', '.join(sorted(unknown))}; use provider, model, timeout_ms, max_chars, shadow_claude_code, "
-                          "keep_alive_minutes")
+                          "keep_alive_minutes, long_prompts")
     prov = raw.get("provider")
     if not isinstance(prov, str) or prov not in providers:
         raise ConfigError(f"route_picker.provider must name a provider (got {prov!r})")
@@ -356,7 +361,12 @@ def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, R
     if keep is not None and not providers[prov].base_url.rstrip("/").endswith("/v1"):
         raise ConfigError(f"route_picker.keep_alive_minutes asks Ollama's /api/generate, beside a base_url that "
                           f"ends in /v1; provider {prov}'s base_url does not, so remove the setting")
-    return RoutePicker(prov, model.strip(), timeout, max_chars, shadow, keep_alive_minutes=keep)
+    long_prompts = raw.get("long_prompts", RoutePicker.long_prompts)
+    if long_prompts not in LONG_PROMPTS:
+        raise ConfigError(f"route_picker.long_prompts must be skip (prompts over max_chars skip the picker) or cut "
+                          f"(the picker reads their first max_chars characters); got {long_prompts!r}")
+    return RoutePicker(prov, model.strip(), timeout, max_chars, shadow, keep_alive_minutes=keep,
+                       long_prompts=long_prompts)
 
 
 def _parse_reinforce(raw) -> Reinforce | None:

@@ -123,7 +123,7 @@ embeddings:
 # first turn waits for it: on a laptop CPU a median of about 1 s at 100 characters and 2 s at
 # 200 once the model is loaded; the first turn after it was unloaded waits the full timeout_ms
 # (docs/route-accuracy.md). Requests whose tools match a route's tool_keywords, and prompts
-# over max_chars, skip it. Enable with
+# over max_chars (unless long_prompts: cut), skip it. Enable with
 # `ollama pull qwen2.5-coder:7b` (4.7 GB) and uncomment.
 # route_picker:
 #   provider: ollama               # must be local: true
@@ -136,6 +136,10 @@ embeddings:
 #                                  # picker call is followed by an empty Ollama /api/generate request that keeps
 #                                  # the model loaded this many minutes (1 to 1440). The cost: the model stays in
 #                                  # memory that long after every call (qwen2.5-coder:7b: 5.9 GB loaded on one laptop)
+#   long_prompts: skip             # skip (the default): prompts over max_chars skip the picker. cut: the picker
+#                                  # reads their first max_chars characters, and the router still reads all of it.
+#                                  # The wait is that of a max_chars prompt (docs/route-accuracy.md, "The picker on
+#                                  # longer prompts"); how often a cut prompt gets the right route is not measured
 
 # Reinforcement loop (optional, off unless this block is here). In this version it only measures:
 # `trioditis reinforce run --dry-run` scores "should the picker's route be served?" on your own

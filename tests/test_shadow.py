@@ -348,7 +348,8 @@ def test_the_line_carries_the_limits_in_force(home):
         post(client, cc_body())
         drained(app, client)
     [rec] = lines(home)
-    assert rec["route_picker"]["limits"] == {"timeout_ms": 3000, "max_chars": 200, "keep_alive_minutes": None}
+    assert rec["route_picker"]["limits"] == {"timeout_ms": 3000, "max_chars": 200, "keep_alive_minutes": None,
+                                               "long_prompts": "skip"}
 
 
 def test_eval_routes_log_splits_outcomes_by_the_limits_in_force(tmp_path):

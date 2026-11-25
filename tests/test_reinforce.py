@@ -1,6 +1,7 @@
 """The reinforcement loop's first half: the adopted-values file and its layers, the labelled gate,
 `reinforce run --dry-run` and `reinforce revert`. No test here reaches a real server or ~/.hlidskjalv."""
 import argparse
+import dataclasses
 import json
 import os
 import stat
@@ -298,6 +299,17 @@ async def test_collect_asks_the_picker_only_where_the_router_would(tmp_path):
     # the router alone: rows 1 and 3 right; with the picker serving: rows 1, 2 and 3 (row 4 falls back to the router)
     assert facts.right(0.45, False) == [True, False, True, False, False]
     assert facts.right(0.45, True) == [True, True, True, False, False]
+
+
+@pytest.mark.anyio
+async def test_with_long_prompts_cut_collect_asks_with_the_first_max_chars_characters(tmp_path):
+    cfg = rcfg(tmp_path)
+    cfg = dataclasses.replace(cfg, route_picker=dataclasses.replace(cfg.route_picker, long_prompts="cut"))
+    rows = reinforce.read_labels(labels_file(tmp_path, GATE_ROWS), cfg.routes)
+    picker = Picker({**PICKS, "x" * 200: "code"})
+    facts = await reinforce.collect(cfg, rows, [0.45], Sims(SIMS), picker)
+    assert picker.asked[-1] == "x" * 200 and (facts.picker_asked, facts.picker_no_route) == (5, 1)
+    assert facts.picker[4] == "code"
 
 
 def test_dry_run_reports_the_verdict_and_writes_nothing(tmp_path, home, capsys):
