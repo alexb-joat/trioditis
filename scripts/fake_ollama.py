@@ -10,6 +10,7 @@ What it answers, the way Ollama does (shapes as the test double `Server` in test
 
     GET  /api/version          {"version": "0.0.0-standin"}
     GET  /api/tags             {"models": [{"name", "model", "digest"} ...]}  (digests are 64 hex characters)
+    GET  /api/ps               {"models": [{"name", "model", "size", "digest", "expires_at", "size_vram"} ...]}
     POST /v1/chat/completions  {"choices": [{"message": {"content": "<route>"}}]}
     POST /v1/embeddings        {"data": [{"index", "embedding"} ...]}
 
@@ -22,8 +23,20 @@ Standard library only, so it runs wherever Python does.
     chat-not-json     the chat endpoint answers 200 with a body that is not JSON
     chat-wrong-shape  the chat endpoint answers 200 with JSON that is not a chat completion
     no-embeddings     the embeddings endpoint answers 404
-    no-api            /api/version and /api/tags answer 404, as servers other than Ollama do
+    no-api            /api/version, /api/tags and /api/ps answer 404, as servers other than Ollama do
     close-after       after --after N requests it closes every connection without answering
+
+Loading, the way Ollama keeps a model in memory, so the route picker's cold starts, timeouts and busy turns
+can be reproduced (tests/test_picker_speed.py). A chat or embeddings request loads the model it names; /api/ps
+lists a model only once its load has finished, and drops it --keep-alive seconds after its last request ended.
+
+    --load-delay S    a chat whose model is not loaded (the first after start, or after the keep-alive ran
+                      out) answers only after S seconds; a chat that arrives during the load waits for it
+                      too (default 0: loads are instant)
+    --keep-alive S    seconds a model stays loaded after its last request ends (default 300, Ollama's "5m")
+    --per-char S      a chat also waits S seconds per character of its last message (default 0)
+
+These delays are settings for a test, not a model of any machine: they measure nothing either.
 """
 
 from __future__ import annotations
@@ -34,6 +47,8 @@ import json
 import re
 import sys
 import threading
+import time
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = "127.0.0.1"
@@ -44,6 +59,9 @@ ROUTES = ("code", "reasoning", "writing", "quick")
 DIMS = 16
 MAX_BODY = 1_000_000                  # a request larger than this is not one of ours
 MODES = ("ok", "chat-500", "chat-not-json", "chat-wrong-shape", "no-embeddings", "no-api", "close-after")
+KEEP_ALIVE_S = 300.0                  # Ollama's default keep-alive, "5m"
+MODEL_SIZE = 1_000_000_000            # the bytes /api/ps reports for every model: made up
+MAX_MODELS = 16                       # model names remembered, oldest dropped first
 
 
 def digest(name: str) -> str:
@@ -62,6 +80,11 @@ def embed(text: str) -> list[float]:
     for word in re.findall(r"\w+", text.lower()):
         vec[int.from_bytes(hashlib.sha256(word.encode("utf-8")).digest()[:2], "big") % DIMS] += 1.0
     return vec
+
+
+def _loaded(m: dict, now: float) -> bool:
+    """Finished loading, and a request is running or the keep-alive has not run out."""
+    return m["ready"] <= now and (m["running"] > 0 or now < m["expires"])
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -101,16 +124,51 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return body if isinstance(body, dict) else None
 
+    def _begin(self, name: str, delay: float) -> dict:
+        """Start a request on model `name`: when it is neither loaded nor loading, start its load, as Ollama
+        does; wait for the load to finish; return the model's state. The caller ends the request with _end."""
+        server = self.server
+        with server.lock:
+            now = time.monotonic()
+            m = server.models.get(name)
+            if m is None or not (now < m["ready"] or _loaded(m, now)):
+                m = {"ready": now + delay, "expires": now, "running": 0}
+                server.models.pop(name, None)
+                server.models[name] = m
+                server.loads += 1
+                while len(server.models) > MAX_MODELS:
+                    server.models.pop(next(iter(server.models)))
+            m["running"] += 1
+            wait = m["ready"] - now
+        if wait > 0:
+            time.sleep(wait)
+        return m
+
+    def _end(self, m: dict) -> None:
+        with self.server.lock:
+            m["running"] -= 1
+            m["expires"] = time.monotonic() + self.server.keep_alive
+
+    def _ps(self) -> dict:
+        now, wall = time.monotonic(), datetime.now(UTC)
+        with self.server.lock:
+            listed = [(n, m) for n, m in self.server.models.items() if _loaded(m, now)]
+            return {"models": [{"name": n, "model": n, "size": MODEL_SIZE, "digest": digest(n),
+                                "expires_at": (wall + timedelta(seconds=max(m["expires"] - now, 0.0))).isoformat(),
+                                "size_vram": 0} for n, m in listed]}
+
     def do_GET(self) -> None:  # noqa: N802
         if self._drops():
             return
-        if self.path in ("/api/version", "/api/tags") and self.server.mode == "no-api":
+        if self.path in ("/api/version", "/api/tags", "/api/ps") and self.server.mode == "no-api":
             self._send(404, {"error": "not found"})
         elif self.path == "/api/version":
             self._send(200, {"version": VERSION})
         elif self.path == "/api/tags":
             names = (MODEL, f"{EMBEDDINGS_MODEL}:latest")
             self._send(200, {"models": [{"name": n, "model": n, "digest": digest(n)} for n in names]})
+        elif self.path == "/api/ps":
+            self._send(200, self._ps())
         else:
             self._send(404, {"error": "not found"})
 
@@ -137,25 +195,40 @@ class Handler(BaseHTTPRequestHandler):
         elif self.path == "/v1/chat/completions":
             messages = body.get("messages")
             text = messages[-1].get("content", "") if isinstance(messages, list) and messages and isinstance(messages[-1], dict) else ""
-            self._send(200, {"choices": [{"message": {"role": "assistant", "content": chat_reply(str(text))}}]})
+            m = self._begin(str(body.get("model") or MODEL)[:100], self.server.load_delay)
+            try:
+                if self.server.per_char:
+                    time.sleep(self.server.per_char * len(str(text)))
+                self._send(200, {"choices": [{"message": {"role": "assistant", "content": chat_reply(str(text))}}]})
+            finally:
+                self._end(m)
         elif self.path == "/v1/embeddings":
             texts = body.get("input")
             texts = [texts] if isinstance(texts, str) else texts
             if not isinstance(texts, list):
                 self._send(400, {"error": "input must be a list of texts"})
             else:
-                self._send(200, {"data": [{"index": i, "embedding": embed(str(t))} for i, t in enumerate(texts)]})
+                m = self._begin(str(body.get("model") or EMBEDDINGS_MODEL)[:100], 0.0)
+                try:
+                    self._send(200, {"data": [{"index": i, "embedding": embed(str(t))} for i, t in enumerate(texts)]})
+                finally:
+                    self._end(m)
         else:
             self._send(404, {"error": "not found"})
 
 
-def make_server(port: int, mode: str = "ok", after: int = 0) -> ThreadingHTTPServer:
+def make_server(port: int, mode: str = "ok", after: int = 0, *, load_delay: float = 0.0,
+                keep_alive: float = KEEP_ALIVE_S, per_char: float = 0.0) -> ThreadingHTTPServer:
     if mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
+    if min(load_delay, keep_alive, per_char) < 0:
+        raise ValueError("load_delay, keep_alive and per_char must be 0 or more")
     server = ThreadingHTTPServer((HOST, port), Handler)
     server.daemon_threads = True
     server.mode, server.after = mode, after
-    server.request_count, server.lock = 0, threading.Lock()      # tests read request_count; nothing else is kept
+    server.load_delay, server.keep_alive, server.per_char = load_delay, keep_alive, per_char
+    server.request_count, server.lock = 0, threading.Lock()      # tests read request_count and loads
+    server.models, server.loads = {}, 0                           # in memory only, like everything else here
     return server
 
 
@@ -164,12 +237,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--port", type=int, required=True, help="the port on 127.0.0.1 to listen on")
     ap.add_argument("--mode", choices=MODES, default="ok", help="how it misbehaves (default: not at all)")
     ap.add_argument("--after", type=int, default=0, metavar="N", help="with --mode close-after: answer N requests first")
+    ap.add_argument("--load-delay", type=float, default=0.0, metavar="S",
+                    help="seconds a chat waits when its model is not loaded (default 0)")
+    ap.add_argument("--keep-alive", type=float, default=KEEP_ALIVE_S, metavar="S",
+                    help=f"seconds a model stays loaded after its last request (default {KEEP_ALIVE_S:g}, Ollama's 5m)")
+    ap.add_argument("--per-char", type=float, default=0.0, metavar="S",
+                    help="seconds a chat also waits per character of its last message (default 0)")
     args = ap.parse_args(argv)
     if not 1 <= args.port <= 65535:
         ap.error("--port must be from 1 to 65535")
     if args.after < 0:
         ap.error("--after must be 0 or more")
-    server = make_server(args.port, args.mode, args.after)
+    for flag in ("load_delay", "keep_alive", "per_char"):
+        if getattr(args, flag) < 0:
+            ap.error(f"--{flag.replace('_', '-')} must be 0 or more")
+    server = make_server(args.port, args.mode, args.after, load_delay=args.load_delay, keep_alive=args.keep_alive,
+                         per_char=args.per_char)
     print(f"fake-ollama on http://{HOST}:{args.port} (model {MODEL}, mode {args.mode}; its numbers measure nothing)", flush=True)
     try:
         server.serve_forever()
