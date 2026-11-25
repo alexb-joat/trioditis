@@ -135,6 +135,7 @@ class Summary:
     late_ms: list[int] = field(default_factory=list)      # their time to answer, where they named a route
     late_agreed: int = 0
     late_pairs: Counter = field(default_factory=Counter)  # (router's route, picker's late route), disagreements
+    by_limits: dict[str, Counter] = field(default_factory=dict)  # shadow lines' limits in force -> outcome -> n
 
     @property
     def chose(self) -> int:
@@ -171,12 +172,14 @@ def summarise(cfg: Config, records: list[dict], prices: Prices,
     late_pairs: Counter = Counter()
     late_ms: list[int] = []
     late_agreed = 0
+    by_limits: dict[str, Counter] = {}
     days = sorted(str(r.get("ts", ""))[:10] for r in records if r.get("ts"))
     for rec in records:
         info = rec["route_picker"]
         outcome = str(info.get("outcome") or "unknown")
         outcomes[outcome] += 1
         pickers[(str(info.get("model")), str(info.get("instruction")))] += 1
+        by_limits.setdefault(_limits(info.get("limits")), Counter())[outcome] += 1
         late = info.get("late")
         if rec.get("shadow") is True and isinstance(late, dict):
             late_outcomes[str(late.get("outcome") or "unknown")] += 1
@@ -212,7 +215,17 @@ def summarise(cfg: Config, records: list[dict], prices: Prices,
         cost.router += other
     return Summary(n=len(records), outcomes=outcomes, pickers=pickers, ms=ms, agreed=agreed, pairs=pairs,
                    cost=cost, first=days[0] if days else "", last=days[-1] if days else "",
-                   late=late_outcomes, late_ms=late_ms, late_agreed=late_agreed, late_pairs=late_pairs)
+                   late=late_outcomes, late_ms=late_ms, late_agreed=late_agreed, late_pairs=late_pairs,
+                   by_limits=by_limits)
+
+
+def _limits(lim) -> str:
+    """A shadow line's limits in force, as one label; lines written before they were logged share one."""
+    if not isinstance(lim, dict):
+        return ""
+    keep = lim.get("keep_alive_minutes")
+    return (f"timeout_ms {lim.get('timeout_ms')}, max_chars {lim.get('max_chars')}, "
+            f"keep-alive {f'{keep} min' if keep else 'off'}")
 
 
 def _usd(x: float) -> str:
@@ -280,6 +293,13 @@ def format_report(data: LogData, s: Summary, config_path: str, today: str, picke
     if s.ms:
         out.append(f"  Time to answer: median {quantile(s.ms, 0.5) / 1000:.2f} s, 95th percentile "
                    f"{quantile(s.ms, 0.95) / 1000:.2f} s (n = {len(s.ms):,})")
+    labelled = {k: c for k, c in s.by_limits.items() if k}
+    if labelled:
+        out += ["", "By the limits in force (shadow lines log them from this version on)"]
+        for label, c in sorted(labelled.items(), key=lambda kv: -sum(kv[1].values())):
+            out.append(f"  {label}: n = {sum(c.values()):,}; " + ", ".join(f"{o} {k:,}" for o, k in c.most_common()))
+        if "" in s.by_limits:
+            out.append(f"  no limits logged (older lines and served requests): n = {sum(s.by_limits[''].values()):,}")
     out += _late_lines(s)
     if not s.chose:
         out += ["", "The picker never named a route, so there is no disagreement to count. "

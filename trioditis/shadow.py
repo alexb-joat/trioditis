@@ -13,7 +13,11 @@ named, so its choices can be judged before anyone pays (memory, a smaller model)
 
 What it never does: change, hold or delay the request (the body is parsed in a thread after the
 upstream call has started); send anything off this machine (the picker and the embeddings provider
-must be local, config.py checks both); write prompt text (counts, routes, a session fingerprint).
+must be local, config.py checks both); write prompt text. The line holds counts, routes, the picker's
+limits in force (route_picker.limits), a session fingerprint and `prompt_fp`, a 16-hex-character hash of
+the prompt the picker was given (security.fingerprint, the decision log's formula). The hash cannot be read
+back into text, but it can confirm a prompt someone already has: hashing that text gives the same value,
+which is how a local script can join a shadow line to a prompt it already holds.
 
 Which request counts as the first turn: the first one in a session that carries `x-claude-code-session-id`,
 no `x-claude-code-agent-id` (a subagent), a non-empty `tools` list (Claude Code's side calls, such
@@ -115,8 +119,11 @@ class Shadow:
             _, router_route, info = await _classify_with_picker(cfg, text, self.embedder, self.picker, [], tools=None,
                                                                 late=True)
             model = body.get("model")
+            p = cfg.route_picker
+            info["limits"] = {"timeout_ms": p.timeout_ms, "max_chars": p.max_chars,
+                              "keep_alive_minutes": p.keep_alive_minutes}  # so counts can be split by setting
             rec = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "shadow": True, "source": "claude-code",
-                   "router_route": router_route, "route_picker": info,
+                   "router_route": router_route, "route_picker": info, "prompt_fp": fingerprint(text),
                    "prompt_chars": len(text), "message_chars": message_chars, "reminder_blocks": reminders,
                    "messages": len(messages),
                    "tools": len(body["tools"]) if isinstance(body["tools"], list) else None,

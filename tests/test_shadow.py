@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
+import re
 import time
 from pathlib import Path
 
@@ -323,3 +325,59 @@ def test_a_first_turn_after_clear_counts_only_the_typed_prompt(home):
     [rec] = lines(home)
     assert rec["prompt_chars"] == len(PROMPT) and rec["reminder_blocks"] == 1 and rec["messages"] == 1
     assert "clear" not in (home / "logs" / "shadow.jsonl").read_text()
+
+
+def test_the_line_carries_a_hash_of_the_prompt_and_never_the_prompt(home):
+    marker = "zebra-marker-4417"
+    text = f"fix the failing python test {marker}"
+    app, _ = make_app(home)
+    with TestClient(app, base_url="http://127.0.0.1:8787") as client:
+        post(client, cc_body(text))
+        drained(app, client)
+    [rec] = lines(home)
+    # The decision log's formula (security.fingerprint), computed here with hashlib: a local script that
+    # holds the prompt can find its line; the hash alone gives no text back.
+    assert rec["prompt_fp"] == hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+    assert re.fullmatch(r"[0-9a-f]{16}", rec["prompt_fp"])
+    assert marker not in (home / "logs" / "shadow.jsonl").read_text()
+
+
+def test_the_line_carries_the_limits_in_force(home):
+    app, _ = make_app(home, timeout_ms=3000)
+    with TestClient(app, base_url="http://127.0.0.1:8787") as client:
+        post(client, cc_body())
+        drained(app, client)
+    [rec] = lines(home)
+    assert rec["route_picker"]["limits"] == {"timeout_ms": 3000, "max_chars": 200, "keep_alive_minutes": None}
+
+
+def test_eval_routes_log_splits_outcomes_by_the_limits_in_force(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+
+    def line(outcome, limits=None):
+        info = {"model": "qwen2.5-coder:7b", "instruction": 1, "outcome": outcome, "route": None, "ms": 900}
+        if limits:
+            info["limits"] = limits
+        return {"shadow": True, "router_route": "code", "route_picker": info}
+    off = {"timeout_ms": 5000, "max_chars": 500, "keep_alive_minutes": None}
+    kept = {"timeout_ms": 5000, "max_chars": 500, "keep_alive_minutes": 30}
+    shadow = [line("cold"), line("chose", off), line("cold", off), line("chose", kept), line("chose", kept)]
+    (logs / "shadow.jsonl").write_text("".join(json.dumps(x) + "\n" for x in shadow))
+    data = read_log(logs / "shadow.jsonl")
+    s = summarise(pcfg(), data.records, Prices(tmp_path / "prices.json"), data.served)
+    report = "\n".join(format_report(data, s, "config.yaml", "2026-11-25", True))
+    assert "timeout_ms 5000, max_chars 500, keep-alive 30 min: n = 2; chose 2" in report
+    assert "timeout_ms 5000, max_chars 500, keep-alive off: n = 2; chose 1, cold 1" in report
+    assert "no limits logged (older lines and served requests): n = 1" in report
+
+
+def test_a_log_without_limits_reports_no_split(tmp_path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    rec = {"shadow": True, "router_route": "code",
+           "route_picker": {"model": "m", "instruction": 1, "outcome": "chose", "route": "code", "ms": 900}}
+    (logs / "shadow.jsonl").write_text(json.dumps(rec) + "\n")
+    data = read_log(logs / "shadow.jsonl")
+    s = summarise(pcfg(), data.records, Prices(tmp_path / "prices.json"), data.served)
+    assert "By the limits in force" not in "\n".join(format_report(data, s, "config.yaml", "2026-11-25", True))
