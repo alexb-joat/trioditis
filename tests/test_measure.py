@@ -17,6 +17,8 @@ from trioditis.hardware import GPU, Hardware
 
 MARKER = "ZQX-MARKER-7731"
 HOST = "workstation-of-someone"
+PICKER_DIGEST = "a1" * 32          # Ollama's /api/tags lists each digest as 64 lowercase hex characters
+EMBEDDINGS_DIGEST = "b2" * 32
 
 
 def fake_hardware() -> Hardware:
@@ -39,8 +41,8 @@ class Server:
         if path == "/api/version":
             return httpx.Response(200, json={"version": "0.13.0"})
         if path == "/api/tags":
-            return httpx.Response(200, json={"models": [{"name": "tiny:1b", "digest": "d1"},
-                                                        {"name": "nomic-embed-text:latest", "digest": "d2"}]})
+            return httpx.Response(200, json={"models": [{"name": "tiny:1b", "digest": PICKER_DIGEST},
+                                                        {"name": "nomic-embed-text:latest", "digest": EMBEDDINGS_DIGEST}]})
         if path == "/v1/chat/completions":
             if self.chat_status != 200:
                 return httpx.Response(self.chat_status, json={"error": "model not found"})
@@ -81,8 +83,9 @@ def test_the_file_follows_the_schema_and_is_printed_in_full(tmp_path, capsys):
     doc = json.loads(text)
     assert doc["schema"] == "trioditis-results.v1" and doc["date"] == "2026-11-24"
     assert set(doc) == {"schema", "trioditis", "date", "settings", "models", "machine", "timing", "heldout", "own_labels"}
-    assert doc["models"] == {"server": "ollama", "server_version": "0.13.0", "picker": "tiny:1b", "picker_digest": "d1",
-                             "embeddings": "nomic-embed-text", "embeddings_digest": "d2"}
+    assert doc["models"] == {"server": "ollama", "server_version": "0.13.0", "picker": "tiny:1b",
+                             "picker_digest": PICKER_DIGEST, "embeddings": "nomic-embed-text",
+                             "embeddings_digest": EMBEDDINGS_DIGEST}
     h = doc["heldout"]
     assert h["n"] == 315 and h["picker"]["n"] == 315 and h["router"]["n"] == 315 and h["router_note"] is None
     assert sum(r["n"] for r in h["picker"]["per_route"].values()) == 315
