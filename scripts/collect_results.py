@@ -8,7 +8,9 @@
 Every submission is untrusted data: anyone can open an issue and type anything into the form. A submission
 becomes a row only when the consent box is ticked, the JSON is a `trioditis-results.v1` file with exactly
 the expected keys and types, its counts add up, and it was measured on the shipped held-out set. Anything
-else is listed with the reason and left out. This script makes no network call: `gh` fetches the issues,
+else is listed with the reason and left out. A file from a server that is not Ollama (`models.server` null, and
+then no version or digests) is checked the same way and gets the `server` cell "unknown server", so its row is
+never taken for an Ollama row. This script makes no network call: `gh` fetches the issues,
 and you run it.
 """
 
@@ -36,6 +38,7 @@ MAX_DEPTH = 6
 MAX_STR = 120
 ROUTES = ["code", "reasoning", "writing", "quick"]
 NO_ROUTE = "-"
+UNKNOWN_SERVER = "unknown server"    # the `server` cell for a file with models.server null; no valid server name has a space
 UNSAFE = re.compile(r"[\x00-\x1f\x7f<>`|\\]")
 
 COLUMNS = ["issue", "date", "trioditis", "picker", "picker_digest_12", "server", "server_version", "embeddings",
@@ -195,12 +198,15 @@ def check(doc: dict) -> dict:
     m = _obj(d["models"], "models", {"server", "server_version", "picker", "picker_digest", "embeddings",
                                      "embeddings_digest"})
     name = r"[A-Za-z0-9][A-Za-z0-9._:/+-]{0,99}"
-    _str(m["server"], "models.server", name)
+    _str(m["server"], "models.server", name, null=True)    # null: a server that is not Ollama, counted as UNKNOWN_SERVER
     _str(m["server_version"], "models.server_version", r"[0-9A-Za-z.+-]{1,40}", null=True)
     _str(m["picker"], "models.picker", name)
     _str(m["embeddings"], "models.embeddings", name)
     for k in ("picker_digest", "embeddings_digest"):
         _str(m[k], f"models.{k}", r"[0-9a-f]{64}", null=True)
+    if m["server"] is None and any(m[k] is not None for k in ("server_version", "picker_digest", "embeddings_digest")):
+        raise Rejected("models.server is null (a server that is not Ollama), so its version and the model digests must "
+                       "be null too: the program cannot know them there")
 
     hw = _obj(d["machine"], "machine", {"os", "arch", "python", "cpu", "cores", "ram_gb", "unified_memory", "gpus"})
     _str(hw["os"], "machine.os", r"[A-Za-z]{1,20}")
@@ -255,7 +261,7 @@ def check(doc: dict) -> dict:
                                                                           "picker_vs_router"})["n"], "own_labels.n")
     gpus = "; ".join(g["name"] for g in hw["gpus"])
     return {"date": d["date"], "trioditis": d["trioditis"], "picker": m["picker"],
-            "picker_digest_12": (m["picker_digest"] or "")[:12], "server": m["server"],
+            "picker_digest_12": (m["picker_digest"] or "")[:12], "server": m["server"] or UNKNOWN_SERVER,
             "server_version": m["server_version"] or "", "embeddings": m["embeddings"], "os": hw["os"],
             "arch": hw["arch"], "cpu": hw["cpu"] or "", "cores": cores if cores is not None else "",
             "ram_gb": hw["ram_gb"] if hw["ram_gb"] is not None else "", "gpus": gpus, "n": n,
@@ -340,7 +346,8 @@ def main(argv: list[str] | None = None) -> int:
         print(line)
     for issue, row in sorted(new.items()):
         print(f"#{issue}: new row: {row['picker']} {row['picker_right']}/{row['n']} on {row['os']} {row['arch']}, "
-              f"{row['cpu'] or 'CPU unknown'}")
+              f"{row['cpu'] or 'CPU unknown'}" + (f" [{UNKNOWN_SERVER}: keep apart from the Ollama rows]"
+                                                   if row["server"] == UNKNOWN_SERVER else ""))
     if not new:
         print(f"nothing new for {args.csv.name} ({len(existing)} rows already there)")
     elif args.write:

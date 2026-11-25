@@ -1,6 +1,7 @@
 """scripts/collect_results.py: shared results are untrusted data; only checked, consented files become rows."""
 
 import copy
+import csv
 import json
 import sys
 from pathlib import Path
@@ -50,6 +51,75 @@ def test_a_good_file_becomes_one_row_of_numbers():
     assert (row["only_picker"], row["only_router"], row["keywords_right"]) == (74, 48, 116)
     assert row["picker_digest_12"] == "a" * 12 and row["gpus"] == "Example GPU"
     assert row["timing_median_s_500"] == 3.2 and row["own_labels_n"] == ""
+
+
+def no_ollama(doc: dict) -> dict:
+    """What `trioditis results` writes for a server that is not Ollama: no /api/version, so no version and no digests."""
+    doc["models"].update(server=None, server_version=None, picker_digest=None, embeddings_digest=None)
+    return doc
+
+
+def test_a_file_from_a_server_that_is_not_ollama_becomes_one_row_labelled_unknown_server(tmp_path, capsys):
+    doc = no_ollama(copy.deepcopy(GOOD))
+    row = cr.check(doc)
+    assert row["server"] == "unknown server" and row["server_version"] == "" and row["picker_digest_12"] == ""
+    assert cr.check(copy.deepcopy(GOOD))["server"] == "ollama"                       # an Ollama row is as before
+    issues = tmp_path / "issues.json"
+    sheet = tmp_path / "community-results.csv"
+    issues.write_text(json.dumps([{"number": 20, "body": body(doc)}, {"number": 21, "body": body(GOOD)}]), encoding="utf-8")
+    assert cr.main(["collect", str(issues), "--csv", str(sheet), "--write"]) == 0
+    out = capsys.readouterr().out
+    assert "#20: new row" in out and "[unknown server: keep apart from the Ollama rows]" in out
+    assert "#21: new row" in out and out.count("keep apart") == 1
+    with sheet.open(newline="", encoding="utf-8") as f:
+        rows = {int(r["issue"]): r for r in csv.DictReader(f)}
+    assert (rows[20]["server"], rows[21]["server"]) == ("unknown server", "ollama")
+    assert rows[20]["picker_right"] == rows[21]["picker_right"] == "231"              # same numbers, kept as separate kinds of row
+
+
+@pytest.mark.parametrize("server", [5, True, 1.5, ["ollama"], {"name": "ollama"}, "", "unknown server", "has space",
+                                    "x" * 101, "<script>"])
+def test_a_server_that_is_neither_text_nor_null_is_still_left_out(server):
+    doc = copy.deepcopy(GOOD)
+    doc["models"]["server"] = server
+    assert "models.server" in rejected(doc) or "characters" in rejected(doc)
+
+
+def test_the_unknown_server_label_cannot_be_written_as_a_server_name():
+    """No valid server name contains a space, so no file can pass itself off as the label (or as an Ollama row
+    with a lookalike name: names are checked against the same pattern as before)."""
+    doc = copy.deepcopy(GOOD)
+    doc["models"]["server"] = "unknown server"
+    assert "models.server: unexpected text" in rejected(doc)
+
+
+@pytest.mark.parametrize("key, value", [("server_version", "0.13.0"), ("picker_digest", "a" * 64),
+                                        ("embeddings_digest", "b" * 64)])
+def test_a_null_server_with_a_version_or_a_digest_is_left_out(key, value):
+    doc = no_ollama(copy.deepcopy(GOOD))
+    doc["models"][key] = value
+    assert "models.server is null" in rejected(doc)
+
+
+def test_every_other_check_still_applies_to_a_file_with_a_null_server():
+    for edit, reason in [(lambda d: d["heldout"]["picker"].__setitem__("right", 300), "routes don't add up"),
+                         (lambda d: d["settings"].__setitem__("heldout_sha256_16", "0" * 16), "different held-out set"),
+                         (lambda d: d.__setitem__("prompts", ["a secret"]), "unexpected ['prompts']"),
+                         (lambda d: d["models"].__setitem__("picker", "model `rm -rf`"), "unexpected text"),
+                         (lambda d: d.__setitem__("date", "2999-01-01"), "future")]:
+        doc = no_ollama(copy.deepcopy(GOOD))
+        edit(doc)
+        assert reason in rejected(doc)
+    assert "consent" in str(pytest.raises(cr.Rejected, cr.from_issue, body(no_ollama(copy.deepcopy(GOOD)), ticked=False)).value)
+
+
+def test_nothing_in_the_repository_sums_the_community_sheet_yet():
+    """If a script or a doc starts to total or average docs/community-results.csv, it must keep the rows labelled
+    `unknown server` apart from the Ollama rows, and this test should be replaced by one that checks that."""
+    readers = [p.relative_to(REPO).as_posix() for p in [*(REPO / "scripts").glob("*.py"), *(REPO / "trioditis").glob("*.py"),
+                                                         *(REPO / "trioditis_metrics").glob("*.py")]
+               if "community-results" in p.read_text(encoding="utf-8")]
+    assert readers == ["scripts/collect_results.py"]
 
 
 def test_a_submitted_issue_is_read_only_with_the_consent_box_ticked():

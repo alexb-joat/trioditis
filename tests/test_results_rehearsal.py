@@ -249,6 +249,8 @@ def test_a_server_without_ollamas_api_still_runs_and_the_file_says_the_server_is
     assert proc.returncode == 0 and "Traceback" not in proc.stderr
     models = json.loads(out.read_text(encoding="utf-8"))["models"]
     assert models["server"] is None and models["picker_digest"] is None and models["embeddings_digest"] is None
+    assert 'counted as an "unknown server" row' in proc.stdout
+    assert cr.check(cr.parse(out.read_text(encoding="utf-8")))["server"] == "unknown server"
 
 
 def test_an_out_folder_that_does_not_exist_is_found_before_the_first_call(tmp_path):

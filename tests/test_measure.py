@@ -35,15 +35,17 @@ def fake_hardware() -> Hardware:
 class Server:
     """A local Ollama stand-in that remembers every request it got."""
 
-    def __init__(self, *, chat_status: int = 200, embeddings: bool = True, reply=None, fail_chat=None):
+    def __init__(self, *, chat_status: int = 200, embeddings: bool = True, reply=None, fail_chat=None, api: bool = True):
         self.requests: list[httpx.Request] = []
-        self.chat_status, self.embeddings = chat_status, embeddings
+        self.chat_status, self.embeddings, self.api = chat_status, embeddings, api   # api=False: not Ollama, no /api/*
         self.reply = reply or (lambda text: "writing" if "write" in text.lower() else "code")
         self.fail_chat, self.chat_calls = fail_chat, 0   # fail_chat(n): the n-th chat call is dropped (n starts at 1)
 
     def __call__(self, request: httpx.Request) -> httpx.Response:
         self.requests.append(request)
         path = request.url.path
+        if path.startswith("/api/") and not self.api:
+            return httpx.Response(404, json={"error": "not found"})
         if path == "/api/version":
             return httpx.Response(200, json={"version": "0.13.0"})
         if path == "/api/tags":
@@ -248,6 +250,22 @@ def test_without_the_embeddings_model_the_router_row_says_why_and_the_picker_sti
     h = json.loads((tmp_path / "trioditis-results.json").read_text(encoding="utf-8"))["heldout"]
     assert h["router"] is None and "ollama pull nomic-embed-text" in h["router_note"]
     assert h["picker"]["n"] == 315 and h["picker_vs_router"]["router"] == "router_keywords"
+
+
+def test_a_server_that_is_not_ollama_is_counted_as_unknown_server_and_the_run_says_so(tmp_path, capsys):
+    run(tmp_path, Server(api=False))
+    text = (tmp_path / "trioditis-results.json").read_text(encoding="utf-8")
+    models = json.loads(text)["models"]
+    assert models["server"] is None and models["server_version"] is None
+    assert models["picker_digest"] is None and models["embeddings_digest"] is None
+    out = capsys.readouterr().out
+    assert 'counted as an "unknown server" row, kept apart from the Ollama results' in out
+    assert cr.check(cr.parse(text))["server"] == "unknown server"            # the collector takes it, labelled
+
+
+def test_an_ollama_run_does_not_mention_an_unknown_server(tmp_path, capsys):
+    run(tmp_path, Server())
+    assert "unknown server" not in capsys.readouterr().out
 
 
 def test_a_reply_with_no_route_counts_as_wrong(tmp_path):

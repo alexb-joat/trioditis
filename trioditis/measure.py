@@ -502,6 +502,9 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
             sys.exit(f"results: cannot write --answers {args.answers}: {err.strerror or err} (the results file was written)")
         print(f"Wrote {args.answers}: the route the picker named for each of the {len(heldout)} public held-out prompts, "
               "by row number. No prompt text; your own labelled prompts are never in it. The share form does not take it.")
+    if doc["models"]["server"] is None:
+        print("This server did not answer like Ollama (GET /api/version), so the file says server: null and holds no "
+              "model digests. If you share it, it is counted as an \"unknown server\" row, kept apart from the Ollama results.")
     interactive = isatty() if isatty else (sys.stdin.isatty() and sys.stdout.isatty())
     if not args.no_share and interactive:
         ask_to_share(doc, ask=ask, opener=opener, out_name=args.out)
