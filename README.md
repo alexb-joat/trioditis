@@ -2,10 +2,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/banner-dark.svg">
-  <img alt="Trioditis: one endpoint, the right model for every prompt" src="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/banner-light.svg" width="720">
+  <img alt="Trioditis: one endpoint, a route for every prompt" src="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/banner-light.svg" width="720">
 </picture>
 
-**A security-first router for LLMs.** One OpenAI-compatible endpoint that sends each prompt to the right model, whether local (Ollama), cloud (Claude, GPT, OpenRouter) or legacy, and keeps sensitive prompts on your machine.
+**A security-first router for LLMs.** One OpenAI-compatible endpoint that picks a route and a model for each prompt, whether local (Ollama), cloud (Claude, GPT, OpenRouter) or legacy, and keeps a prompt in which its detectors find an email, card number, key or password away from cloud models.
 
 [![ci](https://github.com/alexb-joat/trioditis/actions/workflows/ci.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/ci.yml)
 [![codeql](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml)
@@ -30,7 +30,7 @@
 
 | Private by default | Cost-aware | Small and auditable | Explains itself |
 |---|---|---|---|
-| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 8,200 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Every response names its route and model. A log records the reasons, with no prompt text. |
+| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 8,200 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Routed answers name their route and model in response headers; Trioditis's own error replies and the Claude Code passthrough don't. A log records the reasons, with no prompt text. |
 
 ## Quick start
 

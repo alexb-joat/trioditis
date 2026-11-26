@@ -27,6 +27,7 @@
 **Changed**
 - The held-out labels moved from `tests/fixtures/routes-heldout.csv` to `trioditis/data/routes-heldout.csv`, unchanged, so the installed package carries them. The dated run records in `docs/route-accuracy/` keep the old path they were run with.
 - `scripts/route_study.py model-baseline` sends the route picker's own request (the router's code), and both study scripts use the package's local-only address check.
+- The README, the banner and the package description no longer say that every prompt gets the right model, that sensitive prompts stay on your machine, or that every response names its route. They now say what happens: a route and a model are picked for each prompt (the router chose the labelled route for 205 of 315 held-out prompts); a prompt in which the detectors find an email, card number, key or password stays away from cloud models; routed answers carry the route and model headers, error replies and the Claude Code passthrough don't.
 
 **Removed**
 - `privacy.on_no_local_model` is gone. Its `allow_cloud` value never sent a sensitive prompt to a cloud model; it only turned the 422 refusal into a 503. A sensitive prompt that no local model can take is now always refused with 422. A leftover `on_no_local_model:` line is ignored.
