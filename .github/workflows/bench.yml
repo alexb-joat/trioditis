@@ -73,3 +73,11 @@ jobs:
             ${{ env.ARTIFACT }}.runner.json
           if-no-files-found: error
           retention-days: 90
+      # After the upload, so a bad run's files stay for a look. Failed picker calls count as wrong answers,
+      # so a run with any of them would understate the model: it must not pass as a measurement.
+      - name: Fail the run if any picker call failed
+        run: |
+          failed=$(jq -er '.heldout.picker.failed_after_retry' "$ARTIFACT.json") \
+            || { echo "::error::$ARTIFACT.json has no heldout.picker.failed_after_retry"; exit 1; }
+          [[ "$failed" == 0 ]] || { echo "::error::$failed held-out picker calls failed even after a retry and were counted as wrong; this run is not a measurement, run it again"; exit 1; }
+          echo "0 failed picker calls"
