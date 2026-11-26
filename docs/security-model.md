@@ -33,7 +33,7 @@ Commands:
 - `trioditis hardware` asks local providers for `GET /api/tags`.
 - `trioditis eval-routes` sends your labelled prompts to the config's local embeddings provider, and nowhere else.
 - `trioditis reinforce run` sends each prompt of your labelled gate set to the config's local embeddings provider and local route picker, and nowhere else.
-- `trioditis results` sends the 315 held-out prompts (and, with `--own-labels`, yours) to the local server at `--base-url` (it refuses any address not on this machine; no proxy, no redirects), and asks that server for its version and model list. It reads no config. When you answer yes to its question, it asks your browser to open GitHub's results form with the numbers filled in; it sends nothing to GitHub itself, and nothing is public until you press Submit.
+- `trioditis results` sends the 315 held-out prompts (and, with `--own-labels`, yours) to the local server at `--base-url` (it refuses any address not on this machine; no proxy, no redirects), and asks that server for its version and model list. It does not read your `config.yaml`: it measures with the shipped settings. Like every command it loads `.env` from the current folder, and sends nothing from it. When you answer yes to its question, it asks your browser to open GitHub's results form with the numbers filled in; it sends nothing to GitHub itself, and nothing is public until you press Submit.
 - Every other command reads and writes local files only.
 
 ## Controls at a glance

@@ -79,7 +79,7 @@ def load(path: Path, rows: list, fingerprint: str, routes: list[str]) -> Answers
         doc = json.loads(path.read_text(encoding="utf-8"))
     except OSError as err:
         raise Refused(f"{path}: cannot read it ({err.strerror or err})") from None
-    except ValueError:
+    except (ValueError, RecursionError):      # RecursionError: brackets nested too deep to read
         raise Refused(f"{path}: not JSON") from None
     if not isinstance(doc, dict) or set(doc) != KEYS:
         raise Refused(f"{path}: not an answers file (expected exactly the keys {sorted(KEYS)})")

@@ -379,3 +379,11 @@ def test_the_script_names_no_model():
     text = (REPO / "scripts" / "compare_results.py").read_text(encoding="utf-8")
     for name in ("qwen", "llama", "gemma", "phi", "mistral", "smollm", "deepseek", "tiny:1b", "nomic"):
         assert name not in text.lower()
+
+
+def test_a_file_of_nothing_but_brackets_is_refused_in_words(tmp_path):
+    deep = tmp_path / "deep.answers.json"
+    deep.write_text("[" * 200_000, encoding="utf-8")
+    with pytest.raises(cmp.Refused, match="not JSON"):
+        cmp.load(deep, *cmp.shipped())
+

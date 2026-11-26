@@ -7,8 +7,8 @@ body:
     attributes:
       value: |
         `trioditis results` fills this form for you when you answer yes. To fill it by hand, paste the whole
-        `trioditis-results.json` below. It holds counts, timings, version numbers and hardware names only:
-        no prompts, paths, user or host names. Read it before you press Submit.
+        `trioditis-results.json` below. It holds counts, timings, model names and digests, version numbers,
+        hardware names and the date: no prompts, paths, user or host names. Read it before you press Submit.
   - type: textarea
     id: results
     attributes:
@@ -21,7 +21,7 @@ body:
     attributes:
       label: Sharing
       options:
-        - label: "I understand this issue is public, and I release these numbers under CC0 (anyone may use them, no credit needed). It holds numbers only."
+        - label: "I understand this issue is public, and I release these numbers under CC0 (anyone may use them, no credit needed). The file holds no prompts, paths, user or host names."
           required: true
   - type: textarea
     id: notes
