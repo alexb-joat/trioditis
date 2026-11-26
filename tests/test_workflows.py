@@ -23,6 +23,8 @@ ALLOWED_JOB_WRITES = {
 PINNED = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_./-]+)?@[0-9a-f]{40}")
 EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.S)
 UNTRUSTED = re.compile(r"(?<![\w.])(github\.event\.|inputs\.)")
+FETCH_AND_RUN = re.compile(r"\b(pipx\s+(run|install)|uvx|uv\s+tool\s+(run|install)|npx)\b")
+PIP_INSTALL = re.compile(r"\bpip3?\s+install\b([^\n|;&]*)")
 
 
 def load(path: Path) -> dict:
@@ -87,6 +89,22 @@ def injectable_runs(wf: dict) -> list[str]:
     return out
 
 
+def unpinned_tools(wf: dict) -> list[str]:
+    """A `run:` line that fetches a tool at whatever version is newest that day (`pipx run`, `uvx`, `npx`), or a
+    `pip install` that neither checks hashes nor is a local file installed with `--no-deps`. One hijacked release
+    of such a tool would run in CI with the checkout in reach."""
+    out = []
+    for job_id, step in steps(wf):
+        for line in str(step.get("run", "")).splitlines():
+            if found := FETCH_AND_RUN.search(line):
+                out.append(f"{job_id}: `{found.group(0)}` fetches the newest release: {line.strip()}")
+            for args in PIP_INSTALL.findall(line):
+                local_only = "--no-deps" in args and all(a.startswith("-") or "/" in a for a in args.split())
+                if "--require-hashes" not in args and not local_only:
+                    out.append(f"{job_id}: pip install without --require-hashes: {line.strip()}")
+    return out
+
+
 def unpinned_images(wf: dict) -> list[str]:
     out = []
     for job_id, job in jobs(wf).items():
@@ -128,6 +146,11 @@ def test_no_run_line_holds_an_event_or_input_expression(name):
 
 
 @pytest.mark.parametrize("name", DOCS)
+def test_every_tool_a_run_line_installs_is_hash_pinned(name):
+    assert unpinned_tools(DOCS[name]) == []
+
+
+@pytest.mark.parametrize("name", DOCS)
 def test_every_service_and_container_image_is_pinned_by_digest(name):
     assert unpinned_images(DOCS[name]) == []
 
@@ -138,6 +161,7 @@ def test_the_rules_look_at_what_the_workflows_really_contain():
     assert sum("uses" in s for wf in DOCS.values() for _, s in steps(wf)) >= 10
     assert any(jobs(wf)[j].get("services") for wf in DOCS.values() for j in jobs(wf))
     assert all(wf.get("on", wf.get(True)) for wf in DOCS.values())
+    assert sum(len(PIP_INSTALL.findall(str(s.get("run", "")))) for wf in DOCS.values() for _, s in steps(wf)) >= 5
     assert any(re.search(r"\$\{\{\s*inputs\.", str(v)) for wf in DOCS.values() for job in jobs(wf).values()
                for v in (job.get("env") or {}).values()), "an input read through env: is the form the rule allows"
 
@@ -217,6 +241,23 @@ def test_an_event_or_input_expression_in_a_run_string_fails_but_the_same_in_env_
     wf = edited("bench.yml")
     first_step_with(wf, "run")["env"] = {"TITLE": "${{ github.event.pull_request.title }}"}
     assert injectable_runs(wf) == []
+
+
+def test_a_tool_fetched_at_its_newest_release_fails_but_a_hash_checked_or_local_install_does_not():
+    for run in ("pipx run pip-audit -r requirements.txt --require-hashes --strict", "uvx ruff check .",
+                "uv tool run ruff check .", "npx prettier --check .", "pip install pip-audit",
+                "python -m pip install --no-deps build", "pip install -r requirements.txt",
+                "pip install --require-hashes -r a.txt && pip install twine"):
+        wf = edited("ci.yml")
+        first_step_with(wf, "run")["run"] = run
+        assert unpinned_tools(wf), run
+    for run in ("pip install --require-hashes --no-deps -r requirements-dev.txt",
+                "/tmp/clean/bin/pip install --no-deps dist/*.whl",
+                "python -m venv /tmp/audit\n/tmp/audit/bin/pip install --require-hashes --no-deps -r requirements-audit.txt\n"
+                "/tmp/audit/bin/pip-audit -r requirements.txt --require-hashes --strict"):
+        wf = edited("ci.yml")
+        first_step_with(wf, "run")["run"] = run
+        assert unpinned_tools(wf) == [], run
 
 
 def test_an_image_without_a_digest_fails_in_services_and_container():

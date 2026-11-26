@@ -43,6 +43,7 @@
 - The CodeQL action is pinned at 4.39.3.
 - Two guard tests: `tests/test_tls_floor.py` requires every `SSLContext(...)` in the repo to set a TLS 1.2 or 1.3 floor, and `tests/test_lockfiles.py` fails when a lockfile drifts from its own `uv pip compile` command (a runtime pin missing or different in the dev lockfile, the Windows `colorama` line gone, a pin without a hash).
 - The stand-in servers in `scripts/` and the tests bind without the reverse-DNS lookup `HTTPServer` makes of its own address, which can stall for many seconds on GitHub's macOS runners: the results rehearsal's stand-in had not answered within 15 s on any macOS job.
+- CI's dependency audit installs `pip-audit` from its own hash-pinned lockfile (`requirements-audit.txt`, 28 packages) into a separate environment; before, `pipx run pip-audit` fetched whatever release was newest that day. `tests/test_workflows.py` now fails on any workflow line that runs `pipx run`, `uvx` or `npx`, or a `pip install` without `--require-hashes` (a local file with `--no-deps` passes), and `tests/test_lockfiles.py` also checks the audit and release lockfiles' headers and hashes.
 
 ## 0.7.0 (2026-11-24)
 

@@ -1,0 +1,2 @@
+# The dependency audit only (.github/workflows/ci.yml): pip-audit from a hash-pinned lockfile, in its own environment.
+pip-audit

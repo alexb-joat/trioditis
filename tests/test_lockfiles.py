@@ -93,6 +93,8 @@ def test_dev_lockfile_keeps_windows_colorama():
 def test_headers_name_their_command_and_every_pin_is_hashed():
     assert header_and_hash_problems(read(RUNTIME), "requirements.txt", "requirements.in") == []
     assert header_and_hash_problems(read(DEV), "requirements-dev.txt", "requirements-dev.in") == []
+    for name in ("requirements-audit", "requirements-release"):   # the tools CI and the release build install
+        assert header_and_hash_problems(read(REPO / f"{name}.txt"), f"{name}.txt", f"{name}.in") == []
 
 
 def test_dropping_colorama_fails():

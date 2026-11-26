@@ -37,7 +37,12 @@ jobs:
         run: python scripts/smoke.py
       - name: Dependency vulnerability audit
         if: runner.os == 'Linux' && matrix.python == '3.13'
-        run: pipx run pip-audit -r requirements.txt --require-hashes --strict
+        # pip-audit comes from its own hash-pinned lockfile (`pipx run` took whatever was newest that day), in its
+        # own environment so that it replaces none of the packages under test.
+        run: |
+          python -m venv /tmp/audit
+          /tmp/audit/bin/pip install --require-hashes --no-deps -r requirements-audit.txt
+          /tmp/audit/bin/pip-audit -r requirements.txt --require-hashes --strict
       - name: Config sanity
         run: python -m trioditis --config config.example.yaml check
 

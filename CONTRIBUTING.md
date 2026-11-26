@@ -26,6 +26,7 @@ Thanks for helping. Trioditis sits between people and every model they use, so t
   uv pip compile requirements.in --universal --generate-hashes --python-version 3.11 -o requirements.txt
   uv pip compile requirements-dev.in --universal --generate-hashes --python-version 3.11 -o requirements-dev.txt
   ```
+  The audit tool and the release build have their own lockfiles (`requirements-audit.txt`, `requirements-release.txt`); the first lines of each name the command that builds it.
 - **Network.** No new outbound calls (telemetry, update checks, remote config) without a discussion first.
 - **Logging.** Never log prompt text, response text or keys by default.
 - **Secrets.** Never commit `.env`, `config.yaml`, keys or real prompts — not even in tests. If one slips into a pushed commit, rotate it: forks keep history even after you delete it.
