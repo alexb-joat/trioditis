@@ -110,6 +110,7 @@ def stub(capture: Capture, cert: Path, key: Path) -> int:
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), H)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2  # PROTOCOL_TLS_SERVER alone still accepts TLS 1.0 and 1.1
     ctx.load_cert_chain(str(cert), str(key))
     server.socket = ctx.wrap_socket(server.socket, server_side=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
