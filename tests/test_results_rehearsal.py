@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import contextlib
 import json
+import socket
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 import httpx
@@ -122,6 +124,67 @@ def test_the_rehearsal_stops_the_stand_in_it_started(monkeypatch):
     assert rehearse_results.rehearse(sys.executable, "source tree") == LINE
     with pytest.raises(httpx.TransportError), httpx.Client(trust_env=False, timeout=2) as c:
         c.get(f"http://127.0.0.1:{port}/api/version")
+
+
+@contextlib.contextmanager
+def silent_child(log: Path, says: str):
+    """A child that prints `says` (when given) and then never answers anything, the way a stuck stand-in looks."""
+    with log.open("w", encoding="utf-8") as fh:
+        proc = subprocess.Popen([sys.executable, "-c", f"import time; print({says!r} or '', end='', flush=True); "
+                                 "time.sleep(60)"], stdout=fh, stderr=subprocess.STDOUT)
+    try:
+        deadline = time.monotonic() + 30
+        while says and says not in log.read_text(encoding="utf-8") and time.monotonic() < deadline:
+            time.sleep(0.05)
+        yield proc
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_a_stand_in_that_never_answers_is_described_not_just_timed_out(tmp_path):
+    """CI on macOS (26 Nov 2026) said only "did not answer ... within 15 s". The message now says whether the
+    stand-in still runs, whether anything has bound its port, what the last try met and what the stand-in printed."""
+    port = rehearse_results.free_port()
+    url = f"http://127.0.0.1:{port}/api/version"
+    with silent_child(tmp_path / "quiet.log", "") as proc:
+        with pytest.raises(rehearse_results.RehearsalError) as e:
+            rehearse_results.wait_until_up(url, proc, tmp_path / "quiet.log", wait_s=0.5)
+        message = str(e.value)
+    assert message.startswith(f"the stand-in server did not answer {url} within 0.5 s (")
+    assert "tries, the last: " in message and "the last: none made" not in message
+    assert f"the stand-in is still running (pid {proc.pid})" in message
+    assert f"port {port} on 127.0.0.1 is free (nothing has bound it)" in message
+    assert message.endswith("it printed nothing (it prints its address once it is listening)")
+
+
+def test_a_bound_port_and_what_the_stand_in_printed_are_named(tmp_path):
+    """A socket that has bound the port but does not listen: the case of a stand-in stuck between bind and listen."""
+    with socket.socket() as held:
+        held.bind(("127.0.0.1", 0))
+        port = held.getsockname()[1]
+        with silent_child(tmp_path / "said.log", "fake-ollama on its way") as proc:
+            with pytest.raises(rehearse_results.RehearsalError) as e:
+                rehearse_results.wait_until_up(f"http://127.0.0.1:{port}/api/version", proc, tmp_path / "said.log",
+                                               wait_s=0.5)
+    message = str(e.value)
+    assert f"port {port} on 127.0.0.1 is taken (a socket has bound it)" in message
+    assert message.endswith("it printed: fake-ollama on its way")
+
+
+def test_a_stand_in_that_answers_404_is_named_by_its_status(tmp_path):
+    server = fake_ollama.make_server(0, "no-api")
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with silent_child(tmp_path / "s.log", "") as proc:
+            with pytest.raises(rehearse_results.RehearsalError, match=r"the last: HTTP 404\)"):
+                rehearse_results.wait_until_up(f"http://127.0.0.1:{server.server_address[1]}/api/version", proc,
+                                               tmp_path / "s.log", wait_s=0.5)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(5)
 
 
 def test_the_rehearsal_checks_the_answers_file_too(tmp_path):

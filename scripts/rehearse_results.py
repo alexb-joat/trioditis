@@ -25,6 +25,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -36,6 +37,7 @@ DEAD_PROXY = "http://127.0.0.1:9"          # nothing listens there: a run that h
 KEEP = ("PATH", "SYSTEMROOT", "SYSTEMDRIVE", "PATHEXT", "COMSPEC", "WINDIR", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "LC_CTYPE")
 NEVER = {8787, 8788, 11434}                # the live router's ports and Ollama's own: never used here
 TIMEOUT_S = 300
+WAIT_S = 15                                # how long the stand-in has to answer /api/version
 
 
 class RehearsalError(Exception):
@@ -72,20 +74,47 @@ def tail(text: str, n: int = 1500) -> str:
     return text if len(text) <= n else "..." + text[-n:]
 
 
-def wait_until_up(url: str, proc: subprocess.Popen, log: Path) -> None:
+def wait_until_up(url: str, proc: subprocess.Popen, log: Path, wait_s: float = WAIT_S) -> None:
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))     # never through a proxy
-    deadline = time.monotonic() + 15
+    deadline = time.monotonic() + wait_s
+    tries, last = 0, "none made"
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             raise RehearsalError(f"the stand-in server exited with code {proc.returncode}: {tail(log.read_text(errors='replace'))}")
+        tries += 1
         try:
             with opener.open(url, timeout=1) as r:
                 if r.status == 200:
                     return
-        except (urllib.error.URLError, OSError):
-            time.sleep(0.1)
-    raise RehearsalError(f"the stand-in server did not answer {url} within 15 s; it printed: "
-                         f"{tail(log.read_text(errors='replace')) or '(nothing)'}")
+                last = f"HTTP {r.status}"
+        except urllib.error.HTTPError as err:
+            last = f"HTTP {err.code}"
+        except (urllib.error.URLError, OSError) as err:
+            reason = getattr(err, "reason", err)
+            last = f"{type(reason).__name__}: {reason}"
+        time.sleep(0.1)
+    raise RehearsalError(not_up(url, proc, log, wait_s, tries, last))
+
+
+def port_state(port: int) -> str:
+    """Whether a socket holds `port` on 127.0.0.1: a stand-in that has bound it holds it, even before it listens."""
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError:
+            return f"port {port} on 127.0.0.1 is taken (a socket has bound it)"
+    return f"port {port} on 127.0.0.1 is free (nothing has bound it)"
+
+
+def not_up(url: str, proc: subprocess.Popen, log: Path, wait_s: float, tries: int, last: str) -> str:
+    """Why the stand-in did not answer, as far as this side can tell: its state, its port and what it printed."""
+    code = proc.poll()
+    state = f"is still running (pid {proc.pid})" if code is None else f"exited with code {code}"
+    printed = log.read_text(encoding="utf-8", errors="replace").strip() if log.is_file() else ""
+    said = (f"it printed: {tail(printed)}" if printed
+            else "it printed nothing (it prints its address once it is listening)")
+    return (f"the stand-in server did not answer {url} within {wait_s:g} s ({tries} tries, the last: {last}); "
+            f"the stand-in {state}; {port_state(urllib.parse.urlsplit(url).port)}; {said}")
 
 
 def check_answers(answers: dict, doc: dict) -> None:
