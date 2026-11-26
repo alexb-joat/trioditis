@@ -57,8 +57,9 @@ class Loading:
         self.chats += 1
         if self.ready is None:
             self.ready = time.monotonic() + self.load_s
-        wait = self.ready - time.monotonic()
-        await asyncio.sleep(max(wait, 0.0) + self.warm_s)
+        while (wait := self.ready - time.monotonic()) > 0:   # a coarse clock can end one sleep a tick short
+            await asyncio.sleep(wait)
+        await asyncio.sleep(self.warm_s)
         return reply("quick")
 
     def handler(self):

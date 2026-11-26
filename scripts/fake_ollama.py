@@ -158,8 +158,9 @@ class Handler(BaseHTTPRequestHandler):
                 while len(server.models) > MAX_MODELS:
                     server.models.pop(next(iter(server.models)))
             m["running"] += 1
-            wait = m["ready"] - now
-        if wait > 0:
+        # Until the clock /api/ps reads says the load is over: on a coarse clock (15.6 ms ticks, Windows before
+        # Python 3.13) one sleep can end a tick short, and the answer would come while /api/ps still lists nothing.
+        while (wait := m["ready"] - time.monotonic()) > 0:
             time.sleep(wait)
         return m
 
