@@ -452,3 +452,30 @@ What shared results can show: how picker models rank on this public set (accurac
 machine), and how long the picker takes across real hardware. What they cannot show: accuracy on real use.
 These prompts were written for the test, so a ranking on them is a ranking on them, not on anyone's own
 prompts. `--own-labels` adds counts on a person's own labelled prompts, never the prompts.
+
+## Which small picker model: the plan, written before any run (24 November 2026)
+
+- **Question.** Does any small model pick the route more often than `qwen2.5-coder:7b` on the public held-out
+  set (231/315 on this laptop, 19 and 24 November)? A smaller picker that is as good waits less.
+- **Models.** Eight tags taken from Ollama's library page on 24 November 2026, each confirmed to exist in
+  Ollama's registry that day: `llama3.2:3b`, `qwen2.5:3b`, `qwen2.5-coder:3b`, `gemma3:4b`,
+  `phi4-mini:3.8b`, `granite4:3b`, `ministral-3:3b`, `smollm2:1.7b`. The rule that chose them: general or
+  coding instruct models of at most 4B parameters, not tagged "thinking" (the picker's request has no way
+  to turn reasoning off), no vision or embedding models. No model is added after the first run.
+- **Where.** `.github/workflows/bench.yml`, started by hand: a GitHub shared runner, Ollama 0.40.0 pinned
+  by digest, the shipped settings, `nomic-embed-text` for the router. `qwen2.5-coder:7b` runs there too, so
+  every comparison is between two runs on the same kind of machine.
+- **Runs.** Two per model, the 7B included, because a repeat at temperature 0 changed 12 of 315 answers
+  before. The test uses run 1. Run 2 is reported as how many answers changed. If run 2 would reverse a
+  conclusion, both are shown and that conclusion is not claimed.
+- **Test.** For each small model against the 7B: the prompts where exactly one of the two is right,
+  exact two-sided sign test, Holm correction over the eight tests at 0.05. A model "beats" the 7B only if
+  its corrected test passes and it is ahead.
+- **What this n can show.** At Holm's first threshold (0.05/8), with 100 prompts where the two disagree,
+  the test finds a 70:30 split with probability 0.88, a 65:35 split with 0.55 and a 60:40 split with 0.18;
+  with 60 such prompts, 0.67, 0.35 and 0.12. Computed exactly from the binomial distribution. So a small
+  model a few points behind or ahead will most likely read as "no difference shown", not as "equal".
+- **Reported either way.** Every model's count with its 95% interval, per route, the sign tests, run 2's
+  changes, and the runner's waiting times, labelled indicative only.
+- **Limits.** These prompts were written for the test. A ranking on them is a ranking on them, not on
+  real use. One shared runner type, so the timings say little about other hardware.
