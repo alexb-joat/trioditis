@@ -48,6 +48,7 @@ import argparse
 import hashlib
 import json
 import re
+import socketserver
 import sys
 import threading
 import time
@@ -250,13 +251,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
 
+class LocalServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without the reverse-DNS lookup of its own address. HTTPServer.server_bind calls
+    socket.getfqdn(host), which can stall for many seconds on GitHub's macOS runners, longer than a caller
+    waits for the server to answer. Only CGI handlers read server_name, so the bind address does."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def make_server(port: int, mode: str = "ok", after: int = 0, *, load_delay: float = 0.0,
                 keep_alive: float = KEEP_ALIVE_S, per_char: float = 0.0) -> ThreadingHTTPServer:
     if mode not in MODES:
         raise ValueError(f"mode must be one of {', '.join(MODES)}")
     if min(load_delay, keep_alive, per_char) < 0:
         raise ValueError("load_delay, keep_alive and per_char must be 0 or more")
-    server = ThreadingHTTPServer((HOST, port), Handler)
+    server = LocalServer((HOST, port), Handler)
     server.daemon_threads = True
     server.mode, server.after = mode, after
     server.load_delay, server.keep_alive, server.per_char = load_delay, keep_alive, per_char

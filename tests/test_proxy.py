@@ -9,8 +9,10 @@ Real sockets, loopback only: a mocked transport would switch proxy handling off 
 from __future__ import annotations
 
 import json
+import sys
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +20,9 @@ from fastapi.testclient import TestClient
 from trioditis.app import create_app
 from trioditis.config import parse_config
 from trioditis_metrics import BudgetCaps, BudgetGuard, MetricsDB, Prices
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from fake_ollama import LocalServer  # noqa: E402  (no reverse-DNS lookup at bind: it stalls on macOS runners)
 
 PROXY_VARS = ("HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy")
 
@@ -71,7 +76,7 @@ class _LocalModels(BaseHTTPRequestHandler):
 def servers(monkeypatch):
     made = []
     for handler in (_Proxy, _LocalModels):
-        s = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        s = LocalServer(("127.0.0.1", 0), handler)
         s.hits = []
         threading.Thread(target=s.serve_forever, daemon=True).start()
         made.append(s)

@@ -294,3 +294,24 @@ def test_the_two_modes_are_exclusive_and_one_is_required():
         with pytest.raises(SystemExit) as e:
             rehearse_results.main(argv)
         assert e.value.code == 2
+
+
+def test_the_stand_ins_bind_without_a_reverse_dns_lookup(monkeypatch):
+    """HTTPServer.server_bind looks up socket.getfqdn of its own address, which can stall for many seconds on
+    GitHub's macOS runners. Both stand-ins skip it: with getfqdn refused they still bind, and fake_ollama answers."""
+    import socket
+
+    import console_check
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("socket.getfqdn was called while binding")
+
+    monkeypatch.setattr(socket, "getfqdn", refuse)
+    with serving() as server:
+        r = httpx.get(f"http://127.0.0.1:{server.server_address[1]}/api/version", trust_env=False, timeout=5)
+    assert r.status_code == 200 and server.server_name == "127.0.0.1"
+    stand_in = console_check.LocalServer(("127.0.0.1", 0), fake_ollama.Handler)
+    try:
+        assert stand_in.server_name == "127.0.0.1" and stand_in.server_port == stand_in.server_address[1] > 0
+    finally:
+        stand_in.server_close()

@@ -23,6 +23,7 @@ import json
 import os
 import shutil
 import socket
+import socketserver
 import ssl
 import subprocess
 import sys
@@ -32,6 +33,15 @@ import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+
+class LocalServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer without the reverse-DNS lookup of its own address (socket.getfqdn in
+    HTTPServer.server_bind), which can stall for many seconds on GitHub's macOS runners. Only CGI reads server_name."""
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -108,7 +118,7 @@ def stub(capture: Capture, cert: Path, key: Path) -> int:
             self.end_headers()
             self.wfile.write(out)
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    server = LocalServer(("127.0.0.1", 0), H)
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     ctx.minimum_version = ssl.TLSVersion.TLSv1_2  # PROTOCOL_TLS_SERVER alone still accepts TLS 1.0 and 1.1
     ctx.load_cert_chain(str(cert), str(key))

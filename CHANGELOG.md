@@ -40,6 +40,7 @@
 - FastAPI 0.163.1 and ruff 0.17.5. Both lockfiles were regenerated with uv from their own header commands, so the Windows-only `colorama` line that pytest needs stays in `requirements-dev.txt`.
 - The CodeQL action is pinned at 4.39.3.
 - Two guard tests: `tests/test_tls_floor.py` requires every `SSLContext(...)` in the repo to set a TLS 1.2 or 1.3 floor, and `tests/test_lockfiles.py` fails when a lockfile drifts from its own `uv pip compile` command (a runtime pin missing or different in the dev lockfile, the Windows `colorama` line gone, a pin without a hash).
+- The stand-in servers in `scripts/` and the tests bind without the reverse-DNS lookup `HTTPServer` makes of its own address, which can stall for many seconds on GitHub's macOS runners: the results rehearsal's stand-in had not answered within 15 s on any macOS job. On Windows, the no-network test of `scripts/stats_walkthrough.py` now lets asyncio build its internal socket pair and still refuses every other connection.
 
 ## 0.7.0 (2026-11-24)
 

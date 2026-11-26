@@ -84,7 +84,8 @@ def wait_until_up(url: str, proc: subprocess.Popen, log: Path) -> None:
                     return
         except (urllib.error.URLError, OSError):
             time.sleep(0.1)
-    raise RehearsalError(f"the stand-in server did not answer {url} within 15 s")
+    raise RehearsalError(f"the stand-in server did not answer {url} within 15 s; it printed: "
+                         f"{tail(log.read_text(errors='replace')) or '(nothing)'}")
 
 
 def check_answers(answers: dict, doc: dict) -> None:

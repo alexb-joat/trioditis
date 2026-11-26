@@ -9,12 +9,15 @@ import shutil
 import subprocess
 import sys
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+from fake_ollama import LocalServer  # noqa: E402  (no reverse-DNS lookup at bind: it stalls on macOS runners)
+
 WINDOWS = os.name == "nt"
 POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
 
@@ -48,7 +51,7 @@ def router():
             self.end_headers()
             self.wfile.write(body)
 
-    server = HTTPServer(("127.0.0.1", 0), Health)
+    server = LocalServer(("127.0.0.1", 0), Health)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     yield f"http://127.0.0.1:{server.server_address[1]}"
     server.shutdown()
