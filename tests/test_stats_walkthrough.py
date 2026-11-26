@@ -104,16 +104,6 @@ def test_no_socket_is_opened(monkeypatch):
     def refuse(*args, **kwargs):
         raise AssertionError("stats_walkthrough opened a network connection")
 
-    # asyncio's event loop wakes itself through socket.socketpair(); on Windows that pair is two sockets in this
-    # process joined by connect(), so the pair is built with the real connect and every other connect is refused.
-    real_connect, real_socketpair = socket.socket.connect, socket.socketpair
-
-    def socketpair(*args, **kwargs):
-        with monkeypatch.context() as m:
-            m.setattr(socket.socket, "connect", real_connect)
-            return real_socketpair(*args, **kwargs)
-
-    monkeypatch.setattr(socket, "socketpair", socketpair)
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
