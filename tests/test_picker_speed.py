@@ -83,7 +83,7 @@ async def test_a_cold_model_is_counted_cold_and_its_late_answer_comes_after_the_
     c, p = asker(server.handler(), fast())
     router, info = await classify(c, p)
     assert info["outcome"] == "cold" and info["route"] is None
-    assert 100 <= info["ms"] < LOAD_S * 1000
+    assert 100 * 0.9 <= info["ms"] < LOAD_S * 1000     # 0.9: a coarse clock (Windows, 15.6 ms ticks) reads 100 ms as 93
     assert info["late"]["outcome"] == "chose" and info["late"]["route"] == "quick"
     assert info["late"]["ms"] >= LOAD_S * 1000 * 0.9
     assert router == "quick"
