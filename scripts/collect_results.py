@@ -7,8 +7,10 @@
 
 Every submission is untrusted data: anyone can open an issue and type anything into the form. A submission
 becomes a row only when the consent box is ticked, the JSON is a `trioditis-results.v1` file with exactly
-the expected keys and types, its counts add up, and it was measured on the shipped held-out set. Anything
-else is listed with the reason and left out. A file from a server that is not Ollama (`models.server` null, and
+the expected keys and types, its counts add up (with each other, with the 315 shipped prompts, and with the
+interval and the sign test worked out again here), and it was measured on the shipped held-out set. Anything
+else is listed with the reason and left out, and one bad submission never stops the ones after it.
+A file from a server that is not Ollama (`models.server` null, and
 then no version or digests) is checked the same way and gets the `server` cell "unknown server", so its row is
 never taken for an Ollama row. This script makes no network call: `gh` fetches the issues,
 and you run it.
@@ -23,14 +25,18 @@ import hashlib
 import io
 import json
 import math
+import os
 import re
 import sys
+import unicodedata
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from trioditis.measure import SCHEMA, heldout_path  # noqa: E402
+from trioditis_metrics.stats import sign_test, wilson  # noqa: E402
 
 CSV_PATH = ROOT / "docs" / "community-results.csv"
 MAX_BODY = 30_000              # the form's JSON is about 5,500 characters; far past that is not a results file
@@ -40,6 +46,11 @@ ROUTES = ["code", "reasoning", "writing", "quick"]
 NO_ROUTE = "-"
 UNKNOWN_SERVER = "unknown server"    # the `server` cell for a file with models.server null; no valid server name has a space
 UNSAFE = re.compile(r"[\x00-\x1f\x7f<>`|\\]")
+# Unicode classes no hardware or model name needs: other control codes, invisible format marks (bidi overrides,
+# zero-width characters), lone surrogates (which cannot be written as UTF-8), private-use and unassigned code
+# points, line and paragraph separators.
+HIDDEN = frozenset({"Cc", "Cf", "Cs", "Co", "Cn", "Zl", "Zp"})
+FIRST_DATE = dt.date(2026, 11, 1)   # `trioditis results` did not exist before November 2026
 
 COLUMNS = ["issue", "date", "trioditis", "picker", "picker_digest_12", "server", "server_version", "embeddings",
            "os", "arch", "cpu", "cores", "ram_gb", "gpus", "n", "picker_right", "picker_low95", "picker_high95",
@@ -63,6 +74,9 @@ def from_issue(body: str) -> dict:
     """The results JSON from an issue body written by the form, once the consent box is ticked."""
     if not isinstance(body, str) or len(body) > MAX_BODY:
         raise Rejected(f"the issue body is missing or longer than {MAX_BODY:,} characters")
+    for heading in ("Results file", "Sharing"):
+        if len(re.findall(rf"^###\s+{re.escape(heading)}\s*$", body, re.M)) > 1:
+            raise Rejected(f"more than one '{heading}' heading, so the form's own box cannot be told from typed text")
     sharing = _section(body, "Sharing")
     if not sharing or not re.search(r"^\s*[-*]\s+\[[xX]\]\s", sharing, re.M):
         raise Rejected("the consent box (public, CC0) is not ticked")
@@ -75,13 +89,25 @@ def from_issue(body: str) -> dict:
     return parse(text)
 
 
+def _no_repeats(pairs: list) -> dict:
+    """An object as a dict, refused when a key is there twice: the reader of the issue would see the first value
+    and the row would hold the last."""
+    doc = dict(pairs)
+    if len(doc) != len(pairs):
+        raise Rejected("a key is there twice in one object")
+    return doc
+
+
 def parse(text: str) -> dict:
     if len(text) > MAX_BODY:
         raise Rejected(f"the results text is longer than {MAX_BODY:,} characters")
     try:
-        doc = json.loads(text, parse_constant=lambda c: (_ for _ in ()).throw(Rejected(f"{c} is not a number")))
+        doc = json.loads(text, object_pairs_hook=_no_repeats,
+                         parse_constant=lambda c: (_ for _ in ()).throw(Rejected(f"{c} is not a number")))
     except json.JSONDecodeError as e:
         raise Rejected(f"the results text is not JSON ({e.msg}, line {e.lineno})") from None
+    except (ValueError, RecursionError):      # a whole number of thousands of digits, or brackets nested too deep to read
+        raise Rejected("the results text holds a number too long to read or is nested too deep") from None
     _walk(doc, "file", 0)
     return doc
 
@@ -100,10 +126,10 @@ def _walk(x, where: str, depth: int) -> None:
         for i, v in enumerate(x):
             _walk(v, f"{where}[{i}]", depth + 1)
     elif isinstance(x, str):
-        if len(x) > MAX_STR or UNSAFE.search(x):
+        if len(x) > MAX_STR or UNSAFE.search(x) or any(unicodedata.category(c) in HIDDEN for c in x):
             raise Rejected(f"{where}: text longer than {MAX_STR} or with characters a results file never holds")
-    elif isinstance(x, float) and not math.isfinite(x):
-        raise Rejected(f"{where}: not a finite number")
+    elif isinstance(x, float) and (not math.isfinite(x) or (x == 0 and math.copysign(1, x) < 0)):
+        raise Rejected(f"{where}: not a finite number, or a negative zero")
 
 
 # ---------------------------------------------------------------- checking the numbers
@@ -134,7 +160,7 @@ def _num(x, where: str, lo: float = 0.0, hi: float = 1e6, null: bool = False) ->
 def _str(x, where: str, pattern: str = r".{1,120}", null: bool = False) -> str | None:
     if x is None and null:
         return None
-    if not isinstance(x, str) or not re.fullmatch(pattern, x):
+    if not isinstance(x, str) or not re.fullmatch(pattern, x, re.ASCII):    # re.ASCII: \d is 0-9 only
         raise Rejected(f"{where}: unexpected text")
     return x
 
@@ -151,11 +177,19 @@ def _rate(x, where: str, n: int | None = None) -> dict:
     return r
 
 
+def _interval(r: dict, where: str) -> None:
+    """The 95% interval in the file is the one its own count gives (worked out again; the file rounds to 4 places)."""
+    for k, want in zip(("low95", "high95"), wilson(r["right"], r["n"]) or (None, None), strict=True):
+        if (r[k] is None) != (want is None) or (want is not None and abs(r[k] - want) > 1e-4):
+            raise Rejected(f"{where}.{k} is not the 95% interval of {r['right']} of {r['n']}")
+
+
 def _scored(x, where: str, n: int) -> dict:
     s = _rate(x, where, n)
     per = _obj(s.get("per_route"), f"{where}.per_route", set(ROUTES))
+    shipped = heldout_counts()
     for route in ROUTES:
-        _rate(per[route], f"{where}.per_route.{route}")
+        _rate(per[route], f"{where}.per_route.{route}", shipped.get(route, 0))
     if sum(per[r]["right"] for r in ROUTES) != s["right"] or sum(per[r]["n"] for r in ROUTES) != n:
         raise Rejected(f"{where}: the routes don't add up to the total")
     conf = _obj(s.get("confusion"), f"{where}.confusion", set(), set(ROUTES))
@@ -164,7 +198,16 @@ def _scored(x, where: str, n: int) -> dict:
         counts = [_int(v, f"{where}.confusion.{route}.{k}") for k, v in row.items()]
         if sum(counts) != per[route]["n"] or row.get(route, 0) != per[route]["right"]:
             raise Rejected(f"{where}.confusion.{route} doesn't match its per-route count")
+    _interval(s, where)
+    for route in ROUTES:
+        _interval(per[route], f"{where}.per_route.{route}")
     return s
+
+
+def heldout_counts() -> dict[str, int]:
+    """How many prompts of each route the shipped held-out set holds."""
+    with heldout_path().open(newline="", encoding="utf-8") as f:
+        return dict(Counter(row["expected_route"] for row in csv.DictReader(f)))
 
 
 def heldout_fingerprint() -> str:
@@ -180,10 +223,13 @@ def check(doc: dict) -> dict:
     _str(d["trioditis"], "trioditis", r"\d{1,3}\.\d{1,3}\.\d{1,3}[a-z0-9.+-]{0,20}")
     _str(d["date"], "date", r"\d{4}-\d{2}-\d{2}")
     try:
-        if dt.date.fromisoformat(d["date"]) > dt.date.today() + dt.timedelta(days=1):
-            raise Rejected("date is in the future")
+        day = dt.date.fromisoformat(d["date"])
     except ValueError:
         raise Rejected("date is not a real date") from None
+    if day > dt.date.today() + dt.timedelta(days=1):
+        raise Rejected("date is in the future")
+    if day < FIRST_DATE:
+        raise Rejected(f"date is before {FIRST_DATE}, when `trioditis results` did not exist yet")
 
     st = _obj(d["settings"], "settings", {"config_sha256_16", "heldout_sha256_16", "instruction_sha256_16",
                                           "embeddings_threshold", "routes"})
@@ -238,6 +284,9 @@ def check(doc: dict) -> dict:
 
     h = _obj(d["heldout"], "heldout", {"n", "picker", "router_keywords", "router", "router_note", "picker_vs_router"})
     n = _int(h["n"], "heldout.n", 1, 10**5)
+    shipped_n = sum(heldout_counts().values())
+    if n != shipped_n:
+        raise Rejected(f"heldout.n is {n}, the shipped held-out set has {shipped_n} prompts")
     picker = _scored(h["picker"], "heldout.picker", n)
     keywords = _scored(h["router_keywords"], "heldout.router_keywords", n)
     router = _scored(h["router"], "heldout.router", n) if h["router"] is not None else None
@@ -245,14 +294,22 @@ def check(doc: dict) -> dict:
     pr = _obj(h["picker_vs_router"], "heldout.picker_vs_router", {"only_first", "only_second", "sign_test_p", "router"})
     if pr["router"] != ("router" if router else "router_keywords"):
         raise Rejected("heldout.picker_vs_router.router doesn't name the router row that was measured")
-    _int(pr["only_first"], "heldout.picker_vs_router.only_first", 0, n)
-    _int(pr["only_second"], "heldout.picker_vs_router.only_second", 0, n)
-    _num(pr["sign_test_p"], "heldout.picker_vs_router.sign_test_p", 0, 1)
+    b = _int(pr["only_first"], "heldout.picker_vs_router.only_first", 0, n)
+    c = _int(pr["only_second"], "heldout.picker_vs_router.only_second", 0, n)
+    p = _num(pr["sign_test_p"], "heldout.picker_vs_router.sign_test_p", 0, 1)
     second = router or keywords
-    if pr["only_first"] - pr["only_second"] != picker["right"] - second["right"]:
+    if b - c != picker["right"] - second["right"]:
         raise Rejected("heldout.picker_vs_router doesn't match the two right counts")
+    if b > min(picker["right"], n - second["right"]) or c > min(second["right"], n - picker["right"]):
+        raise Rejected("heldout.picker_vs_router counts more prompts than the two right counts leave room for")
+    want_p = sign_test(b, c)
+    if abs(p - want_p) > max(1e-6, 1e-5 * want_p):          # the file holds the p-value rounded
+        raise Rejected(f"heldout.picker_vs_router.sign_test_p is not the sign test of {b} against {c}")
     no_route = _int(picker.get("no_route"), "heldout.picker.no_route", 0, n)
     failed = _int(picker.get("failed_after_retry"), "heldout.picker.failed_after_retry", 0, n)
+    if no_route + failed != sum(row.get(NO_ROUTE, 0) for row in picker["confusion"].values()):
+        raise Rejected("heldout.picker: no_route and failed_after_retry don't add up to the answers without a route "
+                       "in its confusion table")
     spc = _obj(picker.get("seconds_per_call"), "heldout.picker.seconds_per_call", {"n"}, {"median", "p90", "min", "max"})
     per_call = _num(spc.get("median"), "heldout.picker.seconds_per_call.median", 0, 3600, null=True)
 
@@ -277,9 +334,9 @@ def check(doc: dict) -> dict:
 # ---------------------------------------------------------------- the CSV
 
 def _cell(v) -> str:
-    """Text a spreadsheet will never run as a formula."""
+    """Text a spreadsheet will never run as a formula, also when it trims leading spaces on import."""
     s = "" if v is None else str(v)
-    return "'" + s if s[:1] in ("=", "+", "-", "@") else s
+    return "'" + s if s.lstrip()[:1] in ("=", "+", "-", "@") else s
 
 
 def read_rows(path: Path) -> dict[int, dict]:
@@ -296,6 +353,15 @@ def render(rows: dict[int, dict]) -> str:
     for issue in sorted(rows):
         w.writerow({k: _cell(rows[issue].get(k)) for k in COLUMNS})
     return out.getvalue()
+
+
+def write_csv(path: Path, text: str) -> None:
+    """Replace the sheet in one step. The text is encoded before any file is touched and written beside the
+    sheet first, so a failure at any point leaves the old sheet whole."""
+    data = text.encode("utf-8")
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_bytes(data)
+    os.replace(tmp, path)
 
 
 def collect(issues: list, existing: dict[int, dict]) -> tuple[dict[int, dict], list[str]]:
@@ -351,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
     if not new:
         print(f"nothing new for {args.csv.name} ({len(existing)} rows already there)")
     elif args.write:
-        args.csv.write_text(render({**existing, **new}), encoding="utf-8")
+        write_csv(args.csv, render({**existing, **new}))
         print(f"wrote {len(new)} new rows to {args.csv} ({len(existing) + len(new)} in all)")
     else:
         print(f"{len(new)} new rows; nothing written. Add --write to write them to {args.csv}")

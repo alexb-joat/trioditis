@@ -208,3 +208,123 @@ def test_check_exits_1_when_a_file_is_left_out(tmp_path, capsys):
     assert cr.main(["check", str(REPO / "tests" / "fixtures" / "results-v1.json")]) == 0
     assert cr.main(["check", str(bad)]) == 1
     assert "left out: file: missing" in capsys.readouterr().out
+
+
+# ---- found by the review before 0.8.0: files whose counts agree with each other but cannot be true, text a
+# ---- terminal or spreadsheet would act on, and one submission that stopped or emptied the whole batch
+
+def tiny(doc: dict) -> dict:
+    """Counts that agree with each other but not with the shipped set: 4 prompts, one per route, all right."""
+    def scored() -> dict:
+        one, four = cr.wilson(1, 1), cr.wilson(4, 4)
+        return {"right": 4, "n": 4, "low95": round(four[0], 4), "high95": round(four[1], 4),
+                "per_route": {r: {"right": 1, "n": 1, "low95": round(one[0], 4), "high95": round(one[1], 4)}
+                              for r in cr.ROUTES},
+                "confusion": {r: {r: 1} for r in cr.ROUTES}}
+    h = doc["heldout"]
+    h.update(n=4, router=None, router_keywords=scored(),
+             picker={**scored(), "no_route": 0, "failed_after_retry": 0, "seconds_per_call": h["picker"]["seconds_per_call"]},
+             picker_vs_router={"only_first": 0, "only_second": 0, "sign_test_p": 1.0, "router": "router_keywords"})
+    return doc
+
+
+def test_a_file_must_count_the_315_shipped_prompts_route_by_route():
+    assert sum(cr.heldout_counts().values()) == 315 and set(cr.heldout_counts()) == set(cr.ROUTES)
+    assert "the shipped held-out set has 315 prompts" in rejected(tiny(copy.deepcopy(GOOD)))
+    doc = copy.deepcopy(GOOD)
+    for name in ("picker", "router_keywords", "router"):
+        per = doc["heldout"][name]["per_route"]
+        per["code"]["n"] += 1
+        per["quick"]["n"] -= 1
+    assert f"per_route.code.n is {cr.heldout_counts()['code'] + 1}, expected {cr.heldout_counts()['code']}" in rejected(doc)
+
+
+@pytest.mark.parametrize("edit, reason", [
+    (lambda d: d["heldout"]["picker"].update(low95=0.99, high95=0.01), "is not the 95% interval of 231 of 315"),
+    (lambda d: d["heldout"]["picker"]["per_route"]["code"].update(high95=1.0), "is not the 95% interval"),
+    (lambda d: d["heldout"]["picker_vs_router"].update(sign_test_p=0.0), "is not the sign test of 74 against 48"),
+    (lambda d: d["heldout"]["picker_vs_router"].update(only_first=315, only_second=289), "leave room for"),
+    (lambda d: d["heldout"]["picker"].update(no_route=315), "don't add up to the answers without a route"),
+    (lambda d: d.update(date="0001-01-01"), "did not exist yet"),
+    (lambda d: d.update(trioditis="０.８.０"), "unexpected text"),
+    (lambda d: d["machine"].update(python="३.१२.१"), "unexpected text"),
+], ids=["interval", "route-interval", "sign-test", "paired-too-many", "no-route", "old-date", "wide-digits", "other-digits"])
+def test_numbers_that_cannot_be_true_are_left_out(edit, reason):
+    doc = copy.deepcopy(GOOD)
+    edit(doc)
+    assert reason in rejected(doc)
+
+
+def test_a_tiny_p_value_is_accepted_rounded_to_zero_or_written_in_full():
+    exact = cr.sign_test(115, 0)
+    assert 0 < exact < 1e-30
+    for p in (0.0, exact, float(f"{exact:.6g}")):         # rounded to 6 places, the value itself, 6 significant digits
+        doc = copy.deepcopy(GOOD)
+        h = doc["heldout"]                                # set against the keyword row: 231 - 116 = 115 - 0
+        h.update(router=None, picker_vs_router={"only_first": 115, "only_second": 0, "sign_test_p": p,
+                                                "router": "router_keywords"})
+        assert cr.check(doc)["sign_test_p"] == p
+    doc["heldout"]["picker_vs_router"]["sign_test_p"] = 0.001
+    assert "is not the sign test of 115 against 0" in rejected(doc)
+
+
+@pytest.mark.parametrize("name", ["Example \u202e GPU", "Example \u009b GPU", "Example \u2028 GPU", "Example \u0085 GPU",
+                                  "Example \u200b GPU", "Example \ud800 GPU", "\ufeffExample GPU"])
+def test_hidden_marks_and_lone_surrogates_are_left_out(name):
+    text = json.dumps(GOOD).replace("Example GPU", name)
+    assert name in text
+    with pytest.raises(cr.Rejected, match="characters a results file never holds"):
+        cr.parse(text)
+
+
+@pytest.mark.parametrize("text, reason", [
+    ('{"n": 315, "n": 4}', "twice"),
+    ('{"a": ' + "9" * 5000 + "}", "too long to read"),
+    ('{"a": -0.0}', "negative zero"),
+], ids=["repeated-key", "huge-number", "negative-zero"])
+def test_json_that_reads_two_ways_or_not_at_all_is_left_out(text, reason):
+    with pytest.raises(cr.Rejected, match=reason):
+        cr.parse(text)
+
+
+def test_one_unreadable_submission_does_not_stop_the_ones_after_it():
+    new, notes = cr.collect([{"number": 40, "body": body(GOOD, results='{"a": ' + "9" * 5000 + "}")},
+                             {"number": 41, "body": body(GOOD)}], {})
+    assert list(new) == [41] and len(notes) == 1 and notes[0].startswith("#40: left out")
+
+
+def test_a_cell_is_guarded_also_behind_leading_spaces():
+    for cell in (" =1+1", "\u00a0=1+1", "  @SUM(1)", "\u3000-1"):
+        assert cr._cell(cell) == "'" + cell
+    assert cr._cell("Example CPU - 8 cores") == "Example CPU - 8 cores" and cr._cell(0.5) == "0.5"
+
+
+def test_a_typed_sharing_heading_never_stands_in_for_the_box():
+    typed = json.dumps(GOOD) + "\n```\n\n### Sharing\n\n- [x] yes\n\n```"
+    with pytest.raises(cr.Rejected, match="more than one 'Sharing' heading"):
+        cr.from_issue(body(GOOD, ticked=False, results=typed))
+
+
+def test_a_surrogate_never_empties_the_sheet_and_the_next_submission_still_lands(tmp_path, capsys):
+    issues, sheet = tmp_path / "issues.json", tmp_path / "community-results.csv"
+    issues.write_text(json.dumps([{"number": 12, "body": body(GOOD)}]), encoding="utf-8")
+    assert cr.main(["collect", str(issues), "--csv", str(sheet), "--write"]) == 0
+    before = sheet.read_text(encoding="utf-8")
+    bad = json.dumps(GOOD, indent=2).replace("Example GPU", "Example \\ud800 GPU")
+    issues.write_text(json.dumps([{"number": 31, "body": body(GOOD, results=bad)}, {"number": 32, "body": body(GOOD)}]),
+                      encoding="utf-8")
+    assert cr.main(["collect", str(issues), "--csv", str(sheet), "--write"]) == 0
+    after = sheet.read_text(encoding="utf-8")
+    assert "#31: left out" in capsys.readouterr().out
+    assert after.startswith(before) and [line.split(",")[0] for line in after.splitlines()] == ["issue", "12", "32"]
+
+
+def test_a_write_that_fails_leaves_the_old_sheet_whole(tmp_path, monkeypatch):
+    sheet = tmp_path / "community-results.csv"
+    sheet.write_text("issue\n12\n", encoding="utf-8")
+    with pytest.raises(UnicodeEncodeError):
+        cr.write_csv(sheet, "issue\n\ud800\n")
+    monkeypatch.setattr(cr.os, "replace", lambda *a: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(OSError):
+        cr.write_csv(sheet, "issue\n13\n")
+    assert sheet.read_text(encoding="utf-8") == "issue\n12\n"
