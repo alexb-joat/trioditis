@@ -26,6 +26,8 @@
 **Fixed**
 - The test suite no longer fails when `TRIODITIS_API_KEY` is already set in the developer's shell (21 tests answered 401 or 407).
 - `scripts/claude-t.ps1` waits up to 5 s for the router's `/health` answer (was 2 s). On a Windows CI runner it once started Claude Code direct, most likely because a cold PowerShell's first call took longer than 2 s. A router that is down still answers at once.
+- `scripts/stats_walkthrough.py` runs the keyword rule with no asyncio event loop, so it builds no socket pair and opens no connection on any OS. The loop's own wake-up pipe is a localhost TCP pair on Windows, which failed the walkthrough's no-network test on every Windows CI job. A new test puts that pair in place on any OS and refuses every connection.
+- When the stand-in server does not answer within 15 s, `scripts/rehearse_results.py` now says why as far as it can tell: the tries made and what the last one met, whether the stand-in still runs, whether its port is bound, and what it printed. Both rehearsal tests timed out on every macOS CI job with no cause in the log.
 
 **Changed**
 - The held-out labels moved from `tests/fixtures/routes-heldout.csv` to `trioditis/data/routes-heldout.csv`, unchanged, so the installed package carries them. The dated run records in `docs/route-accuracy/` keep the old path they were run with.
