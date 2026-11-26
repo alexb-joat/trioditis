@@ -4,6 +4,7 @@ Expected values for the hand-made pairs are written here, derived by hand, befor
 
 from __future__ import annotations
 
+import csv
 import json
 import math
 import random
@@ -19,6 +20,7 @@ sys.path.insert(0, str(REPO / "scripts"))
 import compare_results as cmp  # noqa: E402
 
 from tests.test_measure import Server, run  # noqa: E402
+from trioditis_metrics.stats import mcnemar, paired_counts  # noqa: E402
 
 ROWS, FINGERPRINT, ROUTES = cmp.shipped()
 
@@ -245,6 +247,101 @@ def test_a_file_that_is_not_a_complete_answers_file_for_this_set_is_refused(tmp_
 def test_a_complete_file_is_accepted(tmp_path):
     answers = load(write(tmp_path, "a.json", good_routes(), "some-model"))
     assert answers.picker == "some-model" and len(answers.routes) == 315 and answers.name == "some-model (a.json)"
+
+
+# ---------------------------------------------------------------- the paired table
+
+def table_pair(tmp_path: Path) -> tuple[Path, Path]:
+    """The hand-made pair of the test above: row i (0 to 314) is right for the first unless i is a multiple of 3, for
+    the second unless i is a multiple of 5. Both right 315 - 42 - 84 - 21 = 168, only the first 42, only the second 84,
+    both wrong 21 (the multiples of 15)."""
+    return (by_rule(tmp_path, "first.json", lambda i: i % 3 != 0, "first-model"),
+            by_rule(tmp_path, "second.json", lambda i: i % 5 != 0, "second-model"))
+
+
+def test_the_table_has_one_row_per_prompt_and_no_prompt_text(tmp_path, capsys):
+    first, second = table_pair(tmp_path)
+    out_file = tmp_path / "table.csv"
+    assert cmp.main(["table", str(first), str(second), "--out", str(out_file)]) == 0
+    text = out_file.read_text(encoding="utf-8")
+    with out_file.open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        data = list(reader)
+    assert tuple(reader.fieldnames) == cmp.TABLE_COLUMNS == ("row", "expected", "stratum", "first_route", "second_route",
+                                                            "first_right", "second_right")
+    assert len(data) == 315 and [int(d["row"]) for d in data] == [r.number for r in ROWS]
+    assert [d["expected"] for d in data] == [r.expected for r in ROWS] and [d["stratum"] for d in data] == [r.stratum for r in ROWS]
+    assert sum(int(d["first_right"]) for d in data) == 210 and sum(int(d["second_right"]) for d in data) == 252
+    assert all(d["first_right"] in ("0", "1") and d["second_right"] in ("0", "1") for d in data)
+    for i, d in enumerate(data):                                       # the 0/1 columns agree with the routes beside them
+        assert (d["first_route"] == d["expected"]) == (d["first_right"] == "1") == (i % 3 != 0)
+        assert (d["second_route"] == d["expected"]) == (d["second_right"] == "1") == (i % 5 != 0)
+    assert not any(r.prompt.strip() in text for r in ROWS)             # like the answers files: no prompt text
+
+
+def test_the_table_prints_the_paired_counts_mcnemar_and_where_the_verdict_comes_from(tmp_path, capsys):
+    first, second = table_pair(tmp_path)
+    assert cmp.main(["table", str(first), str(second), "--out", str(tmp_path / "t.csv")]) == 0
+    out = capsys.readouterr().out
+    assert "first  = first-model (first.json)" in out and "second = second-model (second.json)" in out
+    assert "315 held-out prompts" in out
+    assert any(line.split() == ["first", "right", "168", "42"] for line in out.splitlines())      # both right, only the first
+    assert any(line.split() == ["first", "wrong", "84", "21"] for line in out.splitlines())       # only the second, both wrong
+    assert "on the 126 prompts where they disagree (only the first right 42, only the second right 84)" in out
+    m = mcnemar(42, 84)
+    assert f"exact two-sided p {m['exact_p']:.3g}; mid-p {m['mid_p']:.3g}" in out
+    assert f"chi-square {m['chi2']:.3g}, p {m['chi2_p']:.3g}; with continuity correction {m['chi2_cc']:.3g}, p {m['chi2_cc_p']:.3g}" in out
+    assert "comes from `compare` (the exact two-sided test with Holm over all candidates), not from this table" in out
+    assert f"Wrote 315 rows to {tmp_path / 't.csv'}" in out
+
+
+def test_the_table_counts_are_the_ones_compare_uses(tmp_path):
+    first, second = table_pair(tmp_path)
+    counts =paired_counts(cmp.right(ROWS, load(first)), cmp.right(ROWS, load(second)))
+    assert counts == {"n": 315, "both_right": 168, "only_first": 42, "only_second": 84, "both_wrong": 21}
+    [row] = cmp.compare(load(first), [load(second)], ROWS)
+    assert (row["only_baseline"], row["only_candidate"]) == (counts["only_first"], counts["only_second"])
+
+
+@pytest.mark.parametrize("make, words", [
+    (lambda p: write(p, "bad.json", good_routes(), schema="trioditis-answers.v2"), "schema is 'trioditis-answers.v2'"),
+    (lambda p: write(p, "bad.json", good_routes(), heldout_sha256_16="0" * 16), "different held-out set"),
+    (lambda p: raw(p, "not json"), "not JSON"),
+    (lambda p: p / "missing.json", "cannot read it"),
+])
+def test_a_refused_file_gives_table_the_same_message_and_exit_1_as_compare(tmp_path, capsys, make, words):
+    bad, good = make(tmp_path), write(tmp_path, "good.json", good_routes())
+    out_file = tmp_path / "table.csv"
+    assert cmp.main(["compare", "--baseline", str(bad), str(good)]) == 1
+    from_compare = capsys.readouterr().err
+    assert cmp.main(["table", str(bad), str(good), "--out", str(out_file)]) == 1
+    from_table = capsys.readouterr()
+    assert from_table.err == from_compare and words in from_table.err and from_table.out == ""
+    assert cmp.main(["table", str(good), str(bad), "--out", str(out_file)]) == 1      # the second file is checked too
+    assert words in capsys.readouterr().err
+    assert not out_file.exists()                                       # nothing is written for a refused file
+
+
+def test_the_table_is_never_written_over_an_existing_file_or_into_a_missing_folder(tmp_path, capsys):
+    first, second = table_pair(tmp_path)
+    existing = tmp_path / "keep.csv"
+    existing.write_text("mine\n", encoding="utf-8")
+    assert cmp.main(["table", str(first), str(second), "--out", str(existing)]) == 1
+    assert "already exists" in capsys.readouterr().err and existing.read_text(encoding="utf-8") == "mine\n"
+    assert cmp.main(["table", str(first), str(second), "--out", str(tmp_path / "no-such-folder" / "t.csv")]) == 1
+    assert "cannot write it" in capsys.readouterr().err
+
+
+def test_table_needs_two_files_and_an_output():
+    for argv in (["table"], ["table", "a.json", "b.json"], ["table", "--out", "t.csv", "a.json"]):
+        with pytest.raises(SystemExit) as e:
+            cmp.main(argv)
+        assert e.value.code == 2
+
+
+def test_the_script_does_not_import_pandas():
+    text = (REPO / "scripts" / "compare_results.py").read_text(encoding="utf-8")
+    assert not any(line.startswith(("import pandas", "from pandas")) for line in text.splitlines())
 
 
 # ---------------------------------------------------------------- the writer and the reader fit

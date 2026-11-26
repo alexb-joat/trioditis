@@ -2,6 +2,7 @@
 
     python scripts/compare_results.py compare --baseline A.answers.json B.answers.json [C.answers.json ...]
     python scripts/compare_results.py changed X.answers.json Y.answers.json
+    python scripts/compare_results.py table FIRST.answers.json SECOND.answers.json --out TABLE.csv
 
 `compare` scores each file against the shipped labels (trioditis/data/routes-heldout.csv) and sets every
 candidate against the one baseline: right of n with a Wilson 95% interval; the prompts only the baseline got
@@ -14,6 +15,16 @@ wrong: it asks whether, where the two disagree, one wins more often than a fair 
 `changed` counts how many prompts got a different route between two runs, for the same model run twice or for
 two models.
 
+`table` writes the two pickers side by side, one CSV row per held-out prompt, for looking at the data and for
+learning the paired methods. The columns are `row` (the row number in the shipped labels), `expected` (the
+labelled route), `stratum` (the labels' stratum column), `first_route` and `second_route` (what each picker
+named, "-" for no route), and `first_right` and `second_right` (1 when that route is the expected one, else 0).
+Like the answers files it holds no prompt text. It reads with `csv.DictReader` and with `pandas.read_csv`
+(this script imports neither pandas nor anything else outside the standard library and this repository). It
+prints the paired 2x2 table and McNemar's test in its four forms. The verdict on a comparison is not made
+there: it comes from `compare`, the exact two-sided test with Holm over all candidates. The file is not
+written over an existing one.
+
 Only files written for the same held-out set as the one shipped are accepted: schema, keys, fingerprint, one
 entry for each row and only the shipped routes (or "-" for no route) are checked, and anything else is refused
 with the reason. It reads files only and sends nothing anywhere. The model names come from the files.
@@ -22,6 +33,7 @@ with the reason. It reads files only and sends nothing anywhere. The model names
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import sys
@@ -32,11 +44,12 @@ sys.path.insert(0, str(ROOT))
 
 from trioditis.evalroutes import read_labels  # noqa: E402
 from trioditis.measure import ANSWERS_SCHEMA, NO_ROUTE, heldout_path, measured_config  # noqa: E402
-from trioditis_metrics.stats import sign_test, wilson  # noqa: E402
+from trioditis_metrics.stats import mcnemar, paired_counts, sign_test, wilson  # noqa: E402
 
 ALPHA = 0.05
 MAX_BYTES = 2_000_000
 KEYS = {"schema", "trioditis", "heldout_sha256_16", "picker", "answers"}
+TABLE_COLUMNS = ("row", "expected", "stratum", "first_route", "second_route", "first_right", "second_right")
 
 
 class Refused(Exception):
@@ -116,8 +129,8 @@ def compare(baseline: Answers, candidates: list[Answers], rows: list) -> list[di
     out = []
     for cand in candidates:
         cand_right = right(rows, cand)
-        b = sum(x and not y for x, y in zip(base_right, cand_right, strict=True))
-        c = sum(y and not x for x, y in zip(base_right, cand_right, strict=True))
+        counts = paired_counts(base_right, cand_right)
+        b, c = counts["only_first"], counts["only_second"]
         k = sum(cand_right)
         lo, hi = wilson(k, n)
         out.append({"name": cand.name, "right": k, "n": n, "low95": lo, "high95": hi, "only_baseline": b,
@@ -135,6 +148,43 @@ def changed(x: Answers, y: Answers, rows: list) -> dict:
     return {"n": len(rows), "changed": sum(x.routes[r.number] != y.routes[r.number] for r in rows),
             "right_only_first": sum(a and not b for a, b in zip(xr, yr, strict=True)),
             "right_only_second": sum(b and not a for a, b in zip(xr, yr, strict=True))}
+
+
+def table_rows(rows: list, first: Answers, second: Answers) -> list[dict]:
+    """One dict per held-out prompt, with the TABLE_COLUMNS: no prompt text."""
+    first_right, second_right = right(rows, first), right(rows, second)
+    return [{"row": r.number, "expected": r.expected, "stratum": r.stratum, "first_route": first.routes[r.number],
+             "second_route": second.routes[r.number], "first_right": int(a), "second_right": int(b)}
+            for r, a, b in zip(rows, first_right, second_right, strict=True)]
+
+
+def write_table(path: Path, table: list[dict]) -> None:
+    """The table as CSV, in a new file (an existing file is never written over)."""
+    try:
+        with path.open("x", encoding="utf-8", newline="") as fh:
+            writer = csv.DictWriter(fh, fieldnames=TABLE_COLUMNS, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(table)
+    except FileExistsError:
+        raise Refused(f"{path}: already exists; the table is not written over it (name another file or remove this one)") from None
+    except OSError as err:
+        raise Refused(f"{path}: cannot write it ({err.strerror or err})") from None
+
+
+def report_table(first: Answers, second: Answers, counts: dict, out: Path) -> list[str]:
+    m = mcnemar(counts["only_first"], counts["only_second"])
+    return [f"first  = {first.name}", f"second = {second.name}",
+            f"{counts['n']} held-out prompts, scored against the shipped labels (right = the route the label names):",
+            f"{'':12}{'second right':>14}{'second wrong':>14}",
+            f"{'first right':12}{counts['both_right']:>14}{counts['only_first']:>14}",
+            f"{'first wrong':12}{counts['only_second']:>14}{counts['both_wrong']:>14}",
+            f"McNemar's test on the {m['discordant']} prompts where they disagree "
+            f"(only the first right {m['b']}, only the second right {m['c']}):",
+            f"  exact two-sided p {m['exact_p']:.3g}; mid-p {m['mid_p']:.3g}",
+            f"  chi-square {m['chi2']:.3g}, p {m['chi2_p']:.3g}; with continuity correction {m['chi2_cc']:.3g}, p {m['chi2_cc_p']:.3g}",
+            "The verdict on a comparison comes from `compare` (the exact two-sided test with Holm over all candidates), "
+            "not from this table.",
+            f"Wrote {counts['n']} rows to {out}: one per held-out prompt, no prompt text."]
 
 
 def pct(x: float) -> str:
@@ -164,6 +214,10 @@ def main(argv: list[str] | None = None) -> int:
     ch = sub.add_parser("changed", help="how many prompts got a different route between two runs")
     ch.add_argument("first", type=Path)
     ch.add_argument("second", type=Path)
+    tb = sub.add_parser("table", help="write one CSV row per held-out prompt for two pickers, and McNemar's test on them")
+    tb.add_argument("first", type=Path, metavar="FIRST", help="the first picker's answers file")
+    tb.add_argument("second", type=Path, metavar="SECOND", help="the second picker's answers file")
+    tb.add_argument("--out", required=True, type=Path, metavar="FILE", help="the CSV to write (a new file)")
     args = ap.parse_args(argv)
     try:
         rows, fingerprint, routes = shipped()
@@ -171,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
             baseline = load(args.baseline, rows, fingerprint, routes)
             results = compare(baseline, [load(p, rows, fingerprint, routes) for p in args.candidates], rows)
             print("\n".join(report_compare(baseline, results, rows)))
+        elif args.cmd == "table":
+            x, y = load(args.first, rows, fingerprint, routes), load(args.second, rows, fingerprint, routes)
+            write_table(args.out, table_rows(rows, x, y))                    # after both files passed their checks
+            print("\n".join(report_table(x, y, paired_counts(right(rows, x), right(rows, y)), args.out)))
         else:
             x, y = load(args.first, rows, fingerprint, routes), load(args.second, rows, fingerprint, routes)
             r = changed(x, y, rows)

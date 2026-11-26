@@ -6,10 +6,12 @@ Every rate here comes with its uncertainty: 1 error in 3 calls and 1,000 in
 
 from __future__ import annotations
 
+import functools
 import math
 import random
 import statistics
 from collections import Counter
+from fractions import Fraction
 
 Z95 = 1.959963984540054  # two-sided 95%
 
@@ -45,6 +47,61 @@ def sign_test(b: int, c: int) -> float:
     return min(1.0, 2 * tail / 2 ** n)
 
 
+def paired_counts(first_right, second_right) -> dict:
+    """The paired 2x2 table for two settings scored on the same rows: how often each was right, and together.
+
+    The two sequences hold one True or False per row (the same rows in the same order): was the first
+    setting right on it, was the second. The result counts the rows `both_right`, `only_first`,
+    `only_second` and `both_wrong`, and `n`. `only_first` and `only_second` are the b and c that
+    `sign_test` and `mcnemar` take; the other two cells say nothing about which setting is better.
+    Raises ValueError when the sequences differ in length, since the rows would not line up."""
+    first, second = list(first_right), list(second_right)
+    if len(first) != len(second):
+        raise ValueError(f"the two settings need the same rows, got {len(first)} and {len(second)}")
+    both = sum(x and y for x, y in zip(first, second, strict=True))
+    only_first = sum(x and not y for x, y in zip(first, second, strict=True))
+    only_second = sum(y and not x for x, y in zip(first, second, strict=True))
+    return {"n": len(first), "both_right": both, "only_first": only_first, "only_second": only_second,
+            "both_wrong": len(first) - both - only_first - only_second}
+
+
+def mcnemar(b: int, c: int) -> dict:
+    """McNemar's test in its four usual forms, for two settings scored on the same rows: do they differ?
+
+    `b` rows went right under the first setting only, `c` under the second only (the same counts
+    `sign_test` takes). Only these disagreements matter. Each form gives a p-value; the smaller it is, the
+    less a fair coin would split the disagreements this unevenly.
+
+    - `exact_p` is `sign_test(b, c)`. It is safe, but with few disagreements it is cautious: it rejects
+      less often than its level says. Use it as the stated rule when the rule must never over-claim.
+    - `mid_p` is the exact p-value minus the chance of the observed split itself (Fagerland, Lydersen and
+      Laake 2013). It is less cautious; in their 9,595 simulated designs it never went over its level,
+      but that is not guaranteed. Use it to see how much of the exact p-value is only caution. It is 1
+      when b = c.
+    - `chi2` is (b - c)^2 / (b + c), looked up in a chi-square table with 1 degree of freedom (`chi2_p`).
+      It is a large-sample shortcut and the most powerful of the four; in the same study it went over its
+      level in 29% of the designs, though not by much.
+    - `chi2_cc` is the same with 1 taken off |b - c| first, the "continuity correction" (`chi2_cc_p`).
+      It lands close to `exact_p` and is at least as cautious.
+
+    With no disagreements every p is 1.0 and both statistics are 0.0."""
+    if b < 0 or c < 0:
+        raise ValueError(f"need b >= 0 and c >= 0, got b={b}, c={c}")
+    m = b + c
+    out = {"b": b, "c": c, "discordant": m, "exact_p": sign_test(b, c), "mid_p": 1.0,
+           "chi2": 0.0, "chi2_p": 1.0, "chi2_cc": 0.0, "chi2_cc_p": 1.0}
+    if m == 0:
+        return out
+    low = min(b, c)
+    tail = sum(math.comb(m, i) for i in range(low + 1))                 # P(X <= low) times 2**m
+    out["mid_p"] = (2 * tail - math.comb(m, low)) / 2 ** m             # 2 * (P(X <= low) - P(X = low) / 2)
+    out["chi2"] = (b - c) ** 2 / m
+    out["chi2_cc"] = max(0, abs(b - c) - 1) ** 2 / m
+    out["chi2_p"] = math.erfc(math.sqrt(out["chi2"] / 2))              # chi-square, 1 df: P(Z^2 >= x)
+    out["chi2_cc_p"] = math.erfc(math.sqrt(out["chi2_cc"] / 2))
+    return out
+
+
 def paired_difference(b: int, c: int, n: int, z: float = Z95) -> tuple[float, float, float] | None:
     """(difference, low, high) for two settings scored on the same n rows: the first setting's share
     right minus the second's, as a fraction, with its interval.
@@ -62,6 +119,152 @@ def paired_difference(b: int, c: int, n: int, z: float = Z95) -> tuple[float, fl
     centre = (bb - cc) / nn
     half = z * math.sqrt((bb + cc) - (bb - cc) ** 2 / nn) / nn
     return (b - c) / n, max(-1.0, centre - half), min(1.0, centre + half)
+
+
+@functools.cache
+def _rejection_cutoff(m: int, alpha: float) -> int:
+    """The largest k for which `sign_test(k, m - k) < alpha` with k below m / 2 (the same holds for m - k);
+    -1 when no split of m disagreements is lopsided enough. One pass over the running count of fair-coin
+    sequences with at most k heads, in whole numbers: a split k rejects when 2 * that count < alpha * 2**m."""
+    limit = Fraction(alpha) * 2 ** m
+    count, running, cutoff = 1, 0, -1                       # count = C(m, k)
+    for k in range((m + 1) // 2):
+        running += count
+        if 2 * running >= limit:
+            break
+        cutoff = k
+        count = count * (m - k) // (k + 1)
+    return cutoff
+
+
+def _binomial_pmf(n: int, k: int, p: float) -> float:
+    """P(X = k) for X ~ Binomial(n, p). Computed from logarithms (`lgamma`), so n in the thousands does
+    not overflow a float; p of exactly 0 or 1 is handled apart because log(0) is undefined."""
+    if p in (0.0, 1.0):
+        return float(k == (n if p == 1.0 else 0))
+    log_pmf = (math.lgamma(n + 1) - math.lgamma(k + 1) - math.lgamma(n - k + 1)
+               + k * math.log(p) + (n - k) * math.log1p(-p))
+    return math.exp(log_pmf)
+
+
+def sign_test_power(discordant: int, share: float, alpha: float = 0.05) -> float:
+    """The chance that `sign_test` finds a difference, planned before the data exists.
+
+    Suppose the two settings will disagree on `discordant` rows and that each disagreement goes to the
+    first setting with probability `share` (0.65 for a 65:35 split). The result is the chance that the
+    two-sided exact test then gives p < `alpha`. It is a saw-tooth in `discordant`, not a smooth curve:
+    the test can only reject at whole counts, so one more disagreement can lower it (at share 0.65, 114
+    give 0.902 and 115 give 0.888). With no disagreements it is 0.0."""
+    if discordant < 0 or not 0 <= share <= 1 or not 0 < alpha < 1:
+        raise ValueError(f"need discordant >= 0, 0 <= share <= 1, 0 < alpha < 1; got {discordant}, {share}, {alpha}")
+    cutoff = _rejection_cutoff(discordant, alpha)
+    return min(1.0, math.fsum(_binomial_pmf(discordant, k, share) + _binomial_pmf(discordant, discordant - k, share)
+                              for k in range(cutoff + 1)))
+
+
+def discordant_needed(share: float, power: float = 0.8, alpha: float = 0.05,
+                      limit: int = 1000) -> tuple[int | None, int | None]:
+    """How many disagreements `sign_test` needs to find a `share` split with chance `power`.
+
+    Returns two numbers: the smallest count that reaches `power`, and the smallest count from which every
+    count up to `limit` does. Because the power is a saw-tooth (see `sign_test_power`), the first can be
+    followed by counts that fall short again; plan on the second. A number is None when `limit` does not
+    reach `power` (for the first, at any count; for the second, at `limit` itself)."""
+    if not 0 < power <= 1 or limit < 0:
+        raise ValueError(f"need 0 < power <= 1 and limit >= 0, got power={power}, limit={limit}")
+    powers = [sign_test_power(m, share, alpha) for m in range(limit + 1)]
+    first = next((m for m, p in enumerate(powers) if p >= power), None)
+    stable = None
+    for m in range(limit, -1, -1):
+        if powers[m] < power:
+            break
+        stable = m
+    return first, stable
+
+
+def paired_power(n: int, discordant_rate: float, share: float, alpha: float = 0.05) -> float:
+    """The chance that `sign_test` finds a difference over `n` rows, planned before the data exists.
+
+    Each row is a disagreement with probability `discordant_rate` (the settings differ on that share of
+    rows), and each disagreement goes to the first setting with probability `share`. The number of
+    disagreements is not known in advance, so this weighs `sign_test_power` at every count m by the
+    chance of m disagreements among n rows, Binomial(n, rate). It is exact, so the time grows with the
+    square of n: well under a second for n up to 1,000, seconds for n in the thousands."""
+    if n < 0 or not 0 <= discordant_rate <= 1:
+        raise ValueError(f"need n >= 0 and 0 <= discordant_rate <= 1, got n={n}, discordant_rate={discordant_rate}")
+    return min(1.0, math.fsum(_binomial_pmf(n, m, discordant_rate) * sign_test_power(m, share, alpha)
+                              for m in range(n + 1)))
+
+
+def stratum_allocation(sizes: dict, size: int) -> dict:
+    """How many of `size` rows to draw from each stratum, in proportion to the strata's sizes.
+
+    `sizes` maps each stratum (a route, say) to how many rows it has. Each stratum gets the whole part of
+    size * N_h / N; the units still left go one each to the strata with the largest remainders, ties going
+    to the name that sorts first, so the same input always gives the same answer."""
+    total = sum(sizes.values())
+    if size < 0 or size > total or any(n < 0 for n in sizes.values()):
+        raise ValueError(f"need 0 <= size <= {total} and no negative stratum size, got size={size}")
+    if total == 0:
+        return {name: 0 for name in sizes}
+    base = {name: size * n // total for name, n in sizes.items()}
+    left = size - sum(base.values())
+    by_remainder = sorted(sizes, key=lambda name: (-(size * sizes[name] % total), str(name)))
+    for name in by_remainder[:left]:
+        base[name] += 1
+    return base
+
+
+def stratified_sample(items, key, size: int, seed: int = 0) -> list:
+    """A sample of `size` items that keeps each stratum's share of the whole.
+
+    `key(item)` names an item's stratum (its route, say). Strata get their counts from `stratum_allocation`;
+    inside a stratum the items are a simple random sample without replacement, drawn with a fixed `seed`, so
+    a repeat run gives the same sample. Use it when every stratum must be present in a small sample; a plain
+    random draw of 20 from 4 routes can leave a route out. The result keeps the items' original order.
+    Raises ValueError when `size` is larger than the number of items."""
+    items = list(items)
+    members: dict = {}
+    for index, item in enumerate(items):
+        members.setdefault(key(item), []).append(index)
+    counts = stratum_allocation({name: len(ix) for name, ix in members.items()}, size)
+    rng = random.Random(seed)  # noqa: S311  (drawing a sample, not a secret)
+    chosen = [i for name in sorted(members, key=str) for i in rng.sample(members[name], counts[name])]
+    return [items[i] for i in sorted(chosen)]
+
+
+def stratified_proportion(sample: dict, population_sizes: dict, z: float = Z95) -> dict:
+    """The share of successes in the whole population, estimated from a stratified sample.
+
+    `sample` maps each stratum to its sampled outcomes (1 or 0, True or False); `population_sizes` maps each
+    stratum to how many rows it has in the whole set. The estimate is the sum of W_h * p_h: each stratum's
+    sample share p_h, weighted by the stratum's share W_h = N_h / N of the population. Its standard error is
+    sqrt(sum of W_h^2 * (1 - n_h / N_h) * s_h^2 / n_h), where s_h^2 is the sample variance of the stratum
+    (divisor n_h - 1) and the factor (1 - n_h / N_h) credits sampling without replacement from a finite
+    stratum. The 95% interval is the estimate plus and minus `z` standard errors, kept inside [0, 1].
+    A stratum with fewer than 2 sampled rows has no sample variance (one value has no spread to measure),
+    so `se`, `low` and `high` are then None and only the estimate is given."""
+    if set(sample) != set(population_sizes):
+        raise ValueError(f"the sample and the population need the same strata, got {sorted(map(str, sample))} "
+                         f"and {sorted(map(str, population_sizes))}")
+    total = sum(population_sizes.values())
+    estimate, variance, enough = 0.0, 0.0, True
+    for name, outcomes in sample.items():
+        n_h, big_n = len(outcomes), population_sizes[name]
+        if n_h == 0 or n_h > big_n or any(o not in (0, 1) for o in outcomes):
+            raise ValueError(f"stratum {name!r}: need 1 to {big_n} outcomes, each 0 or 1")
+        weight, p_h = big_n / total, sum(outcomes) / n_h
+        estimate += weight * p_h
+        if n_h < 2:
+            enough = False
+        else:
+            s2 = n_h * p_h * (1 - p_h) / (n_h - 1)                       # sample variance of 0/1 values
+            variance += weight ** 2 * (1 - n_h / big_n) * s2 / n_h
+    out = {"estimate": estimate, "se": None, "low": None, "high": None, "n": sum(map(len, sample.values()))}
+    if enough:
+        se = math.sqrt(variance)
+        out.update(se=se, low=max(0.0, estimate - z * se), high=min(1.0, estimate + z * se))
+    return out
 
 
 def _kappa(pairs: list[tuple[str, str]]) -> float | None:
