@@ -6,6 +6,7 @@ the counts are re-derived here straight from the two committed CSV files, withou
 from __future__ import annotations
 
 import ast
+import asyncio
 import csv
 import re
 import shutil
@@ -117,6 +118,36 @@ def test_no_socket_is_opened(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect_ex", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
     assert walk.build()[5] == "  keywords     40/100 = 40.0% (30.9% to 49.8%)"
+
+
+def test_no_socket_is_opened_where_socketpair_is_a_localhost_tcp_pair(monkeypatch):
+    """On Windows `socket.socketpair` is the stdlib's pure-Python fallback, which listens on and connects to a
+    localhost TCP port. An asyncio event loop makes such a pair for its self-pipe as it starts, so a walkthrough
+    that started one would open a connection there (CI on Windows, 26 Nov 2026). Here the same fallback stands in
+    on any OS, under the same guard."""
+    assert callable(getattr(socket, "_fallback_socketpair", None)), "the stdlib's socketpair fallback moved"
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("stats_walkthrough opened a network connection")
+
+    monkeypatch.setattr(socket, "socketpair", socket._fallback_socketpair)
+    monkeypatch.setattr(socket.socket, "connect", refuse)
+    monkeypatch.setattr(socket.socket, "connect_ex", refuse)
+    monkeypatch.setattr(socket, "create_connection", refuse)
+    assert walk.build()[5] == "  keywords     40/100 = 40.0% (30.9% to 49.8%)"
+
+
+def test_a_step_that_waits_is_refused_not_run_on_a_loop():
+    async def answers() -> int:
+        return 7
+
+    async def waits() -> int:
+        await asyncio.sleep(0)
+        return 7
+
+    assert walk.run_to_end(answers()) == 7
+    with pytest.raises(RuntimeError, match="waited on something"):
+        walk.run_to_end(waits())
 
 
 def test_the_script_imports_no_network_library():

@@ -18,7 +18,6 @@ either picker (the page says why).
 from __future__ import annotations
 
 import argparse
-import asyncio
 import csv
 import sys
 from collections import Counter
@@ -66,10 +65,21 @@ def keyword_picks(cfg, rows: list) -> list[str]:
         raise Refused("the config has a route_picker, which would ask a model; this example uses the keyword rule only "
                       "(config.example.yaml has none)")
 
-    async def all_picks() -> list[str]:
-        return [await classify(cfg, r.prompt, None) for r in rows]
+    return [run_to_end(classify(cfg, r.prompt, None)) for r in rows]
 
-    return asyncio.run(all_picks())
+
+def run_to_end(coro):
+    """Run a coroutine that never waits on anything to its end, with no event loop.
+
+    `classify` with no embedder only scores keywords, so it finishes on its first step. An event loop
+    (`asyncio.run`) would open a socket pair for its own wake-ups as it starts, and on Windows that pair is a
+    localhost TCP connection; this example opens none. A coroutine that does wait is stopped and refused."""
+    try:
+        coro.send(None)
+    except StopIteration as done:
+        return done.value
+    coro.close()
+    raise RuntimeError("the keyword rule waited on something; this example runs it with no I/O")
 
 
 def saved_picks(path: Path, rows: list, routes: list[str]) -> list[str]:
