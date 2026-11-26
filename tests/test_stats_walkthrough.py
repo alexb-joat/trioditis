@@ -110,20 +110,30 @@ def test_no_socket_is_opened(monkeypatch):
     assert walk.build()[5] == "  keywords     40/100 = 40.0% (30.9% to 49.8%)"
 
 
-def test_no_socket_is_opened_where_socketpair_is_a_localhost_tcp_pair(monkeypatch):
-    """On Windows `socket.socketpair` is the stdlib's pure-Python fallback, which listens on and connects to a
-    localhost TCP port. An asyncio event loop makes such a pair for its self-pipe as it starts, so a walkthrough
-    that started one would open a connection there (CI on Windows, 26 Nov 2026). Here the same fallback stands in
-    on any OS, under the same guard."""
-    assert callable(getattr(socket, "_fallback_socketpair", None)), "the stdlib's socketpair fallback moved"
+def tcp_pair(*args, **kwargs):
+    """What `socket.socketpair` does on Windows: a listener on localhost and a connection to it."""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        with socket.socket() as client:
+            client.connect(listener.getsockname())
+            return listener.accept()[0], client.dup()
 
+
+def test_no_socket_is_opened_where_socketpair_is_a_localhost_tcp_pair(monkeypatch):
+    """On Windows `socket.socketpair` listens on and connects to a localhost TCP port. An asyncio event loop makes
+    such a pair for its self-pipe as it starts, so a walkthrough that started one would open a connection there (CI
+    on Windows, 26 Nov 2026). Here `tcp_pair` stands in for it on any OS and any Python, under the same guard; the
+    first assert shows the guard refuses the pair an event loop would ask for."""
     def refuse(*args, **kwargs):
         raise AssertionError("stats_walkthrough opened a network connection")
 
-    monkeypatch.setattr(socket, "socketpair", socket._fallback_socketpair)
+    monkeypatch.setattr(socket, "socketpair", tcp_pair)
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket.socket, "connect_ex", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
+    with pytest.raises(AssertionError, match="opened a network connection"):
+        socket.socketpair()
     assert walk.build()[5] == "  keywords     40/100 = 40.0% (30.9% to 49.8%)"
 
 
