@@ -35,6 +35,12 @@
 **Removed**
 - `privacy.on_no_local_model` is gone. Its `allow_cloud` value never sent a sensitive prompt to a cloud model; it only turned the 422 refusal into a 503. A sensitive prompt that no local model can take is now always refused with 422. A leftover `on_no_local_model:` line is ignored.
 
+**Security and engineering**
+- `scripts/console_check.py`'s local HTTPS stand-in refuses TLS 1.0 and 1.1: its server context now sets a TLS 1.2 floor (CodeQL's `py/insecure-protocol`).
+- FastAPI 0.163.1 and ruff 0.17.5. Both lockfiles were regenerated with uv from their own header commands, so the Windows-only `colorama` line that pytest needs stays in `requirements-dev.txt`.
+- The CodeQL action is pinned at 4.39.3.
+- Two guard tests: `tests/test_tls_floor.py` requires every `SSLContext(...)` in the repo to set a TLS 1.2 or 1.3 floor, and `tests/test_lockfiles.py` fails when a lockfile drifts from its own `uv pip compile` command (a runtime pin missing or different in the dev lockfile, the Windows `colorama` line gone, a pin without a hash).
+
 ## 0.7.0 (2026-11-24)
 
 **Licence**
