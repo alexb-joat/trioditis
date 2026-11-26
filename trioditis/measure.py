@@ -84,12 +84,14 @@ def heldout_path() -> Path:
 def require_local(url: str, what: str = "--base-url") -> None:
     """Refuse any server that is not on this machine: every prompt in the run is sent there."""
     try:
-        host = urlsplit(url).hostname
+        parts = urlsplit(url)
+        host, _ = parts.hostname, parts.port      # .port raises for a port that is not a number from 0 to 65535
     except ValueError:
-        host = None
+        raise MeasureError(f"{what} {url} is not an address this program can read: check the host and the port "
+                           "(for Ollama: http://localhost:11434/v1)") from None
     if host not in LOCAL_HOSTS:
-        raise MeasureError(f"{what} {url} is not on this machine; the prompts are sent only to a local server "
-                           f"(use one of: {', '.join(sorted(LOCAL_HOSTS))})")
+        raise MeasureError(f"{what} {url}: the host must be one of {', '.join(sorted(LOCAL_HOSTS))}; the prompts are "
+                           "sent only to a server on this machine, at one of those names")
 
 
 def measured_config(model: str, base_url: str, config_path: Path | None = None) -> Config:
@@ -131,7 +133,8 @@ def paired(rows: list[Row], first: list[str], second: list[str]) -> dict:
     """Rows only the first setting got right, only the second, and the exact sign test between them."""
     b = sum(p == r.expected != q for r, p, q in zip(rows, first, second, strict=True))
     c = sum(q == r.expected != p for r, p, q in zip(rows, first, second, strict=True))
-    return {"only_first": b, "only_second": c, "sign_test_p": round(sign_test(b, c), 6)}
+    # 6 significant digits, not 6 places: a clear difference has p far below 0.000001 and must not be written as 0.
+    return {"only_first": b, "only_second": c, "sign_test_p": float(f"{sign_test(b, c):.6g}")}
 
 
 def machine(hw: Hardware) -> dict:
@@ -201,6 +204,16 @@ async def server_facts(client: httpx.AsyncClient, cfg: Config) -> dict:
     return facts
 
 
+def _is_error_object(r: httpx.Response) -> bool:
+    """An OpenAI-style error reply ({"error": ...}), which is how Ollama answers for a model it does not have. A
+    wrong path gets a plain "404 page not found" instead."""
+    try:
+        doc = r.json()
+    except ValueError:
+        return False
+    return isinstance(doc, dict) and "error" in doc
+
+
 def _is_chat_completion(r: httpx.Response) -> bool:
     try:
         r.json()["choices"][0]["message"]["content"]
@@ -217,8 +230,12 @@ async def _first_call(client: httpx.AsyncClient, cfg: Config, picker: RoutePicke
         r.raise_for_status()
     except httpx.HTTPStatusError as err:
         code = err.response.status_code
-        if code == 404:
+        if code == 404 and _is_error_object(err.response):
             raise MeasureError(f"{url} answered HTTP 404 for model {model!r}. Is it pulled? Run: ollama pull {model}") from None
+        if code == 404:
+            raise MeasureError(f"{url} answered HTTP 404, and not the way a server answers for a missing model: the "
+                               "address looks wrong. Is --base-url an OpenAI-style address (for Ollama: "
+                               "http://localhost:11434/v1)?") from None
         raise MeasureError(f"{url} answered HTTP {code} for model {model!r}: the server could not run it. Read the "
                            "server's own log for the reason, or try another model with --model") from None
     except httpx.HTTPError as err:
@@ -286,28 +303,44 @@ async def route_all(cfg: Config, prompts: list[str], embedder) -> list[str]:
     return [await classify(cfg, p, embedder) or NO_ROUTE for p in prompts]
 
 
-async def embedder_or_reason(cfg: Config, client: httpx.AsyncClient, prompts: list[str]) -> tuple[Embedder | None, str | None]:
-    """The embedder, checked on every prompt first so a failure can't pass for a keyword-only answer."""
-    emb = Embedder(cfg, client)
-    try:
-        for p in prompts:
-            await emb.similarities(request_text(p))
-    except Exception as err:  # unreachable, not pulled, an odd reply: all mean "not graded"
-        return None, (f"not graded: {cfg.embeddings.model} did not answer ({type(err).__name__}); "
-                      f"run: ollama pull {cfg.embeddings.model}")
-    return emb, None
-
-
 class _Remembering:
-    """Asks the embedder once per text; `classify` asks again for the same texts."""
+    """Asks the embedder once per text. Once sealed it answers only from what it holds and counts any other text:
+    `classify` answers an embedder error with keywords and says nothing, so after the check nothing may depend on
+    the server again."""
 
     def __init__(self, inner: Embedder):
-        self.inner, self.seen = inner, {}
+        self.inner, self.seen, self.sealed, self.unseen = inner, {}, False, 0
 
     async def similarities(self, text: str) -> dict[str, float]:
         if text not in self.seen:
+            if self.sealed:
+                self.unseen += 1
+                raise LookupError("a text the embeddings check did not embed")
             self.seen[text] = await self.inner.similarities(text)
         return self.seen[text]
+
+
+async def embedder_or_reason(cfg: Config, client: httpx.AsyncClient, prompts: list[str]) -> tuple[_Remembering | None, str | None]:
+    """The embedder with every prompt already embedded, so a failure can't pass for a keyword-only answer: the
+    router is then graded from these vectors and asks the server nothing more."""
+    memo = _Remembering(Embedder(cfg, client))
+    try:
+        for p in prompts:
+            await memo.similarities(request_text(p))
+    except Exception as err:  # unreachable, not pulled, an odd reply: all mean "not graded"
+        return None, (f"not graded: {cfg.embeddings.model} did not answer ({type(err).__name__}); "
+                      f"run: ollama pull {cfg.embeddings.model}")
+    memo.sealed = True
+    return memo, None
+
+
+async def _routed(cfg: Config, prompts: list[str], memo: _Remembering) -> list[str]:
+    """The router's routes with embeddings, from the vectors the check holds."""
+    routed = await route_all(cfg, prompts, memo)
+    if memo.unseen:
+        raise MeasureError(f"the router asked for {memo.unseen} texts the embeddings check had not embedded, so its row "
+                           "could hold keyword answers; nothing was written. This is a bug in trioditis: please report it")
+    return routed
 
 
 async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, transport=None,
@@ -330,9 +363,8 @@ async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, tra
         require_answered(calls, len(prompts), "the held-out prompts")
         keywords = await route_all(cfg, prompts, None)
         say(f"the router with {cfg.embeddings.model}")
-        embedder, note = await embedder_or_reason(cfg, client, prompts + [r.prompt for r in own or []])
-        memo = _Remembering(embedder) if embedder else None
-        routed = await route_all(cfg, prompts, memo) if memo else None
+        memo, note = await embedder_or_reason(cfg, client, prompts + [r.prompt for r in own or []])
+        routed = await _routed(cfg, prompts, memo) if memo else None
 
         result_heldout = {
             "n": len(heldout),
@@ -348,7 +380,7 @@ async def measure(cfg: Config, heldout: list[Row], own: list[Row] | None, *, tra
             own_prompts = [r.prompt for r in own]
             own_picked, own_calls = await pick_all(picker, own_prompts, clock, say, "your prompts")
             require_answered(own_calls, len(own_prompts), "your prompts")
-            own_routed = await route_all(cfg, own_prompts, memo)
+            own_routed = await _routed(cfg, own_prompts, memo) if memo else await route_all(cfg, own_prompts, None)
             result_own = {"n": len(own),
                           "picker": {**score(routes, own, own_picked), "no_route": own_calls["no_route"],
                                      "failed_after_retry": own_calls["failed_after_retry"]},
@@ -421,9 +453,12 @@ def summary(doc: dict) -> list[str]:
     out += [f"  {t['chars']:>5} characters  " + (f"{t['median']:.2f} / {t['max']:.2f}  (n = {t['n']})" if t["n"] else "no successful call")
             for t in doc["timing"]["by_chars"]]
     timing_calls = doc["timing"]["repeats"] * len(doc["timing"]["by_chars"])
+    own = doc["own_labels"]
     dropped = [f"{k} of {n} {what}" for k, n, what in
                ((h["picker"]["failed_after_retry"], h["n"], "picker calls on the held-out set failed even after a retry "
                                                            "and count as wrong"),
+                (own["picker"]["failed_after_retry"] if own else 0, own["n"] if own else 0,
+                 "picker calls on your labelled prompts failed even after a retry and count as wrong"),
                 (doc["timing"]["failed"], timing_calls, "timing calls failed and are left out of the times")) if k]
     if dropped:
         out.append("Note: " + "; ".join(dropped) + " (the server dropped or refused them)")
@@ -470,7 +505,8 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
                                "prompt and expected_route")
         own = read_labels(args.own_labels, cfg.routes) if args.own_labels else None
     except (MeasureError, LabelsError) as err:
-        sys.exit(f"results: {err}" + (" (your labels must use the shipped routes)" if isinstance(err, LabelsError) and args.own_labels else ""))
+        sys.exit(f"results: {err}" + (f" (`results` reads only the shipped routes, {', '.join(cfg.routes)}: adding a route "
+                                      "cannot help here, so fix the label)" if isinstance(err, LabelsError) and args.own_labels else ""))
     out = Path(args.out)
     for flag, value in (("--out", args.out), ("--answers", args.answers)):  # found out now, not after a run of an hour or more
         if value and Path(value).is_dir():
@@ -479,6 +515,10 @@ def run(args, *, transport=None, hardware: Callable[[], Hardware] = detect, isat
             sys.exit(f"results: cannot write {flag} {value}: its folder does not exist; create it or pass another {flag}")
     if args.answers and Path(args.answers).resolve() == out.resolve():
         sys.exit("results: --answers and --out name the same file; give them different names")
+    for flag, value in (("--out", args.out), ("--answers", args.answers)):
+        if value and args.own_labels and Path(value).resolve() == Path(args.own_labels).resolve():
+            sys.exit(f"results: {flag} and --own-labels name the same file ({value}): the run would replace your labels. "
+                     f"Give {flag} another name")
     try:
         measured = asyncio.run(measure(cfg, heldout, own, transport=transport))
     except MeasureError as err:

@@ -38,7 +38,7 @@ def test_the_model_baseline_only_talks_to_this_machine(tmp_path):
                            config=str(REPO / "config.example.yaml"), label="expected_route", by="", out=None)
     with pytest.raises(SystemExit) as err:
         rs.model_baseline(args)
-    assert "not on this machine" in str(err.value)
+    assert "the host must be one of" in str(err.value) and "on this machine" in str(err.value)
 
 
 def test_the_model_baseline_sends_the_route_pickers_own_request(tmp_path, monkeypatch, capsys):

@@ -234,7 +234,7 @@ def test_a_server_that_is_not_on_this_machine_is_refused_before_any_call(tmp_pat
     server = Server()
     with pytest.raises(SystemExit) as e:
         run(tmp_path, server, base_url="http://192.168.1.20:11434/v1")
-    assert "is not on this machine" in str(e.value) and server.requests == []
+    assert "the host must be one of 127.0.0.1, ::1, localhost" in str(e.value) and server.requests == []
     assert not (tmp_path / "trioditis-results.json").exists()
 
 
@@ -389,3 +389,102 @@ def test_the_command_line_reaches_the_command_without_a_config(tmp_path, monkeyp
 def test_the_held_out_set_ships_in_the_package():
     rows = list(csv.DictReader(open(measure.heldout_path(), encoding="utf-8")))
     assert len(rows) == 315 and set(rows[0]) >= {"prompt", "expected_route"}
+
+
+# ---- found by the review before 0.8.0
+
+class DroppingEmbeddings(Server):
+    """Answers the first `after` embeddings requests, then drops every later one."""
+
+    def __init__(self, after: int):
+        super().__init__()
+        self.after, self.embedding_calls = after, 0
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/embeddings":
+            self.embedding_calls += 1
+            if self.embedding_calls > self.after:
+                self.requests.append(request)
+                raise httpx.ReadError("the server dropped the call", request=request)
+        return super().__call__(request)
+
+
+def test_the_router_row_never_turns_into_keyword_answers_when_embeddings_drop_after_the_check(tmp_path):
+    clean = Server()
+    run(tmp_path, clean, out=str(tmp_path / "clean.json"))
+    sent = [tuple(json.loads(r.content)["input"]) for r in clean.requests if r.url.path == "/v1/embeddings"]
+    assert len(sent) == len(set(sent))                      # every text is embedded once: the router is graded from the check
+    want = json.loads((tmp_path / "clean.json").read_text(encoding="utf-8"))["heldout"]
+    assert want["router"] is not None and want["router_note"] is None
+
+    run(tmp_path, DroppingEmbeddings(after=len(sent)), out=str(tmp_path / "late.json"))    # gone right after the check
+    late = json.loads((tmp_path / "late.json").read_text(encoding="utf-8"))["heldout"]
+    assert late["router"] == want["router"] and late["picker_vs_router"] == want["picker_vs_router"]
+
+    run(tmp_path, DroppingEmbeddings(after=len(sent) - 1), out=str(tmp_path / "early.json"))  # gone during the check
+    early = json.loads((tmp_path / "early.json").read_text(encoding="utf-8"))["heldout"]
+    assert early["router"] is None and "not graded" in early["router_note"]
+
+
+def test_a_text_the_check_did_not_embed_stops_the_run_instead_of_passing_as_a_keyword_answer(tmp_path, monkeypatch):
+    real = measure.request_text
+    monkeypatch.setattr(measure, "request_text", lambda p: real(p) + " ")     # the check and the router disagree on the text
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, Server())
+    assert "had not embedded" in str(e.value) and not (tmp_path / "trioditis-results.json").exists()
+
+
+@pytest.mark.parametrize("url", ["http://localhost:abc/v1", "http://localhost:99999/v1", "http://[::1/v1"])
+def test_an_address_that_cannot_be_read_is_refused_in_words_before_any_call(tmp_path, url):
+    server = Server()
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, server, base_url=url)
+    assert "is not an address this program can read" in str(e.value) and server.requests == []
+
+
+def test_a_404_for_a_wrong_address_does_not_tell_you_to_pull_the_model(tmp_path):
+    class NoSuchPath(Server):
+        def __call__(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/v1/chat/completions":
+                return httpx.Response(404, text="404 page not found")       # what Ollama answers without the /v1
+            return super().__call__(request)
+
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, NoSuchPath())
+    assert "ollama pull" not in str(e.value) and "address looks wrong" in str(e.value)
+    assert not (tmp_path / "trioditis-results.json").exists()
+
+
+@pytest.mark.parametrize("flag", ["out", "answers"])
+def test_the_run_never_writes_over_the_own_labels_file(tmp_path, flag):
+    labels = own_labels_file(tmp_path)
+    before = labels.read_bytes()
+    server = Server()
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, server, own_labels=str(labels), **{flag: str(labels)})
+    assert f"--{flag} and --own-labels name the same file" in str(e.value)
+    assert labels.read_bytes() == before and server.requests == []
+
+
+def test_a_label_outside_the_shipped_routes_says_to_fix_the_label_not_to_add_a_route(tmp_path):
+    labels = tmp_path / "own.csv"
+    labels.write_text("prompt,expected_route\nhello there,chat\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        run(tmp_path, Server(), own_labels=str(labels))
+    assert "adding a route cannot help here, so fix the label" in str(e.value)
+
+
+def test_a_clear_difference_is_never_written_as_p_zero():
+    rows = [measure.Row(i + 2, f"prompt {i}", "code") for i in range(200)]
+    first = ["code"] * 185 + ["quick"] * 15
+    second = ["quick"] * 185 + ["code"] * 15
+    got = measure.paired(rows, first, second)
+    assert (got["only_first"], got["only_second"]) == (185, 15)
+    assert 0 < got["sign_test_p"] < 1e-30 and got["sign_test_p"] == float(f"{measure.sign_test(185, 15):.6g}")
+
+
+def test_failed_calls_on_your_own_prompts_are_named_in_the_note():
+    doc = json.loads((Path(__file__).parent / "fixtures" / "results-v1.json").read_text(encoding="utf-8"))
+    doc["own_labels"] = {"n": 12, "picker": {"right": 5, "no_route": 0, "failed_after_retry": 2}, "router": {"right": 4}}
+    note = [line for line in measure.summary(doc) if line.startswith("Note:")]
+    assert len(note) == 1 and "2 of 12 picker calls on your labelled prompts failed" in note[0]
