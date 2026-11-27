@@ -58,6 +58,25 @@ jobs:
       - name: Build the image and smoke-test it
         run: python3 scripts/docker_smoke.py
 
+  minimum-deps:
+    # pyproject.toml's lower bounds, installed exactly from .github/min-deps/, on the oldest Python CI tests.
+    # tests/test_lockfiles.py keeps those pins equal to the bounds.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install the lowest allowed versions (hash-verified)
+        run: pip install --require-hashes --no-deps -r .github/min-deps/requirements.txt
+      - name: Tests
+        run: python -m pytest -q
+      - name: Smoke test (real server, real sockets)
+        run: python scripts/smoke.py
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5

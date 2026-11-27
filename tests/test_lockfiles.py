@@ -116,3 +116,49 @@ def test_a_missing_hash_fails():
     unhashed = re.sub(r"(?m)^(pytest==\S+) \\\n(?:\s+--hash=sha256:[0-9a-f]{64}(?: \\)?\n)+", r"\1\n", dev)
     assert unhashed != dev
     assert header_and_hash_problems(unhashed, "requirements-dev.txt", "requirements-dev.in")
+
+
+# ---------------------------------------------------------------- the minimum-versions lockfile
+MIN_IN = REPO / ".github" / "min-deps" / "requirements.in"
+MIN = REPO / ".github" / "min-deps" / "requirements.txt"
+
+
+def lower_bounds(dependencies: list[str]) -> dict[str, str]:
+    """`name>=1.2` -> {name: 1.2}; a dependency without a lower bound maps to ''."""
+    out = {}
+    for dep in dependencies:
+        m = re.fullmatch(r"([A-Za-z0-9][A-Za-z0-9_.-]*)\s*(?:>=\s*([^\s,;]+))?.*", dep)
+        out[m.group(1).lower()] = m.group(2) or ""
+    return out
+
+
+def min_pin_problems(bounds: dict[str, str], min_text: str, dev_text: str) -> list[str]:
+    """The minimum-deps job proves pyproject.toml's lower bounds only if it installs exactly them."""
+    pins, dev = entries(min_text), entries(dev_text)
+    problems = [f"{name}: no lower bound in pyproject.toml" for name, low in bounds.items() if not low]
+    problems += [f"{name}: pyproject.toml says >={low}, the minimum lockfile has {pins.get(name, ('missing',))[0]}"
+                 for name, low in bounds.items() if low and pins.get(name, ("",))[0] != low]
+    problems += [f"{tool}: {pins.get(tool, ('missing',))[0]} in the minimum lockfile, {dev[tool][0]} in requirements-dev.txt"
+                 for tool in ("pytest", "hypothesis") if pins.get(tool, ("",))[0] != dev[tool][0]]
+    return problems
+
+
+def test_the_minimum_lockfile_pins_exactly_the_lower_bounds_and_the_dev_test_tools():
+    import tomllib
+    deps = tomllib.loads(read(REPO / "pyproject.toml"))["project"]["dependencies"]
+    assert min_pin_problems(lower_bounds(deps), read(MIN), read(DEV)) == []
+    assert header_and_hash_problems(read(MIN), ".github/min-deps/requirements.txt", ".github/min-deps/requirements.in") == []
+    direct = {ln.split("#")[0].split("==")[0].strip().lower() for ln in read(MIN_IN).splitlines() if ln.split("#")[0].strip()}
+    assert direct == set(lower_bounds(deps)) | {"pytest", "hypothesis"}
+    assert set(lower_bounds(deps)) == {ln.split("#")[0].strip().lower() for ln in read(REPO / "requirements.in").splitlines()
+                                       if ln.split("#")[0].strip()}, "pyproject.toml and requirements.in name the same packages"
+
+
+def test_a_raised_bound_without_a_new_minimum_lockfile_fails():
+    import tomllib
+    deps = tomllib.loads(read(REPO / "pyproject.toml"))["project"]["dependencies"]
+    bounds = lower_bounds(deps)
+    raised = {**bounds, "httpx": "99.0"}
+    assert min_pin_problems(raised, read(MIN), read(DEV)) == [
+        f"httpx: pyproject.toml says >=99.0, the minimum lockfile has {entries(read(MIN))['httpx'][0]}"]
+    assert min_pin_problems({**bounds, "httpx": ""}, read(MIN), read(DEV)) == ["httpx: no lower bound in pyproject.toml"]

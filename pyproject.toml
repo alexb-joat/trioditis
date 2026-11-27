@@ -9,11 +9,14 @@ description = "Security-first LLM router: one OpenAI-compatible endpoint that pi
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.11"
+# Lower bounds: the oldest versions the suite passes on (Python 3.11), proven by CI's minimum-deps job
+# (.github/min-deps/). starlette is imported directly, and 1.3.1 is the first with no known advisory (pip-audit).
 dependencies = [
-  "fastapi",
-  "uvicorn",
-  "httpx",
-  "pyyaml",
+  "fastapi>=0.133.0",
+  "starlette>=1.3.1",
+  "uvicorn>=0.30.0",
+  "httpx>=0.27.0",
+  "pyyaml>=6.0.1",
 ]
 # Python versions: exactly CI's matrix (tests/test_workflows.py checks). "5 - Production/Stable" only in 1.0.0.
 classifiers = [

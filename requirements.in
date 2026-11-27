@@ -1,4 +1,5 @@
 fastapi
+starlette   # imported directly (starlette.datastructures), not only through fastapi
 uvicorn
 httpx
 pyyaml

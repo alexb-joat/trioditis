@@ -66,7 +66,7 @@ trioditis results
 
 - **Private by default.** A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread.
 - **Cost-aware.** Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend.
-- **Small and auditable.** About 9,100 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry.
+- **Small and auditable.** About 9,100 lines of Python. Five direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry.
 - **Explains itself.** Routed answers name their route and model in response headers; Trioditis's own error replies and the Claude Code passthrough don't. A log records the reasons, with no prompt text.
 
 ## Quick start
@@ -206,7 +206,7 @@ Each call records why its answer ended, retries and cache use, so `trioditis usa
 
 | Risk | Control |
 |---|---|
-| Hijacked dependency | Four direct dependencies, 18 packages in the lockfile, each hash-pinned (`--require-hashes`, from a clone; `pipx` takes the newest releases), `pip-audit` in CI, Dependabot with a 7-day hold |
+| Hijacked dependency | Five direct dependencies, 18 packages in the lockfile, each hash-pinned (`--require-hashes`, from a clone; `pipx` takes the newest releases), `pip-audit` in CI, Dependabot with a 7-day hold |
 | Router exposed to the network | Binds `127.0.0.1`; refuses any other bind without a 32+ character API key |
 | A web page in your browser reaching the router | Foreign `Host` (DNS rebinding) or `Origin` gets 403 and a log line; POST bodies must be JSON |
 | Sensitive data sent to the cloud | Detectors force local-only routing or reject (not for Claude Code through the passthrough, which is relayed unread) |

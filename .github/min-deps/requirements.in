@@ -1,0 +1,11 @@
+# The lowest versions pyproject.toml allows, for the minimum-deps job in .github/workflows/ci.yml.
+# Each pin equals a lower bound in pyproject.toml; pytest and hypothesis match requirements-dev.txt
+# (tests/test_lockfiles.py checks both). Raise a bound there, then here, then recompile:
+#   uv pip compile .github/min-deps/requirements.in --universal --generate-hashes --python-version 3.11 --exclude-newer <a week ago> -o .github/min-deps/requirements.txt
+fastapi==0.133.0
+starlette==1.3.1
+uvicorn==0.30.0
+httpx==0.27.0
+pyyaml==6.0.1
+pytest==9.2.0
+hypothesis==6.170.15
