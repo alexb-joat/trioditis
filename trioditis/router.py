@@ -414,6 +414,23 @@ def _eligible(cfg: Config, model: str, *, vision: bool, tools: bool, tokens: int
     return None
 
 
+def check_shape(body: dict) -> None:
+    """The fields the router reads, checked before it reads them: a malformed request gets a 400
+    that says what to fix, never a 500 from deep inside routing."""
+    for i, m in enumerate(body["messages"]):
+        if not isinstance(m, dict):
+            raise RoutingError(400, f"messages[{i}] must be an object with role and content, "
+                                    f"got {type(m).__name__}")
+        if not isinstance(m.get("content"), (str, list, type(None))):
+            raise RoutingError(400, f"messages[{i}].content must be a string, a list of parts or null")
+    for key in ("max_tokens", "max_completion_tokens"):
+        v = body.get(key)
+        if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v < 1):
+            raise RoutingError(400, f"{key} must be a number of 1 or more, got {v!r}")
+    if body.get("tools") is not None and not isinstance(body["tools"], list):
+        raise RoutingError(400, "tools must be a list")
+
+
 async def decide(
     cfg: Config,
     body: dict,
@@ -427,6 +444,7 @@ async def decide(
     messages = body.get("messages")
     if not isinstance(messages, list) or not messages:
         raise RoutingError(400, "messages must be a non-empty list")
+    check_shape(body)
 
     requested = str(body.get("model") or "auto")
     vision = has_images(messages)

@@ -221,6 +221,28 @@ def test_chat_routes_and_fallbacks():
     assert seen[1] == ("localhost", "qwen-coder", None)  # local: no key sent
 
 
+@pytest.mark.parametrize("bad,words", [
+    ({"messages": ["hi"]}, "messages[0] must be an object"),
+    ({"messages": [{"role": "user", "content": 5}]}, "messages[0].content"),
+    ({"messages": [{"role": "user", "content": "hi"}], "max_tokens": "lots"}, "max_tokens must be a number"),
+    ({"messages": [{"role": "user", "content": "hi"}], "max_completion_tokens": 0}, "max_completion_tokens"),
+    ({"messages": [{"role": "user", "content": "hi"}], "max_tokens": True}, "max_tokens"),
+    ({"messages": [{"role": "user", "content": "hi"}], "tools": {"name": "x"}}, "tools must be a list"),
+])
+def test_a_malformed_body_gets_a_400_that_says_what_to_fix(bad, words):
+    c = make_client(lambda req: pytest.fail("nothing goes upstream"))
+    for path in ("/v1/chat/completions", "/v1/route"):
+        r = c.post(path, json={"model": "auto", **bad})
+        assert r.status_code == 400, (path, r.text)
+        assert words in r.json()["error"]["message"]
+
+
+def test_float_max_tokens_and_null_content_are_accepted():
+    b = {"model": "auto", "max_tokens": 1000.0, "messages": [
+        {"role": "assistant", "content": None, "tool_calls": []}, {"role": "user", "content": "hi"}]}
+    assert make_client(lambda req: ok("x")).post("/v1/chat/completions", json=b).status_code == 200
+
+
 @pytest.mark.parametrize("status", [401, 402, 403])
 def test_a_refused_cloud_key_falls_back_to_local(status):
     def handler(req: httpx.Request):
