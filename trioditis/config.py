@@ -11,6 +11,7 @@ Design rules (security):
 
 from __future__ import annotations
 
+import difflib
 import os
 import re
 from dataclasses import dataclass, field
@@ -193,6 +194,7 @@ class Config:
     logging: Logging = field(default_factory=Logging)
     facts: str | None = None  # a provider-facts.v1 file: model status and retirement dates, prices
     plan: PlanSettings = field(default_factory=PlanSettings)
+    warnings: tuple[str, ...] = ()  # keys the loader doesn't know: ignored, and reported by `check` and at start
 
     def provider_of(self, model: str) -> Provider:
         return self.providers[self.models[model].provider]
@@ -234,6 +236,39 @@ def _compile(patterns: list, where: str) -> tuple[re.Pattern, ...]:
             out.append(re.compile(p, re.IGNORECASE))
         except re.error as e:
             raise ConfigError(f"{where}: bad regex {p!r}: {e}") from e
+    return tuple(out)
+
+
+# Sections where an unknown key is a warning. route_picker, reinforce and plan refuse one (they came later).
+_WARN_SECTIONS = ("", "providers.<name>", "models.<name>", "routes.<name>", "embeddings", "privacy", "limits",
+                  "logging")
+
+
+def _unknown_keys(raw: dict) -> tuple[str, ...]:
+    """One line per key the loader would ignore, with the nearest known key when one is close (a typo)."""
+    out = []
+
+    def check(where: str, block, known: frozenset[str]) -> None:
+        if not isinstance(block, dict):
+            return
+        for key in block:
+            if str(key) in known:
+                continue
+            near = difflib.get_close_matches(str(key), sorted(known), n=1, cutoff=0.6)
+            hint = f"; did you mean {near[0]}?" if near else f"; known keys here: {', '.join(sorted(known))}"
+            out.append(f"unknown key {where}{key} is ignored{hint}")
+
+    for sec in _WARN_SECTIONS:
+        known = CONFIG_KEYS[sec]
+        if sec == "":
+            check("", raw, known)
+        elif sec.endswith(".<name>"):
+            group = sec.removesuffix(".<name>")
+            entries = raw.get(group)
+            for name, block in (entries.items() if isinstance(entries, dict) else ()):
+                check(f"{group}.{name}.", block, known)
+        else:
+            check(f"{sec}.", raw.get(sec), known)
     return tuple(out)
 
 
@@ -339,7 +374,8 @@ def parse_config(raw: dict) -> Config:
     return Config(providers, models, routes, default_route, embeddings=emb,
                   route_picker=_parse_route_picker(raw.get("route_picker"), providers, routes),
                   reinforce=_parse_reinforce(raw.get("reinforce")),
-                  privacy=privacy, limits=limits, logging=logging, facts=facts, plan=parse_plan(raw.get("plan")))
+                  privacy=privacy, limits=limits, logging=logging, facts=facts, plan=parse_plan(raw.get("plan")),
+                  warnings=_unknown_keys(raw))
 
 
 def _parse_route_picker(raw, providers: dict[str, Provider], routes: dict[str, Route]) -> RoutePicker | None:

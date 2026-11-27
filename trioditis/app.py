@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sqlite3
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -687,4 +688,7 @@ def _prompt_cut(text: str, body: dict, usage: dict | None) -> str | None:
 
 def app_from_env() -> FastAPI:
     from .config import load_config
-    return create_app(load_config(env("CONFIG", "config.yaml")))
+    cfg = load_config(env("CONFIG", "config.yaml"))
+    for line in cfg.warnings:  # `uvicorn --factory trioditis.app:app_from_env` skips `trioditis serve`
+        print(f"warning: {line}", file=sys.stderr)
+    return create_app(cfg)

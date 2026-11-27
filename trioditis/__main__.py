@@ -233,6 +233,8 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.cmd == "check":
         print(f"config OK: {len(cfg.models)} models, {len(cfg.routes)} routes")
+        for line in cfg.warnings:  # unknown keys: a typo here would silently keep a default
+            print(f"warning: {line}")
         from .localcheck import local_states
         # Local servers are asked once each (a model listing); cloud providers are never contacted.
         # Exit code: 0 whatever the states, as for a missing key: `check` reports, `serve` decides.
@@ -349,7 +351,7 @@ def main(argv: list[str] | None = None) -> None:
     from .migrate import at_start
     at_start()
 
-    for line in _facts_lines(cfg):
+    for line in (*cfg.warnings, *_facts_lines(cfg)):
         print(f"warning: {line}", file=sys.stderr)
 
     import uvicorn

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+**Added**
+- An unknown key in `config.yaml` (a typo such as `upstream_timeout` for `upstream_timeout_s`) is still ignored, but `trioditis check` and the server's start now print a warning that names it and the nearest known key.
+
 ## 0.9.1 (2026-11-27)
 
 Trioditis gets its own data folder, `~/.trioditis`, and `docs/compatibility.md` writes down what 1.0 will keep stable.

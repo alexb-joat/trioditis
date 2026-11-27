@@ -2,7 +2,7 @@
 
 Every key `config.yaml` can hold, with its default and its label. The labels (**stable**, **experimental**, **internal**) mean what [compatibility.md](compatibility.md) says. `trioditis init` writes a starting config from [config.example.yaml](../config.example.yaml); `trioditis check` validates one.
 
-The file is read with a safe YAML loader. Keys are case-sensitive. `<name>` stands for a name you choose: letters, digits and `._:/-`, starting with a letter or digit, up to 128 characters. A key the loader doesn't know is ignored today, except inside `route_picker`, `reinforce` and `plan`, where it is an error. `tests/test_contract.py` checks this page against the loader, so every key below is one Trioditis really reads.
+The file is read with a safe YAML loader. Keys are case-sensitive. `<name>` stands for a name you choose: letters, digits and `._:/-`, starting with a letter or digit, up to 128 characters. A key the loader doesn't know is ignored, and `trioditis check` and the server's start print a warning that names it and the nearest known key; inside `route_picker`, `reinforce` and `plan` an unknown key is an error. `tests/test_contract.py` checks this page against the loader, so every key below is one Trioditis really reads.
 
 ## Top level
 

@@ -1479,3 +1479,37 @@ def test_check_names_a_missing_key_variable_and_never_prints_a_key(tmp_path, cap
     assert "missing $OPENAI_API_KEY" in seen.out  # the variable to set, by name
     assert "MARKER" not in seen.out + seen.err  # a key that is set shows only as "ready"
     assert "ready" in seen.out
+
+
+def test_unknown_config_keys_are_warnings_with_the_nearest_known_key():
+    raw = json.loads(json.dumps(BASE))
+    raw["limits"] = {"upstream_timeout": 30}  # the real key is upstream_timeout_s
+    raw["providers"]["local"]["locl"] = True
+    raw["routes"]["quick"]["zzz"] = 1
+    raw["defaults_route"] = "quick"
+    c = parse_config(raw)
+    assert c.limits.upstream_timeout_s == 120.0  # ignored, so the default stays: the reason for the warning
+    assert c.warnings == (
+        "unknown key defaults_route is ignored; did you mean default_route?",
+        "unknown key providers.local.locl is ignored; did you mean local?",
+        "unknown key routes.quick.zzz is ignored; known keys here: description, examples, keywords, local_only, "
+        "models, patterns, prefer, tool_keywords",
+        "unknown key limits.upstream_timeout is ignored; did you mean upstream_timeout_s?",
+    )
+    assert cfg().warnings == ()
+
+
+def test_check_and_serve_print_unknown_key_warnings(tmp_path, capsys, monkeypatch):
+    import yaml
+
+    from trioditis.__main__ import main
+    raw = json.loads(json.dumps(BASE))
+    raw["logging"]["paht"] = "x.jsonl"
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(raw))
+    main(["--config", str(path), "check"])
+    assert "warning: unknown key logging.paht is ignored; did you mean path?" in capsys.readouterr().out
+    monkeypatch.setenv("TRIODITIS_CONFIG", str(path))
+    from trioditis.app import app_from_env
+    app_from_env()
+    assert "warning: unknown key logging.paht" in capsys.readouterr().err
