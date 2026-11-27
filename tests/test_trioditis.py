@@ -1295,6 +1295,20 @@ def test_prices_import_cli_writes_a_private_file(tmp_path, capsys):
     assert Prices(prices).estimate("big", 1_000_000, 0) == 2.0
 
 
+def test_prices_import_with_nothing_to_import_exits_1_and_writes_nothing(tmp_path, capsys):
+    # docs/compatibility.md (stable exit codes): no configured cloud model in the facts file -> 1, no file written.
+    from trioditis.__main__ import main
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text(json.dumps(BASE))
+    facts = tmp_path / "facts.json"
+    facts.write_text(json.dumps({**FACTS, "providers": {}}))
+    prices = tmp_path / "prices.json"
+    with pytest.raises(SystemExit) as e:
+        main(["--config", str(cfg_file), "prices", "import", str(facts), "--prices", str(prices)])
+    assert e.value.code == 1 and not prices.exists()
+    assert "nothing to import" in capsys.readouterr().out
+
+
 # ------------------------------------------------------------------ coding agents
 
 AGENT_ROUTES = {"code": {"models": ["big", "coder"], "keywords": ["python"],

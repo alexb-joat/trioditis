@@ -89,7 +89,7 @@ This page lists everything you can build on: commands and flags, environment var
 | `trioditis migrate` | stable | moves Trioditis's files from the old shared folder (`~/.hlidskjalv`, or `$HLIDSKJALV_HOME` when `TRIODITIS_HOME` is also set) to the data folder, leaving a link at each old path; `serve` does the same when it starts; nothing to do once moved; exits 1 when it can't move yet or both folders hold the files |
 | `trioditis migrate --dry-run` | stable | shows what would move; writes nothing |
 
-**Exit codes** (stable): 0 when the command did its job. 2 when the command line is wrong (argparse's own errors, and a value such as `usage --since 3q` or `usage --by colour`) or `prices import` can't read its input file. 1 for anything else that stopped the command: a missing or invalid config, a file it couldn't write, a local model it needed and couldn't reach. One exception: `prices import` exits 1 when there is nothing to import.
+**Exit codes** (stable): 0 when the command did its job. 2 when the command line is wrong (argparse's own errors, and a value such as `usage --since 3q` or `usage --by colour`) or `prices import` can't read its input file. 1 for anything else that stopped the command: a missing or invalid config, a file it couldn't write, a local model it needed and couldn't reach, or a `prices import` with nothing to import (no configured cloud model is in the facts file, so no price is written).
 
 ## Environment variables
 
