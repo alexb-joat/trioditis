@@ -144,6 +144,20 @@ curl -s http://127.0.0.1:8787/v1/chat/completions -H 'Content-Type: application/
 
 Cloud models are optional: add `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `OPENROUTER_API_KEY` to `.env` and they join the routes. A cloud provider without a key is simply skipped.
 
+<details>
+<summary>Upgrade or uninstall</summary>
+
+**Upgrade.** Read the [CHANGELOG](https://github.com/alexb-joat/trioditis/blob/main/CHANGELOG.md) first, then run `pipx upgrade trioditis`. From a clone, run `git pull` and the same `pip install --require-hashes` line as above. With Docker, run `docker compose up -d --build`. Restart the background service if you run one. Upgrading from 0.9.0 or earlier moves the data folder: see [the upgrade notes](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md#upgrading-from-090-or-earlier).
+
+**Uninstall.** Apart from paths you name with a flag (such as `--out` or `--prices`), Trioditis writes only to these four places:
+
+1. The background service, if you installed one: run its script with `--remove` (`-Remove` on Windows), see [docs/deployment.md](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md#run-in-the-background).
+2. The program: `pipx uninstall trioditis`, or delete the clone. With Docker: `docker compose down`, then delete the image.
+3. Your folder from `trioditis init` (`config.yaml`, `.env` with your keys, `logs/`), or `logs/` next to `docker-compose.yml`.
+4. The data folder `~/.trioditis` (or `$TRIODITIS_HOME`): spending, prices, metrics. If you upgraded from 0.9.0 or earlier on Linux or macOS, `~/.hlidskjalv` holds links to these files next to Lunete's own files. `find ~/.hlidskjalv/ -maxdepth 1 -lname '*.trioditis/*'` lists only the links; add `-delete` to remove them. On Windows nothing has moved yet, so the files are still in `%USERPROFILE%\.hlidskjalv`, next to Lunete's.
+
+</details>
+
 ## Help measure
 
 Trioditis ships 315 labelled prompts, the public held-out set. One command runs its route picker and its router on them on your machine and writes the numbers to a file you may share:
