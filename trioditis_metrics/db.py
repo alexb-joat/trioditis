@@ -2,7 +2,7 @@
 
 Replaces the plain decisions.jsonl log with a queryable store, so Trioditis
 can answer "how much have I spent today / this month" before making a cloud
-call, and so other tools (Hlidskjalv, future dashboards) can query
+call, and so other tools (dashboards such as Lunete) can query
 history without re-parsing a growing log file.
 
 Stdlib only (sqlite3) -- no new dependency, matching the rest of the stack.
@@ -10,7 +10,7 @@ Stdlib only (sqlite3) -- no new dependency, matching the rest of the stack.
 Usage inside Trioditis, once per process:
 
     from trioditis_metrics import MetricsDB
-    db = MetricsDB()  # defaults to ~/.hlidskjalv/metrics.db
+    db = MetricsDB()  # defaults to metrics.db in the data folder (home.py)
 
 After each request completes (Trioditis already builds a dict with this
 shape to write to decisions.jsonl -- pass that same object straight in):

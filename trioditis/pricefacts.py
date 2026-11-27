@@ -2,8 +2,8 @@
 
 A provider-facts file (schema "provider-facts.v1", the one Euboulia's catalog is built from) lists,
 per provider, each model's API id and price with the documentation page it was read from. This module
-matches it against config.yaml by the model id sent upstream and writes ~/.hlidskjalv/prices.json
-entries that carry their source:
+matches it against config.yaml by the model id sent upstream and writes prices.json
+(in the data folder) entries that carry their source:
 
     {"claude-haiku": {"input": 0.1, "output": 0.5,
                       "long_context": {"threshold": 100000, "input": 0.5, "output": 2.5},

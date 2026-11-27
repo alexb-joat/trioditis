@@ -1,6 +1,6 @@
 """Routing values the reinforcement loop adopted, kept apart from config.yaml (docs/staying-current.md).
 
-The file (~/.hlidskjalv/trioditis-adopted.json, private) holds the values in force, every change with
+The file (trioditis-adopted.json in the data folder, private) holds the values in force, every change with
 its before and after, and what the current label batch has decided. It is used only while the config
 has a `reinforce:` block: without the block the router never opens it. A file that cannot be read, or
 that holds a value outside what the loop may set, is ignored whole: the config's values serve, and

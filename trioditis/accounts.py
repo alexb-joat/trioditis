@@ -2,7 +2,7 @@
 
 There is no universal API for this, so there's one small adapter per
 provider, chosen by the host in the provider's configured base_url, never a
-hard-coded third party. Every adapter returns the same shape, so Hlidskjalv
+hard-coded third party. Every adapter returns the same shape, so Lunete
 can draw one kind of meter for all of them:
 
     {"kind": "credits" | "spend", "label": str, "used": float, "limit": float | None,
@@ -21,7 +21,7 @@ needs:
 - Local providers (Ollama): nothing to report; they're free.
 
 Only GET requests to the provider's own host; keys never leave the process
-otherwise. Results go to ~/.hlidskjalv/accounts.json every ACCOUNTS_EVERY_S.
+otherwise. Results go to accounts.json in the data folder every ACCOUNTS_EVERY_S.
 """
 
 from __future__ import annotations

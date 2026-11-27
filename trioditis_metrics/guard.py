@@ -1,13 +1,13 @@
 """Budget guard: decide whether a cloud call is allowed right now.
 
 Reads today's and this month's spend from MetricsDB and compares against
-caps loaded from ~/.hlidskjalv/budget.json (same convention as the existing
-~/.hlidskjalv/prices.json). Call `guard.check()` before dispatching to a cloud
+caps loaded from budget.json in the data folder (home.py), next to
+prices.json. Call `guard.check()` before dispatching to a cloud
 provider; if it returns a reason (a string), skip the cloud call and fall
 back to a local model instead, and log the reason so it shows up as a
-"blocked -- over budget" event in Hlidskjalv.
+"blocked -- over budget" event in a dashboard such as Lunete.
 
-Defaults: $1.00/day, $15.00/month. Edit ~/.hlidskjalv/budget.json to change
+Defaults: $1.00/day, $15.00/month. Edit budget.json in the data folder to change
 them -- no code change or restart-time flag needed, just a file write:
 
     {"daily_usd": 1.0, "monthly_usd": 15.0}

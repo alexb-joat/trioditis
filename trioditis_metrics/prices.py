@@ -1,7 +1,7 @@
-"""Per-token prices for cloud models, from ~/.hlidskjalv/prices.json.
+"""Per-token prices for cloud models, from prices.json in the data folder (home.py).
 
-Same file and format Hlidskjalv already reads, so one price list feeds
-both Hlidskjalv's cost display and Trioditis' budget guard:
+Lunete reads the same file and format, so one price list feeds
+both Lunete's cost display and Trioditis' budget guard:
 
     {"claude-sonnet": {"input": 3.0, "output": 15.0}}   # USD per 1M tokens
 

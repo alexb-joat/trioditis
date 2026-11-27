@@ -1,5 +1,6 @@
-"""Where Trioditis and Hlidskjalv keep shared state: metrics.db, budget.json,
-prices.json, hardware.json. $HLIDSKJALV_HOME, else ~/.hlidskjalv.
+"""Trioditis's data folder: metrics.db, budget.json, prices.json, hardware.json,
+accounts.json, plan-salt and the refit files. $HLIDSKJALV_HOME, else ~/.hlidskjalv.
+Dashboards such as Lunete read some of these files; Trioditis reads nothing of theirs.
 
 (The pre-rename ~/.arcade and $ARCADE_HOME, and the one-time move from them,
 were dropped in 0.5.)

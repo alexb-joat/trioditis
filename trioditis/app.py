@@ -77,7 +77,7 @@ SECURITY_LOG_MAX = 5 * 1024 * 1024    # refusals can be spammed by anything that
 
 def _append_private(path: Path, line: str, max_bytes: int) -> None:
     """Append a line to a JSONL log (owner-only), moving the file to <name>.1 once it passes max_bytes.
-    One backup only: the disk use is bounded at about twice the cap. Hlidskjalv's tail copes with the rename."""
+    One backup only: the disk use is bounded at about twice the cap. Lunete's tail copes with the rename."""
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
         if path.stat().st_size >= max_bytes:
@@ -108,7 +108,7 @@ class DecisionLog:
 
 
 class SecurityLog:
-    """Refused requests, next to the decision log (logs/security.jsonl). Hlidskjalv turns
+    """Refused requests, next to the decision log (logs/security.jsonl). Lunete turns
     these into alerts. Method, path, client address and reason only: never keys or bodies."""
 
     def __init__(self, decisions_path: str | None, max_bytes: int = SECURITY_LOG_MAX):
@@ -151,7 +151,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
     cooldowns = Cooldowns()
     log = DecisionLog(cfg.logging.path, cfg.logging.log_prompts)
     security = SecurityLog(cfg.logging.path)
-    metrics = metrics or MetricsDB()  # one per process; ~/.hlidskjalv/metrics.db by default
+    metrics = metrics or MetricsDB()  # one per process; metrics.db in the data folder by default
     budget = budget or BudgetGuard(metrics)
     prices = prices or Prices()
     signals = Signals(prices=prices, latency=_latency_cache(metrics), cooldowns=cooldowns)
@@ -160,7 +160,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
     hardware_file = hardware_file or DEFAULT_HARDWARE_FILE
 
     async def publish_hardware():
-        """Keep ~/.hlidskjalv/hardware.json current so Hlidskjalv can show local-model
+        """Keep hardware.json in the data folder current so Lunete can show local-model
         suggestions without needing this router's API key."""
         while True:
             try:
@@ -180,7 +180,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         return accounts
 
     async def publish_accounts():
-        """Balances and spend from each provider's own account API, for Hlidskjalv. Only runs
+        """Balances and spend from each provider's own account API, for Lunete. Only runs
         when a cloud provider with an adapter and a key is configured; never affects routing."""
         if not any(not p.local and p.available() and adapter_for(p) for p in cfg.providers.values()):
             return
@@ -559,7 +559,7 @@ async def _relay(resp: httpx.Response, on_done=None):
 
 
 def _remember_limits(metrics: MetricsDB, provider: str, headers, cooldowns: Cooldowns | None = None) -> None:
-    """Rate-limit headers from an upstream response -> the metrics DB (Hlidskjalv shows them); a limit
+    """Rate-limit headers from an upstream response -> the metrics DB (Lunete shows them); a limit
     at zero with a refill time ahead makes the router try that provider last until then."""
     try:
         limits = parse_ratelimits(headers)
@@ -626,13 +626,13 @@ def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body
     cut = _prompt_cut(text, body, usage)
     if cut:
         rec["prompt_truncated"] = True
-        rec["reasons"] = [*d.reasons, cut]  # Hlidskjalv shows reasons, so the user learns why the model "forgot"
+        rec["reasons"] = [*d.reasons, cut]  # Lunete shows reasons, so the user learns why the model "forgot"
     if log.log_prompts:
         rec["prompt"] = text
     log.write(rec)
     try:
         # Cost goes to the metrics DB only; decisions.jsonl keeps its format
-        # (Hlidskjalv prices it itself from the same prices.json).
+        # (Lunete prices it itself from the same prices.json).
         cost = estimate if charge_estimate else prices.cost(model, local, usage)
         metrics.record({**rec, "cost": cost, "provider": provider,
                         "unpriced": bool(local is False and cost is None and isinstance(status, int) and status < 400)})

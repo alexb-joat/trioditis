@@ -3,12 +3,12 @@
 Reads the metrics database (read-only), the config, prices.json and, when the config's `facts:`
 names one, a provider-facts file. Writes:
 
-- ~/.hlidskjalv/trioditis-fitted.json: per model, its error, cut-off, asked-again and cache-hit
+- trioditis-fitted.json (data folder): per model, its error, cut-off, asked-again and cache-hit
   rates with 95% intervals, p50/p95 latency and a daily error chart; what the facts say about the
   configured models; price changes waiting to be applied; with a plan-usage ledger, meter points
   per token for each model and effort (planfit.py). Every number carries its n, its window and
   the method behind it.
-- ~/.hlidskjalv/trioditis-notebook.jsonl: one line per finding that wasn't there at the last refit
+- trioditis-notebook.jsonl (data folder): one line per finding that wasn't there at the last refit
   (a drift alarm, a lifecycle warning, a price change, a model to try).
 
 It changes nothing the router uses: prices change when you run `prices import`, models and
