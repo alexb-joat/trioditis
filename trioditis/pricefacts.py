@@ -197,6 +197,7 @@ def check_lines(path: str, configured: dict[str, str], today: dt.date | None = N
 
 
 def write_prices(path: Path, table: dict) -> None:
+    path = Path(path).resolve()  # an old path left as a link by `trioditis migrate`: write the file, keep the link
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

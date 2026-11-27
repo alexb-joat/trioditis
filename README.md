@@ -66,7 +66,7 @@ trioditis results
 
 - **Private by default.** A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread.
 - **Cost-aware.** Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend.
-- **Small and auditable.** About 8,600 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry.
+- **Small and auditable.** About 9,100 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry.
 - **Explains itself.** Routed answers name their route and model in response headers; Trioditis's own error replies and the Claude Code passthrough don't. A log records the reasons, with no prompt text.
 
 ## Quick start

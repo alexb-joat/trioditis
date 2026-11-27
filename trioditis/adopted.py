@@ -85,7 +85,7 @@ def read(path: Path | None = None) -> dict:
 
 
 def write(doc: dict, path: Path | None = None) -> None:
-    path = path or adopted_path()
+    path = Path(path or adopted_path()).resolve()  # an old path left as a link by `trioditis migrate`: keep the link
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

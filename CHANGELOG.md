@@ -7,7 +7,12 @@
 - `docs/configuration.md` documents every `config.yaml` key with its default and label.
 - SECURITY.md has a table of supported versions (0.9.x).
 - A contract test reads these lists from the code: an undocumented flag, key, variable, endpoint, header, column or log field fails the test suite, and so does a documented one that is gone.
-- `TRIODITIS_HOME` names the data folder, default `~/.trioditis`. An install that has `~/.hlidskjalv` and no `~/.trioditis` keeps using `~/.hlidskjalv` for now, so nothing moves yet.
+- `TRIODITIS_HOME` names the data folder, default `~/.trioditis`.
+- `trioditis migrate` moves Trioditis's own files (metrics.db, budget.json, prices.json and the rest) out of the folder it shared with the dashboard, `~/.hlidskjalv`, into `~/.trioditis`, and leaves a link at each old path so dashboards that read the old paths keep working. The dashboard's files stay where they are. `serve` does the same when it starts. `--dry-run` shows the move first. If Trioditis is still writing to metrics.db, or both folders already hold the same file, nothing moves and the message says why. On Windows nothing moves yet; Trioditis keeps reading the old folder. `check` says when files are still waiting in the old folder.
+
+**Changed**
+- After the move, edit `budget.json` and `prices.json` in `~/.trioditis`: an editor that saves by replacing the file would cut the link at the old path (`check` then reports both copies). Trioditis's own writers follow the link.
+- A folder that holds only the dashboard's files is no longer taken for Trioditis's data folder: a fresh install next to it starts `~/.trioditis`.
 
 **Deprecated**
 - `HLIDSKJALV_HOME`: still read when `TRIODITIS_HOME` is unset, with a one-line warning. Rename it to `TRIODITIS_HOME` (same value).

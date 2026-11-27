@@ -86,6 +86,8 @@ This page lists everything you can build on: commands and flags, environment var
 | `trioditis reinforce revert` | experimental | takes back the last adopted value |
 | `trioditis reinforce revert --all` | experimental | takes back every adopted value |
 | `trioditis reinforce revert --dry-run` | experimental | writes nothing |
+| `trioditis migrate` | stable | moves Trioditis's files from the old shared folder (`~/.hlidskjalv`, or `$HLIDSKJALV_HOME` when `TRIODITIS_HOME` is also set) to the data folder, leaving a link at each old path; `serve` does the same when it starts; nothing to do once moved; exits 1 when it can't move yet or both folders hold the files |
+| `trioditis migrate --dry-run` | stable | shows what would move; writes nothing |
 
 **Exit codes** (stable): 0 when the command did its job. 2 when the command line is wrong (argparse's own errors, and a value such as `usage --since 3q` or `usage --by colour`) or `prices import` can't read its input file. 1 for anything else that stopped the command: a missing or invalid config, a file it couldn't write, a local model it needed and couldn't reach. One exception: `prices import` exits 1 when there is nothing to import.
 
@@ -167,7 +169,7 @@ An error the provider itself returned (a 400, say) is passed through with its ow
 
 ## Files
 
-The data folder is `$TRIODITIS_HOME`, default `~/.trioditis`. An install from before 0.9.1 that has `~/.hlidskjalv` and no `~/.trioditis` keeps using `~/.hlidskjalv`. Log files sit where `logging.path` points (default `logs/` under the folder `serve` runs in). On Linux and macOS, `metrics.db` and the log files are readable by your user only (mode 600).
+The data folder is `$TRIODITIS_HOME`, default `~/.trioditis`. An install from before 0.9.1 whose Trioditis files are still in `~/.hlidskjalv`, with no `~/.trioditis` yet, keeps using `~/.hlidskjalv` until `trioditis migrate` (or the next `serve` start) moves them. Log files sit where `logging.path` points (default `logs/` under the folder `serve` runs in). On Linux and macOS, `metrics.db` and the log files are readable by your user only (mode 600).
 
 | Item | Label | Notes |
 |---|---|---|
@@ -184,6 +186,7 @@ The data folder is `$TRIODITIS_HOME`, default `~/.trioditis`. An install from be
 | `hardware.json` | experimental | what `/v1/hardware` last found; dashboards such as Lunete read it |
 | `accounts.json` | experimental | what `/v1/accounts` last found; dashboards such as Lunete read it |
 | `plan-salt` | internal | the salt for plan-usage hashes |
+| `migrate.log` | internal | one line per file `trioditis migrate` moved |
 
 ## Metrics database
 

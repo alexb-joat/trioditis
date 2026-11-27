@@ -555,6 +555,8 @@ def test_old_home_variable_still_works_with_one_warning(monkeypatch, tmp_path, c
 def test_an_old_install_keeps_its_folder_until_a_new_one_exists(monkeypatch, tmp_path, capsys):
     home = _fresh_home(monkeypatch, tmp_path)
     (tmp_path / ".hlidskjalv").mkdir()
+    assert home.data_home() == tmp_path / ".trioditis"  # Lunete's folder alone is not Trioditis's
+    (tmp_path / ".hlidskjalv" / "metrics.db").touch()
     assert home.data_home() == tmp_path / ".hlidskjalv"  # an upgrade never starts from an empty folder
     (tmp_path / ".trioditis").mkdir()
     assert home.data_home() == tmp_path / ".trioditis"

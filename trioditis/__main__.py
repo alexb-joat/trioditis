@@ -1,4 +1,4 @@
-"""Command line entry point: python -m trioditis [init|serve|check|explain|eval-routes|results|hardware|usage|plan|prices|refit]."""
+"""Command line entry point: python -m trioditis [init|serve|check|explain|eval-routes|results|hardware|usage|plan|prices|refit|reinforce|migrate]."""
 
 from __future__ import annotations
 
@@ -130,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
                          "default: not written)")
     rs.add_argument("--no-share", action="store_true", help="don't ask about sharing (it is never asked when not run in a terminal)")
 
+    mg = sub.add_parser("migrate", help="move Trioditis's files from the old shared folder (~/.hlidskjalv) to "
+                        "~/.trioditis, leaving a link at each old path; `serve` also does this when it starts "
+                        "(no config needed)")
+    mg.add_argument("--dry-run", action="store_true", help="show what would move, write nothing")
+
     h = sub.add_parser("hardware", help="detect hardware and suggest local models (no config change)")
     h.add_argument("--json", action="store_true", help="machine-readable output")
 
@@ -211,6 +216,9 @@ def main(argv: list[str] | None = None) -> None:
         except (OSError, ConfigError, ValueError) as err:
             sys.exit(f"config error in {args.config}: {err}")
         sys.exit(plan_run(args, settings))
+    if args.cmd == "migrate":  # moves files in the data folder only: works without a config
+        from .migrate import run as migrate_run
+        sys.exit(migrate_run(args))
     if args.cmd == "init":  # creates the config: obviously works without one
         sys.exit(init_folder(Path(args.dir)))
     if args.cmd == "results":  # measures with the shipped settings: never reads config.yaml
@@ -258,6 +266,10 @@ def main(argv: list[str] | None = None) -> None:
                                 break_on_hyphens=False))
         for line in _facts_lines(cfg):
             print(line)
+        from .migrate import check_lines as folder_lines
+        for line in folder_lines():  # [] once the data folder has moved (or never needed to)
+            print(textwrap.fill(line, width=98, subsequent_indent="    ", break_long_words=False,
+                                break_on_hyphens=False))
         return
 
     if args.cmd == "reinforce":
@@ -332,6 +344,10 @@ def main(argv: list[str] | None = None) -> None:
         fd = os.open("logs/server.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
         stream = os.fdopen(fd, "a", encoding="utf-8", buffering=1)
         sys.stdout = sys.stderr = stream
+
+    # Before anything opens the data folder: the modules below fix their default paths when imported.
+    from .migrate import at_start
+    at_start()
 
     for line in _facts_lines(cfg):
         print(f"warning: {line}", file=sys.stderr)
