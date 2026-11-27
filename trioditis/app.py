@@ -27,7 +27,7 @@ from .adopted import Layer
 from .config import Config
 from .envvars import env
 from .hardware import ReportCache
-from .localcheck import attempts_text, connection_hint
+from .localcheck import attempts_text, connection_hint, key_hint
 from .router import Cooldowns, Decision, Embedder, RoutePickerClient, RoutingError, SessionPins, Signals, all_text, decide
 from .security import check_bearer, fingerprint, host_header_is_local, origin_is_local, router_api_key
 from .shadow import Shadow
@@ -46,8 +46,11 @@ def client_of(headers) -> str | None:
 # A 429 without Retry-After still moves that provider to the back of the line for this long.
 DEFAULT_COOLDOWN_S = 15
 
+# A provider that refuses its key (401, 403) or wants payment (402) can't answer this request,
+# but the next model can: a wrong cloud key must not stop the local fallback.
+KEY_REFUSED = {401, 402, 403}
 # Upstream failures worth trying the next model for.
-RETRYABLE = {404, 408, 409, 425, 429, 500, 502, 503, 504}
+RETRYABLE = {404, 408, 409, 425, 429, 500, 502, 503, 504} | KEY_REFUSED
 
 
 DEFAULT_HARDWARE_FILE = data_home() / "hardware.json"
@@ -450,7 +453,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             return _error(429, f"cloud budget exceeded: {blocked}; no local model "
                                f"available for route {d.route}", "budget_exceeded")
         _log(log, metrics, prices, d, body, None, 502, attempts, started, sid, caller, error="upstream_error")
-        hint = connection_hint(cfg, attempts)
+        hint = " ".join(h for h in (connection_hint(cfg, attempts), key_hint(cfg, attempts)) if h)
         return _error(502, f"all candidate models failed: {attempts_text(attempts)}." + (f" {hint}" if hint else ""),
                       "upstream_error")
 

@@ -107,6 +107,25 @@ def connection_hint(cfg: Config, attempts: list[dict]) -> str:
     return f"No answer from the local server ({where}): {start_hint(next(iter(seen.values())))}, then run `trioditis check`."
 
 
+def key_hint(cfg: Config, attempts: list[dict]) -> str:
+    """One sentence for the 502 when a cloud provider refused its key or wanted payment; '' otherwise."""
+    out = []
+    for a in attempts:
+        m = cfg.models.get(a.get("model"))
+        status = a.get("status")
+        if not m or status not in (401, 402, 403) or cfg.providers[m.provider].local:
+            continue
+        prov = cfg.providers[m.provider]
+        if status == 402:
+            line = f"{prov.name} answered 402: the account behind ${prov.api_key_env} needs credit."
+        else:
+            line = (f"{prov.name} refused the key in ${prov.api_key_env} (HTTP {status}): check it in .env; "
+                    f"`trioditis check` shows only that it is set.")
+        if line not in out:
+            out.append(line)
+    return " ".join(out)
+
+
 def attempts_text(attempts: list[dict]) -> str:
     """The attempts as 'model: reason, model: reason' instead of a Python list."""
     out = []

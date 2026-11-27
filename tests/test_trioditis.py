@@ -221,6 +221,30 @@ def test_chat_routes_and_fallbacks():
     assert seen[1] == ("localhost", "qwen-coder", None)  # local: no key sent
 
 
+@pytest.mark.parametrize("status", [401, 402, 403])
+def test_a_refused_cloud_key_falls_back_to_local(status):
+    def handler(req: httpx.Request):
+        if json.loads(req.content)["model"] == "big-1":
+            return httpx.Response(status, json={"error": {"message": "invalid key"}})
+        return ok("qwen-coder")
+
+    r = make_client(handler).post("/v1/chat/completions", json=body("python bug"))
+    assert r.status_code == 200
+    assert r.headers["x-trioditis-model"] == "coder"
+
+
+@pytest.mark.parametrize("status,words", [(401, "refused the key in $CLOUD_KEY"), (403, "refused the key"),
+                                          (402, "needs credit")])
+def test_a_refused_key_with_no_fallback_names_the_key(status, words):
+    config = cfg(routes={"cloudy": {"models": ["big"]}}, default_route="cloudy")
+    r = make_client(lambda req: httpx.Response(status, json={"error": {"message": "no"}}), config).post(
+        "/v1/chat/completions", json=body("hello"))
+    assert r.status_code == 502
+    msg = r.json()["error"]["message"]
+    assert f"big: HTTP {status}" in msg and words in msg
+    assert "cloud-secret" not in msg  # the key's name, never its value
+
+
 def test_router_key_required_and_never_forwarded(monkeypatch):
     monkeypatch.setenv("TRIODITIS_API_KEY", "router-key-" + "x" * 30)
     captured = {}
