@@ -1549,6 +1549,25 @@ def test_total_timeout_gives_up_and_skips_the_rest_instead_of_waiting_per_model(
     assert "big: limits.total_timeout_s used up, coder: limits.total_timeout_s used up" in msg
 
 
+def test_a_timer_that_fires_a_tick_early_still_skips_the_rest(monkeypatch):
+    # asyncio fires a timer up to one clock tick early (about 15.6 ms on Windows), so right after a timeout the
+    # deadline can still look a few ms away. Seen on a Windows CI runner: the next model was asked anyway.
+    import trioditis.app as app_mod
+    asked = []
+
+    async def times_out_early(call, deadline):
+        asked.append(deadline)
+        call.close()  # the provider is never reached; the timeout fires with the deadline still ahead
+        raise app_mod.TotalTimeout
+
+    monkeypatch.setattr(app_mod, "_within", times_out_early)
+    r = make_client(lambda req: ok("big-1"), config=cfg(limits={"total_timeout_s": 60})).post(
+        "/v1/chat/completions", json=body("fix this python bug"))
+    assert r.status_code == 502
+    assert len(asked) == 1, "a timeout means the whole wait is used up: no later model is asked"
+    assert "coder: limits.total_timeout_s used up" in r.json()["error"]["message"]
+
+
 def test_total_timeout_never_cuts_a_stream_that_has_started():
     import asyncio
 

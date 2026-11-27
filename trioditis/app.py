@@ -359,11 +359,13 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         tokens_in = _sent_tokens(all_text(body.get("messages") or []), body)
         tokens_out = _max_output(body) or caps.assume_output_tokens
         deadline = started + cfg.limits.total_timeout_s  # the whole wait, fallbacks included
+        # Set when a wait times out. The clock alone can't say so: asyncio fires a timer up to one clock tick early
+        # (about 15.6 ms on Windows), so just after a timeout the deadline can still look a few ms away.
+        used_up = False
         for model in d.candidates:
             m = cfg.models[model]
             prov = cfg.providers[m.provider]
-            left = deadline - time.monotonic()
-            if left <= 0:  # the rest are not tried: the client has waited long enough
+            if used_up or deadline - time.monotonic() <= 0:  # the rest are not tried: the client has waited long enough
                 attempts.append({"model": model, "error": "total_timeout"})
                 continue
             held = None  # this call's reservation against the caps, released once its cost is recorded
@@ -394,6 +396,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                     req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
                     resp = await _within(upstream.send(req, stream=stream), deadline)
                 except TotalTimeout:
+                    used_up = True
                     attempts.append({"model": model, "error": "total_timeout"})
                     continue
                 except httpx.HTTPError as e:
@@ -408,6 +411,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                             req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
                             resp = await _within(upstream.send(req, stream=stream), deadline)
                         except TotalTimeout:
+                            used_up = True
                             attempts.append({"model": model, "error": "total_timeout"})
                             continue
                         except httpx.HTTPError as e:
