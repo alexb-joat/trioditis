@@ -345,6 +345,7 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
             m = cfg.models[model]
             prov = cfg.providers[m.provider]
             held = None  # this call's reservation against the caps, released once its cost is recorded
+            estimate = None  # this call's estimated cost: charged if the provider reports no usage
             if not prov.local:
                 estimate = prices.estimate(model, tokens_in, tokens_out)
                 held, reason = budget.reserve(m.provider, caps.assume_unpriced_usd if estimate is None else estimate,
@@ -415,14 +416,16 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                     await resp.aclose()
                     _log(log, metrics, prices, d, body, model, resp.status_code, attempts, started, sid, caller,
                          local=local, usage=_usage_from_json(content), provider=m.provider,
-                         finish=_finish_from_json(content))
+                         finish=_finish_from_json(content), estimate=estimate)
                     return _passthrough(resp, content, route_headers)
 
-                def done(usage, finish, _model=model, _status=resp.status_code, _local=local, _prov=m.provider,
-                         _held=held):
+                def done(usage, finish, broken=None, _model=model, _status=resp.status_code, _local=local,
+                         _prov=m.provider, _held=held, _estimate=estimate):
                     try:
-                        _log(log, metrics, prices, d, body, _model, _status, attempts, started, sid, caller,
-                             local=_local, usage=usage, provider=_prov, finish=finish)
+                        # A stream that broke halfway is a failed call, whatever status it started with.
+                        _log(log, metrics, prices, d, body, _model, 502 if broken else _status, attempts, started, sid,
+                             caller, local=_local, usage=usage, provider=_prov, finish=finish, estimate=_estimate,
+                             error="stream_broken" if broken else None)
                     finally:
                         budget.release(_held)  # after the record: the cost moves from pending to spent, no gap
 
@@ -535,16 +538,24 @@ def _usage_from_sse(tail: bytes) -> dict | None:
 
 async def _relay(resp: httpx.Response, on_done=None):
     tail = b""
+    broken = None
     try:
         # Decoded bytes: a provider may gzip its stream (Anthropic does), and we send only our own
         # headers back, with no Content-Encoding, so the client must get plain SSE.
         async for chunk in resp.aiter_bytes():
             tail = (tail + chunk)[-16384:]
             yield chunk
+    except httpx.HTTPError as e:
+        # The answer has started, so no other model can take over (see Known limits). Tell the client
+        # in the stream's own format instead of cutting the connection without a word.
+        broken = type(e).__name__
+        err = {"error": {"message": f"the upstream stream broke halfway ({broken}); the answer is incomplete",
+                         "type": "upstream_error", "code": "stream_broken"}}
+        yield b"\n\ndata: " + json.dumps(err).encode() + b"\n\ndata: [DONE]\n\n"
     finally:
         await resp.aclose()
         if on_done:
-            on_done(_usage_from_sse(tail), _finish_from_sse(tail))
+            on_done(_usage_from_sse(tail), _finish_from_sse(tail), broken)
 
 
 def _remember_limits(metrics: MetricsDB, provider: str, headers, cooldowns: Cooldowns | None = None) -> None:
@@ -582,7 +593,7 @@ def _latency_cache(metrics: MetricsDB, ttl_s: float = 60.0, window_s: float = 7 
 def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body: dict, model,
          status, attempts, started, sid, caller: str | None = None, local: bool | None = None,
          usage: dict | None = None, provider: str | None = None, error: str | None = None,
-         finish: str | None = None) -> None:
+         finish: str | None = None, estimate: float | None = None) -> None:
     text = all_text(body.get("messages") or [])
     rec = {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -604,9 +615,14 @@ def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body
         rec["router_route"] = d.router_route
         rec["route_picker"] = d.picker
     if error:
-        rec["error"] = error  # why no model answered: rate_limited | budget_exceeded | upstream_error
+        rec["error"] = error  # why no model answered: rate_limited | budget_exceeded | upstream_error | stream_broken
     if finish:
         rec["finish_reason"] = finish
+    # A cloud answer without a usage block would count $0 against the caps: charge its estimate instead.
+    charge_estimate = (local is False and usage is None and estimate is not None
+                       and isinstance(status, int) and status < 400)
+    if charge_estimate:
+        rec["usage_missing"] = True
     cut = _prompt_cut(text, body, usage)
     if cut:
         rec["prompt_truncated"] = True
@@ -617,9 +633,9 @@ def _log(log: DecisionLog, metrics: MetricsDB, prices: Prices, d: Decision, body
     try:
         # Cost goes to the metrics DB only; decisions.jsonl keeps its format
         # (Hlidskjalv prices it itself from the same prices.json).
-        cost = prices.cost(model, local, usage)
+        cost = estimate if charge_estimate else prices.cost(model, local, usage)
         metrics.record({**rec, "cost": cost, "provider": provider,
-                        "unpriced": bool(local is False and cost is None and usage and isinstance(status, int) and status < 400)})
+                        "unpriced": bool(local is False and cost is None and isinstance(status, int) and status < 400)})
     except sqlite3.Error:
         pass  # metrics are best-effort; never fail (or break a stream) over them
 

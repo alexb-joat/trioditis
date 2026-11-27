@@ -692,6 +692,59 @@ def test_unpriced_cloud_calls_are_recorded_and_can_count_toward_caps():
     assert BudgetGuard(metrics, BudgetCaps(daily_usd=1.0)).check("cloud") is None  # default: unpriced counts $0, as documented
 
 
+def _sse_stream(parts, fail_after=False):
+    class Chunks(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            for part in parts:
+                yield part
+            if fail_after:
+                raise httpx.ReadError("connection reset")
+    return Chunks()
+
+
+def test_a_priced_cloud_stream_without_usage_is_charged_its_estimate(tmp_path):
+    # The provider ignores stream_options.include_usage: no usage block, so the call would count $0.
+    pf = tmp_path / "prices.json"
+    pf.write_text(json.dumps({"big": {"input": 3, "output": 15}}))
+    metrics = MetricsDB(tmp_path / "metrics.db")
+    sse = [b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n', b"data: [DONE]\n\n"]
+    c = make_client(lambda req: httpx.Response(200, stream=_sse_stream(sse),
+                                               headers={"content-type": "text/event-stream"}),
+                    metrics=metrics, prices=Prices(pf))
+    r = c.post("/v1/chat/completions", json=body("python bug", stream=True, max_tokens=1000))
+    assert r.status_code == 200 and r.headers["x-trioditis-model"] == "big"
+    row = metrics.recent(1)[0]
+    assert row["cost"] and row["cost"] >= 1000 * 15 / 1e6  # at least the output tokens it may have used
+    assert row["unpriced"] == 0
+    assert metrics.spend_today() == pytest.approx(row["cost"])
+
+
+def test_a_cloud_answer_without_usage_or_price_is_flagged_unpriced():
+    metrics = MetricsDB(Path(tempfile.mkdtemp()) / "metrics.db")
+    c = make_client(lambda req: ok("big-1"), metrics=metrics)  # no usage block, no prices.json
+    assert c.post("/v1/chat/completions", json=body("python bug")).status_code == 200
+    row = metrics.recent(1)[0]
+    assert row["cost"] is None and row["unpriced"] == 1
+
+
+def test_a_stream_that_breaks_halfway_ends_with_an_error_event_and_is_logged_failed(tmp_path):
+    logf = tmp_path / "decisions.jsonl"
+    metrics = MetricsDB(tmp_path / "metrics.db")
+    first = b'data: {"choices":[{"delta":{"content":"half an ans"}}]}\n\n'
+    c = make_client(lambda req: httpx.Response(200, stream=_sse_stream([first], fail_after=True),
+                                               headers={"content-type": "text/event-stream"}),
+                    config=cfg(logging={"path": str(logf)}), metrics=metrics)
+    r = c.post("/v1/chat/completions", json=body("hello", stream=True))
+    assert r.content.startswith(first)
+    events = [e for e in r.content.decode().split("\n\n") if e.startswith("data: ")]
+    assert events[-1] == "data: [DONE]"
+    err = json.loads(events[-2][len("data: "):])["error"]
+    assert err["code"] == "stream_broken" and "ReadError" in err["message"]
+    rec = json.loads(logf.read_text().splitlines()[-1])
+    assert rec["status"] == 502 and rec["error"] == "stream_broken"
+    assert metrics.recent(1)[0]["status"] == 502
+
+
 # ------------------------------------------------------------------ VS Code (Cline) shapes
 
 def cline_turn(name="first"):

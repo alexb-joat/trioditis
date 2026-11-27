@@ -43,7 +43,7 @@ A model whose price rises with the prompt size carries a tier. Above `threshold`
 {"claude-haiku": {"input": 0.1, "output": 0.5, "long_context": {"threshold": 100000, "input": 0.5, "output": 2.5}}}
 ```
 
-**A cloud model without a price counts as $0 toward the caps** unless you set `"assume_unpriced_usd": 0.05` (an assumed cost per such call) in `budget.json`; Lunete raises an alert when calls without a price happen, so add every cloud model you use. Streaming answers carry their token usage too: Trioditis asks the provider for it (OpenAI's `stream_options`) and retries once without for a provider that doesn't know the option, or set `stream_usage: false` on that provider. Local models always cost $0.
+**A cloud model without a price counts as $0 toward the caps** unless you set `"assume_unpriced_usd": 0.05` (an assumed cost per such call) in `budget.json`; Lunete raises an alert when calls without a price happen, so add every cloud model you use. Streaming answers carry their token usage too: Trioditis asks the provider for it (OpenAI's `stream_options`) and retries once without for a provider that doesn't know the option, or set `stream_usage: false` on that provider. A priced cloud answer that comes back without usage is charged its estimate (the prompt's size plus `max_tokens`, or `assume_output_tokens`), and its log line says `usage_missing`, so it never counts $0. Local models always cost $0.
 
 **Caps per provider** go in the same file, under the provider names from `config.yaml`, on top of the global ones:
 

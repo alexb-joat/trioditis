@@ -215,7 +215,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 ## Known limits
 
 - The privacy detectors read text: every message's text parts and the arguments of earlier tool calls. They cannot read images, files or audio, so a screenshot or PDF with a card number in it is not caught.
-- Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model.
+- Fallback happens before an answer starts. If a streamed answer breaks halfway, Trioditis does not retry it on another model: it ends the stream with an error event and logs the call as failed.
 - Every routed chat request goes to the provider's OpenAI-style `/chat/completions` address. There are no native Anthropic or Gemini adapters for routing; the Claude Code passthrough only forwards to Anthropic.
 - No prompt caching for Claude models. Trioditis calls Anthropic at its OpenAI-compatible endpoint, and Anthropic's page for it says "Prompt caching is not supported" ([source](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk), read 13 November 2026). For every provider, Trioditis adds no caching settings of its own and records cached tokens only when the provider reports them.
 - On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md)).
