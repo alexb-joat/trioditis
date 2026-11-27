@@ -100,7 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
                            "the router disagreed and what the disagreements cost; reads files only, writes nothing")
     ev.add_argument("--config", default=argparse.SUPPRESS, metavar="FILE",
                     help="the config to grade (default: TRIODITIS_CONFIG or config.yaml; same as the option before the command)")
-    ev.add_argument("--notebook", default=None, metavar="FILE", help="where a threshold proposal goes (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
+    ev.add_argument("--notebook", default=None, metavar="FILE", help="where a threshold proposal goes (default ~/.trioditis/trioditis-notebook.jsonl)")
     ev.add_argument("--dry-run", action="store_true", help="show the proposal that would be recorded, write nothing")
     ev.add_argument("--compare-threshold", type=float, default=None, metavar="VALUE",
                     help="instead of the sweep, score this embeddings.threshold against the config's on every row "
@@ -140,7 +140,7 @@ def build_parser() -> argparse.ArgumentParser:
                                                "with --plan: model-effort (default), model, effort, day, source, "
                                                "person or agent")
     u.add_argument("--session", default=None, help="only this X-Session-Id (matched by its hash)")
-    u.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
+    u.add_argument("--db", default=None, help="metrics database (default ~/.trioditis/metrics.db)")
     u.add_argument("--outcomes", action="store_true",
                    help="rates with 95%% intervals instead of spend: errors, answers cut off at the length "
                         "limit, answers asked again within 2 minutes, prompt tokens served from cache")
@@ -159,29 +159,29 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--claude-home", default=None, help=argparse.SUPPRESS)
     pi.add_argument("--meter", nargs="?", const="", default=None, metavar="FILE",
                     help="plan meter readings (plan-meter.v1 or snapshots); without FILE, plan.meter_file")
-    pi.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
+    pi.add_argument("--db", default=None, help="metrics database (default ~/.trioditis/metrics.db)")
     pi.add_argument("--dry-run", action="store_true", help="show what would be imported, write nothing")
 
-    pr = sub.add_parser("prices", help="manage ~/.hlidskjalv/prices.json")
+    pr = sub.add_parser("prices", help="manage ~/.trioditis/prices.json")
     pr_sub = pr.add_subparsers(dest="prices_cmd", required=True)
     imp = pr_sub.add_parser("import", help="take cloud model prices from a provider-facts file, with their sources")
     imp.add_argument("facts", help="a provider-facts.v1 JSON file (for example Euboulia's src/catalog/provider-facts.json)")
-    imp.add_argument("--prices", default=None, help="prices file to update (default ~/.hlidskjalv/prices.json)")
+    imp.add_argument("--prices", default=None, help="prices file to update (default ~/.trioditis/prices.json)")
     imp.add_argument("--dry-run", action="store_true", help="show the changes, write nothing")
 
     rf = sub.add_parser("refit", help="refit rates, latency and drift charts from the call record, and check the "
                                       "model facts (changes nothing the router uses)")
     rf.add_argument("--days", type=int, default=28, help="window to fit, in days (default 28)")
-    rf.add_argument("--db", default=None, help="metrics database (default ~/.hlidskjalv/metrics.db)")
-    rf.add_argument("--out", default=None, help="fitted file (default ~/.hlidskjalv/trioditis-fitted.json)")
-    rf.add_argument("--notebook", default=None, help="findings log (default ~/.hlidskjalv/trioditis-notebook.jsonl)")
-    rf.add_argument("--prices", default=None, help="prices file to compare (default ~/.hlidskjalv/prices.json)")
+    rf.add_argument("--db", default=None, help="metrics database (default ~/.trioditis/metrics.db)")
+    rf.add_argument("--out", default=None, help="fitted file (default ~/.trioditis/trioditis-fitted.json)")
+    rf.add_argument("--notebook", default=None, help="findings log (default ~/.trioditis/trioditis-notebook.jsonl)")
+    rf.add_argument("--prices", default=None, help="prices file to compare (default ~/.trioditis/prices.json)")
     rf.add_argument("--json", action="store_true", help="print the fitted document")
     rf.add_argument("--dry-run", action="store_true", help="show the result, write nothing")
 
     rn = sub.add_parser("reinforce", help="the reinforcement loop: gate a routing change on your labelled prompts, "
                                           "or take an adopted one back (off unless the config has `reinforce:`)",
-                        description="Routing values the loop adopts live in ~/.hlidskjalv/trioditis-adopted.json, never "
+                        description="Routing values the loop adopts live in ~/.trioditis/trioditis-adopted.json, never "
                                     "in config.yaml, and only two can move: embeddings.threshold (inside 0.35 to 0.55, "
                                     "0.05 a step) and whether the route picker's route is served. A change has to pass "
                                     "the gate: right on more rows of your labelled gate set (config reinforce.labels) "
@@ -520,7 +520,8 @@ def usage_report(args) -> int:
                   f"{total['cost']:.4f}", total["unpriced"]))
     _print_table(table)
     if total["unpriced"]:
-        print(f"{total['unpriced']} cloud call(s) had no price: add them to ~/.hlidskjalv/prices.json")
+        from trioditis_metrics.prices import DEFAULT_PRICES_PATH
+        print(f"{total['unpriced']} cloud call(s) had no price: add them to {DEFAULT_PRICES_PATH}")
     return 0
 
 

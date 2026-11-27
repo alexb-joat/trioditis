@@ -7,7 +7,7 @@ It starts scripts/fake_ollama.py on a free port (127.0.0.1 only) as a child it s
 `PATH -m trioditis results --no-share --model tiny:1b --base-url ... --out ... --answers ...` over real sockets,
 then checks the file with `scripts/collect_results.py check`, the way a shared submission is checked, and the
 answers file for the shape the comparison reads. The child runs in an
-isolated environment: its own HLIDSKJALV_HOME and TRIODITIS_ENV_FILE inside a temporary folder, and proxy
+isolated environment: its own TRIODITIS_HOME and TRIODITIS_ENV_FILE inside a temporary folder, and proxy
 variables pointing at a dead address to show that the run ignores them. Your environment is not passed on.
 
 The stand-in's numbers measure nothing; this checks that the program runs and its file passes the collector,
@@ -56,7 +56,7 @@ def free_port() -> int:
 def child_env(home: Path) -> dict[str, str]:
     """A small environment built from nothing: the run's own variables, not the caller's."""
     env = {k: os.environ[k] for k in KEEP if k in os.environ}
-    env.update({"HLIDSKJALV_HOME": str(home / "hlidskjalv"), "TRIODITIS_ENV_FILE": str(home / "no-such.env"),
+    env.update({"TRIODITIS_HOME": str(home / "trioditis"), "TRIODITIS_ENV_FILE": str(home / "no-such.env"),
                 "HOME": str(home), "USERPROFILE": str(home), "APPDATA": str(home), "LOCALAPPDATA": str(home),
                 "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"})
     for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):

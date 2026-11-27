@@ -88,8 +88,8 @@ def hand_csv(tmp_path):
 
 @pytest.fixture(autouse=True)
 def _home(tmp_path, monkeypatch):
-    """The notebook lives under HLIDSKJALV_HOME: keep it in tmp_path so no test touches the real one."""
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "home"))
+    """The notebook lives under TRIODITIS_HOME: keep it in tmp_path so no test touches the real one."""
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("TRIODITIS_ENV_FILE", str(tmp_path / "no.env"))  # main() would load the repo's .env into os.environ
 
 

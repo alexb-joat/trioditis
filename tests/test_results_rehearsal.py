@@ -205,7 +205,7 @@ def test_the_child_gets_a_small_environment_and_dead_proxies(monkeypatch, tmp_pa
     monkeypatch.setenv("ZQX_SECRET_MARKER", "do-not-pass-on")
     env = rehearse_results.child_env(tmp_path)
     assert "ZQX_SECRET_MARKER" not in env and "do-not-pass-on" not in env.values()
-    assert Path(env["HLIDSKJALV_HOME"]).is_relative_to(tmp_path) and Path(env["TRIODITIS_ENV_FILE"]).is_relative_to(tmp_path)
+    assert Path(env["TRIODITIS_HOME"]).is_relative_to(tmp_path) and Path(env["TRIODITIS_ENV_FILE"]).is_relative_to(tmp_path)
     proxies = {env[k] for k in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")}
     assert proxies == {rehearse_results.DEAD_PROXY} and "NO_PROXY" not in env
 

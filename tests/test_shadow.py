@@ -28,7 +28,7 @@ TOOLS = [{"name": "Bash", "input_schema": {"type": "object"}}, {"name": "Edit", 
 
 @pytest.fixture
 def home(tmp_path, monkeypatch):
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "hl"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "hl"))
     monkeypatch.delenv("TRIODITIS_GATE_UPSTREAM", raising=False)
     return tmp_path
 

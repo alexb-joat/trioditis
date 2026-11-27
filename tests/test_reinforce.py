@@ -1,5 +1,5 @@
 """The reinforcement loop's first half: the adopted-values file and its layers, the labelled gate,
-`reinforce run --dry-run` and `reinforce revert`. No test here reaches a real server or ~/.hlidskjalv."""
+`reinforce run --dry-run` and `reinforce revert`. No test here reaches a real server or the real data folder."""
 import argparse
 import dataclasses
 import json
@@ -26,7 +26,7 @@ def anyio_backend():
 
 @pytest.fixture(autouse=True)
 def home(monkeypatch, tmp_path):
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "home"))
     return tmp_path / "home"
 
 

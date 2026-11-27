@@ -6,7 +6,7 @@ import tempfile
 
 # Before anything imports trioditis: its default files (metrics database, prices, budget) are
 # resolved at import time, and a test that forgets to pass its own would write to the developer's.
-os.environ["HLIDSKJALV_HOME"] = tempfile.mkdtemp(prefix="trioditis-test-home-")
+os.environ["TRIODITIS_HOME"] = tempfile.mkdtemp(prefix="trioditis-test-home-")
 
 import httpx  # noqa: E402
 import pytest  # noqa: E402

@@ -7,6 +7,10 @@
 - `docs/configuration.md` documents every `config.yaml` key with its default and label.
 - SECURITY.md has a table of supported versions (0.9.x).
 - A contract test reads these lists from the code: an undocumented flag, key, variable, endpoint, header, column or log field fails the test suite, and so does a documented one that is gone.
+- `TRIODITIS_HOME` names the data folder, default `~/.trioditis`. An install that has `~/.hlidskjalv` and no `~/.trioditis` keeps using `~/.hlidskjalv` for now, so nothing moves yet.
+
+**Deprecated**
+- `HLIDSKJALV_HOME`: still read when `TRIODITIS_HOME` is unset, with a one-line warning. Rename it to `TRIODITIS_HOME` (same value).
 
 ## 0.9.0 (2026-11-27)
 

@@ -12,7 +12,7 @@ This page lists everything you can build on: commands and flags, environment var
 
 **Deprecation.** A stable item is removed only in a major release. Before that it is deprecated: it keeps working, prints or logs a one-line warning that names its replacement, and the CHANGELOG says so, for at least one minor release.
 
-**Before 1.0.** Releases until 1.0.0 are 0.9.x patches. They follow the same rule: an old name or path keeps working with a deprecation warning, so a 0.9.x upgrade never breaks a setup that worked. The data folder is the one planned change: it moves from `~/.hlidskjalv` to `~/.trioditis`, with the old path still read.
+**Before 1.0.** Releases until 1.0.0 are 0.9.x patches. They follow the same rule: an old name or path keeps working with a deprecation warning, so a 0.9.x upgrade never breaks a setup that worked. The data folder is the one planned change: it moves from `~/.hlidskjalv` to `~/.trioditis` (variable `TRIODITIS_HOME`), with the old path and the old `HLIDSKJALV_HOME` still read.
 
 **Python and systems.** Trioditis needs Python 3.11 or newer. CI runs the full test suite on Python 3.11, 3.12 and 3.13 on Ubuntu, macOS, Windows Server 2022 and Windows Server 2025. The Docker image uses Python 3.12. Other versions and systems may work but are not tested.
 
@@ -101,7 +101,8 @@ This page lists everything you can build on: commands and flags, environment var
 | `TRIODITIS_HOST` | stable | default for `serve --host` |
 | `TRIODITIS_PORT` | stable | default for `serve --port` |
 | `TRIODITIS_GATE_UPSTREAM` | internal | where the Claude Code passthrough sends calls (default `https://api.anthropic.com`; https only); for tests |
-| `HLIDSKJALV_HOME` | experimental | the data folder (default `~/.hlidskjalv`). Being replaced before 1.0 by `TRIODITIS_HOME` and `~/.trioditis`; this old name will still be read, with a warning, and may be removed in a 1.x minor release |
+| `TRIODITIS_HOME` | stable | the data folder (default `~/.trioditis`; see "Files") |
+| `HLIDSKJALV_HOME` | experimental | the old name of `TRIODITIS_HOME`, read only when that is unset, with a one-line warning; may be removed in a 1.x minor release |
 | `CLAUDE_CONFIG_DIR` | experimental | Claude Code's own setting; `plan import --claude-code` reads transcripts there (default `~/.claude`) |
 
 Provider keys live in variables you name yourself (`api_key_env`, `admin_key_env` in the config). Cloud calls follow `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`; calls to `local: true` providers never use a proxy.
@@ -166,7 +167,7 @@ An error the provider itself returned (a 400, say) is passed through with its ow
 
 ## Files
 
-The data folder is `$HLIDSKJALV_HOME`, default `~/.hlidskjalv`. Log files sit where `logging.path` points (default `logs/` under the folder `serve` runs in). On Linux and macOS, `metrics.db` and the log files are readable by your user only (mode 600).
+The data folder is `$TRIODITIS_HOME`, default `~/.trioditis`. An install from before 0.9.1 that has `~/.hlidskjalv` and no `~/.trioditis` keeps using `~/.hlidskjalv`. Log files sit where `logging.path` points (default `logs/` under the folder `serve` runs in). On Linux and macOS, `metrics.db` and the log files are readable by your user only (mode 600).
 
 | Item | Label | Notes |
 |---|---|---|

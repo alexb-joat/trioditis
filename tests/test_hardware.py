@@ -28,7 +28,7 @@ def inst(name, gb, prov="local"):
 
 @pytest.fixture(autouse=True)
 def _private_home(tmp_path, monkeypatch):
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path))  # never read the real ~/.hlidskjalv
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path))  # never read the real data folder
 
 
 # ------------------------------------------------------------------ budget rule
@@ -314,7 +314,7 @@ def test_hardware_endpoint_requires_auth(monkeypatch):
     assert c.get("/v1/hardware").status_code == 401
 
 
-def test_hardware_report_is_published_for_hlidskjalv(tmp_path, monkeypatch):
+def test_hardware_report_is_published_for_dashboards(tmp_path, monkeypatch):
     """At startup the router writes the same report as /v1/hardware to a file (0600)."""
     import json as _json
     import os as _os

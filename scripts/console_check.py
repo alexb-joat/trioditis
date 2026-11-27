@@ -158,7 +158,7 @@ def start_router(work: Path, stub_port: int, cert: Path) -> tuple[subprocess.Pop
     cfg.write_text(CONFIG % (work / "logs" / "decisions.jsonl").as_posix())
     port = free_port()
     env = {**os.environ, "TRIODITIS_GATE_UPSTREAM": f"https://127.0.0.1:{stub_port}", "SSL_CERT_FILE": str(cert),
-           "HLIDSKJALV_HOME": str(work / "home"),
+           "TRIODITIS_HOME": str(work / "home"),
            "PYTHONPATH": os.pathsep.join(filter(None, [str(ROOT), os.environ.get("PYTHONPATH")]))}
     env.pop("TRIODITIS_API_KEY", None)  # and cwd=work below: the repo's .env (a router key) is not read
     log = open(work / "router.log", "w")

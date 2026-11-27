@@ -42,7 +42,7 @@ def main() -> None:
     cfg.write_text(CONFIG, encoding="utf-8")
     repo = Path(__file__).resolve().parent.parent
     env = {**os.environ, "TRIODITIS_API_KEY": "", "TRIODITIS_ENV_FILE": str(tmp / "none"),
-           "HLIDSKJALV_HOME": str(tmp / "home"),  # never touch the real data folder
+           "TRIODITIS_HOME": str(tmp / "home"),  # never touch the real data folder
            "PYTHONPATH": str(repo)}
 
     # 1. Refuses to listen beyond localhost without a key.

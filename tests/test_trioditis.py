@@ -180,7 +180,7 @@ def test_bind_guard(monkeypatch):
 # ------------------------------------------------------------------ HTTP
 
 def make_client(handler, config=None, metrics=None, caps=None, prices=None, accounts_file=None):
-    # Always a throwaway DB, explicit caps and prices: tests must never touch ~/.hlidskjalv.
+    # Always a throwaway DB, explicit caps and prices: tests must never touch the real data folder.
     transport = httpx.MockTransport(handler)
     tmp = Path(tempfile.mkdtemp())
     metrics = metrics or MetricsDB(tmp / "metrics.db")
@@ -517,13 +517,48 @@ def test_old_names_are_ignored_since_0_5(monkeypatch, tmp_path):
     assert env("CONFIG") is None
     monkeypatch.setenv("TRIODITIS_CONFIG", "new.yaml")
     assert env("CONFIG") == "new.yaml"
+    monkeypatch.delenv("TRIODITIS_HOME", raising=False)
     monkeypatch.delenv("HLIDSKJALV_HOME", raising=False)
     monkeypatch.setenv("ARCADE_HOME", str(tmp_path / "old"))
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     (tmp_path / ".arcade").mkdir()
-    assert data_home() == tmp_path / ".hlidskjalv"  # neither $ARCADE_HOME nor ~/.arcade is read
+    assert data_home() == tmp_path / ".trioditis"  # neither $ARCADE_HOME nor ~/.arcade is read
+
+
+def _fresh_home(monkeypatch, tmp_path):
+    from trioditis_metrics import home
+    monkeypatch.delenv("TRIODITIS_HOME", raising=False)
+    monkeypatch.delenv("HLIDSKJALV_HOME", raising=False)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(home, "_warned", False)
+    return home
+
+
+def test_data_home_is_trioditis_home_first(monkeypatch, tmp_path, capsys):
+    home = _fresh_home(monkeypatch, tmp_path)
+    assert home.data_home() == tmp_path / ".trioditis"  # nothing set, nothing on disk
+    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "old"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "new"))
+    assert home.data_home() == tmp_path / "new"
+    assert capsys.readouterr().err == ""  # the old name is not read, so no warning
+
+
+def test_old_home_variable_still_works_with_one_warning(monkeypatch, tmp_path, capsys):
+    home = _fresh_home(monkeypatch, tmp_path)
     monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "custom"))
-    assert data_home() == tmp_path / "custom"
+    assert home.data_home() == tmp_path / "custom"
+    assert home.data_home() == tmp_path / "custom"
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "HLIDSKJALV_HOME is deprecated" in err and "TRIODITIS_HOME" in err
+
+
+def test_an_old_install_keeps_its_folder_until_a_new_one_exists(monkeypatch, tmp_path, capsys):
+    home = _fresh_home(monkeypatch, tmp_path)
+    (tmp_path / ".hlidskjalv").mkdir()
+    assert home.data_home() == tmp_path / ".hlidskjalv"  # an upgrade never starts from an empty folder
+    (tmp_path / ".trioditis").mkdir()
+    assert home.data_home() == tmp_path / ".trioditis"
+    assert capsys.readouterr().err == ""
 
 
 # ------------------------------------------------------------------ rate limits, per-provider caps, accounts
@@ -838,7 +873,7 @@ def test_cline_tools_skip_models_that_cannot_call_them():
 
 def test_truncated_prompt_is_flagged_from_reported_usage(tmp_path):
     """Ollama cuts a prompt past its context window without saying so; the only trace is a prompt_tokens
-    count far below what was sent. The decision log marks that, with a reason Hlidskjalv can show."""
+    count far below what was sent. The decision log marks that, with a reason Lunete can show."""
     reported = [120, 1300, 3]
 
     def handler(req):

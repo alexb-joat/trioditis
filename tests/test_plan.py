@@ -46,7 +46,7 @@ def write_transcripts(home):
 
 @pytest.fixture
 def env(tmp_path, monkeypatch):
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "hl"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "hl"))
     home = tmp_path / "claude"
     proj = write_transcripts(home)
     db = tmp_path / "metrics.db"

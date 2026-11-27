@@ -216,7 +216,7 @@ def config_on_disk(tmp_path, **over):
 
 @pytest.fixture
 def _home(tmp_path, monkeypatch):
-    monkeypatch.setenv("HLIDSKJALV_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("TRIODITIS_ENV_FILE", str(tmp_path / "no.env"))
 
 
