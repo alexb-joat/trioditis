@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (2026-11-27)
+
+Fixes from a readiness check before Trioditis is announced: sensitive text in tool calls stays local, a refused cloud key falls back to the next model, broken streams and malformed requests get clear errors.
 
 **Fixed**
 - The privacy detectors now also read the arguments of earlier tool and function calls, and text parts of any type. Before, a card number that appeared only in an agent's earlier tool call could reach a cloud model. Images, files and audio are still not read; the README's Known limits says so.
