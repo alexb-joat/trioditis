@@ -15,9 +15,28 @@ dependencies = [
   "httpx",
   "pyyaml",
 ]
+# Python versions: exactly CI's matrix (tests/test_workflows.py checks). "5 - Production/Stable" only in 1.0.0.
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Framework :: FastAPI",
+  "Intended Audience :: Developers",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: Proxy Servers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 
 [project.urls]
 Homepage = "https://github.com/alexb-joat/trioditis"
+Documentation = "https://github.com/alexb-joat/trioditis/tree/main/docs"
+Changelog = "https://github.com/alexb-joat/trioditis/blob/main/CHANGELOG.md"
 Issues = "https://github.com/alexb-joat/trioditis/issues"
 Security = "https://github.com/alexb-joat/trioditis/security/policy"
 

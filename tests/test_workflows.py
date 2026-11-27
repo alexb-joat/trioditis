@@ -274,3 +274,20 @@ def test_an_image_without_a_digest_fails_in_services_and_container():
     wf = edited("ci.yml")
     jobs(wf)["test"]["container"] = {"image": "ubuntu:22.04@sha256:" + "0" * 64}
     assert unpinned_images(wf) == []
+
+
+def test_pypi_classifiers_name_exactly_the_python_versions_and_systems_ci_tests():
+    import tomllib
+
+    from trioditis import __version__
+    meta = tomllib.loads((WORKFLOWS.parent.parent / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    classifiers = meta["classifiers"]
+    matrix = load(WORKFLOWS / "ci.yml")["jobs"]["test"]["strategy"]["matrix"]
+    claimed = {c.rsplit(" :: ", 1)[1] for c in classifiers if re.fullmatch(r"Programming Language :: Python :: 3\.\d+", c)}
+    assert claimed == set(matrix["python"])
+    systems = {"ubuntu": "Operating System :: POSIX :: Linux", "macos": "Operating System :: MacOS",
+               "windows": "Operating System :: Microsoft :: Windows"}
+    assert {c for c in classifiers if c.startswith("Operating System")} == \
+        {systems[os.split("-")[0]] for os in matrix["os"]}
+    stable = "Development Status :: 5 - Production/Stable" in classifiers
+    assert stable == (not __version__.startswith("0.")), "Production/Stable comes with 1.0.0, and only then"
