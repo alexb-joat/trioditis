@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.8.1 (2026-11-27)
+
+Trioditis itself is unchanged apart from the version number. PyPI shows the README as it was at the latest release, so this release brings the new first screen there.
 
 **Docs**
 - The README's first screen says who Trioditis is for, shows real `trioditis explain` output for a coding question and for a prompt with a card number, and points at `trioditis results`. A test checks that every line of that output is what `explain` prints.
 - "Why Trioditis" is a list instead of a four-column table, so it reads on a phone, and says about 8,600 lines of Python (8,562 counted; it said 8,200).
+- `docs/community-results.csv` has its first row, from a result shared through the form (issue #22).
 
 ## 0.8.0 (2026-11-27)
 
