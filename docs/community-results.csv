@@ -1,1 +1,2 @@
 issue,date,trioditis,picker,picker_digest_12,server,server_version,embeddings,os,arch,cpu,cores,ram_gb,gpus,n,picker_right,picker_low95,picker_high95,router,router_right,keywords_right,only_picker,only_router,sign_test_p,picker_no_route,picker_failed,picker_median_s,timing_median_s_500,timing_median_s_2000,own_labels_n
+22,2026-11-27,0.8.0,qwen2.5-coder:7b,dae161e27b0e,ollama,0.40.0,nomic-embed-text,Linux,x86_64,AMD Ryzen 7 7735HS with Radeon Graphics,16,16.0,Radeon 680M/660M (Rembrandt),315,231,0.6819,0.7791,router,205,116,74,48,0.0232164,0,0,1.05,3.2,11.81,
