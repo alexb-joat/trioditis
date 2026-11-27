@@ -7,7 +7,7 @@ This page lists everything you can build on: commands and flags, environment var
 ## The labels
 
 - **stable**: from 1.0.0, it keeps its name and meaning for every 1.x release. New optional flags, keys, fields and columns may be added; nothing stable is renamed, removed or made to mean something else before 2.0.
-- **experimental**: it works and is tested, but its shape may still change in a minor release (1.1, 1.2 and so on). Every change is in the [CHANGELOG](../CHANGELOG.md). Today this covers `reinforce`, `refit`, `plan`, `prices`, the notebook and the route picker's shadow log.
+- **experimental**: it works and is tested, but its shape may still change in a minor release (1.1, 1.2 and so on). Every change is in the [CHANGELOG](../CHANGELOG.md). Today this covers `reinforce`, `refit`, `plan`, `prices`, the notebook, the route picker's shadow log, the rate-limit table and the hardware and account files.
 - **internal**: there for the program or its tests. It may change in any release; don't depend on it.
 
 **Deprecation.** A stable item is removed only in a major release. Before that it is deprecated: it keeps working, prints or logs a one-line warning that names its replacement, and the CHANGELOG says so, for at least one minor release.
@@ -101,7 +101,7 @@ This page lists everything you can build on: commands and flags, environment var
 | `TRIODITIS_HOST` | stable | default for `serve --host` |
 | `TRIODITIS_PORT` | stable | default for `serve --port` |
 | `TRIODITIS_GATE_UPSTREAM` | internal | where the Claude Code passthrough sends calls (default `https://api.anthropic.com`; https only); for tests |
-| `HLIDSKJALV_HOME` | stable | the data folder (default `~/.hlidskjalv`). Planned before 1.0: `TRIODITIS_HOME` and `~/.trioditis`, with this name still read and a warning |
+| `HLIDSKJALV_HOME` | experimental | the data folder (default `~/.hlidskjalv`). Being replaced before 1.0 by `TRIODITIS_HOME` and `~/.trioditis`; this old name will still be read, with a warning, and may be removed in a 1.x minor release |
 | `CLAUDE_CONFIG_DIR` | experimental | Claude Code's own setting; `plan import --claude-code` reads transcripts there (default `~/.claude`) |
 
 Provider keys live in variables you name yourself (`api_key_env`, `admin_key_env` in the config). Cloud calls follow `HTTPS_PROXY`, `HTTP_PROXY` and `NO_PROXY`; calls to `local: true` providers never use a proxy.
@@ -180,8 +180,8 @@ The data folder is `$HLIDSKJALV_HOME`, default `~/.hlidskjalv`. Log files sit wh
 | `trioditis-fitted.json` | experimental | written by `refit` |
 | `trioditis-notebook.jsonl` | experimental | findings and proposals from `refit` and `eval-routes` |
 | `trioditis-adopted.json` | experimental | routing values the reinforcement loop adopted |
-| `hardware.json` | internal | cache for `/v1/hardware` |
-| `accounts.json` | internal | cache for `/v1/accounts` |
+| `hardware.json` | experimental | what `/v1/hardware` last found; dashboards such as Lunete read it |
+| `accounts.json` | experimental | what `/v1/accounts` last found; dashboards such as Lunete read it |
 | `plan-salt` | internal | the salt for plan-usage hashes |
 
 ## Metrics database
@@ -210,12 +210,12 @@ The data folder is `$HLIDSKJALV_HOME`, default `~/.hlidskjalv`. Log files sit wh
 | `calls.session_fp` | stable | a hash of the session id, never the id |
 | `calls.prompt_fp` | stable | a hash of the conversation text, never the text |
 | `calls.client` | stable | the calling tool's name |
-| `provider_limits.provider` | internal | rate-limit headers last seen |
-| `provider_limits.name` | internal | |
-| `provider_limits.lim` | internal | |
-| `provider_limits.remaining` | internal | |
-| `provider_limits.reset_at` | internal | |
-| `provider_limits.seen` | internal | |
+| `provider_limits.provider` | experimental | rate-limit headers last seen; dashboards such as Lunete read them |
+| `provider_limits.name` | experimental | |
+| `provider_limits.lim` | experimental | |
+| `provider_limits.remaining` | experimental | |
+| `provider_limits.reset_at` | experimental | |
+| `provider_limits.seen` | experimental | |
 | `plan_usage.id` | experimental | plan usage, filled by `trioditis plan import` |
 | `plan_usage.at` | experimental | |
 | `plan_usage.service` | experimental | |
