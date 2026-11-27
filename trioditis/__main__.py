@@ -254,6 +254,10 @@ def main(argv: list[str] | None = None) -> None:
         for note in notes:
             print(textwrap.fill(note, width=98, initial_indent="  ", subsequent_indent="    ",
                                 break_long_words=False, break_on_hyphens=False))
+        from .localcheck import local_scope_lines
+        for line in local_scope_lines(cfg):  # [] unless a local: true provider has a public address
+            print(textwrap.fill(f"warning: {line}", width=98, subsequent_indent="    ", break_long_words=False,
+                                break_on_hyphens=False))
         print(f"{confirmed} of {len(cfg.models)} models confirmed ready; cloud providers are never contacted")
         from .localcheck import embeddings_lines
         for line in embeddings_lines(cfg):

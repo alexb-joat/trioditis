@@ -6,11 +6,14 @@ Ollama, llama.cpp, LM Studio and vLLM all serve). Cloud providers are never cont
 """
 from __future__ import annotations
 
+import ipaddress
+import socket
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 import httpx
 
-from .config import Config, Provider
+from .config import LOCAL_HOSTS, Config, Provider
 
 TIMEOUT_S = 2.0
 CONNECT_ERRORS = ("ConnectError", "ConnectTimeout")  # httpx exception names: "nothing is listening"
@@ -92,6 +95,35 @@ def local_states(cfg: Config, transport: httpx.BaseTransport | None = None) -> t
         else:
             states[name] = "server answers; model not checked"
     return states, notes
+
+
+def _public_addresses(host: str, resolve) -> list[str]:
+    """The public (globally routable) addresses a host name or IP literal stands for; [] when it doesn't resolve."""
+    try:
+        addrs = [str(ipaddress.ip_address(host))]
+    except ValueError:
+        try:
+            addrs = sorted({info[4][0] for info in resolve(host, None)})
+        except (OSError, UnicodeError):
+            return []  # nothing can reach it, and the probe line already says it did not answer
+    return [a for a in addrs if ipaddress.ip_address(a.split("%")[0]).is_global]
+
+
+def local_scope_lines(cfg: Config, resolve=socket.getaddrinfo) -> list[str]:
+    """A warning for each `local: true` provider whose address is public. Sensitive prompts may go to a
+    local provider, so the flag must be true; private ranges (10/8, 192.168/16, Tailscale's 100.64/10) count
+    as your network. Only the name is resolved: nothing is sent to the provider here."""
+    out = []
+    for p in cfg.providers.values():
+        host = urlparse(p.base_url).hostname or ""
+        if not p.local or host in LOCAL_HOSTS:
+            continue
+        public = _public_addresses(host, resolve)
+        if public:
+            out.append(f"{p.name} is marked local: true, but {host} is a public address ({', '.join(public[:3])}): "
+                       f"sensitive prompts may go there. Keep local: true only if that machine is yours; "
+                       f"otherwise remove it.")
+    return out
 
 
 KEYWORDS_ONLY = ("routes use keywords and patterns alone, which chose the labelled route for 116 of 315 "

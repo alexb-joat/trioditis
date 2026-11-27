@@ -253,3 +253,25 @@ def test_check_says_when_embeddings_are_off(tmp_path, capsys, monkeypatch):
     _fake_network(monkeypatch, lambda r: httpx.Response(200, json={"data": [{"id": "llama3.2:3b"}]}))
     out = " ".join(_run_check(tmp_path, capsys).split())
     assert "embeddings: off; routes use keywords and patterns alone" in out
+
+
+def test_check_warns_when_a_local_provider_has_a_public_address():
+    from trioditis.localcheck import local_scope_lines
+    names = {"gpu.example.com": "93.184.216.34", "box.lan": "192.168.1.20", "pc.tail1234.ts.net": "100.101.102.103"}
+    asked = []
+
+    def resolve(host, port):
+        asked.append(host)
+        if host not in names:
+            raise OSError("no such name")
+        return [(2, 1, 6, "", (names[host], 0))]
+
+    providers = {name: {"base_url": url, "local": True} for name, url in {
+        "local": "http://localhost:11434/v1", "lan": "https://box.lan/v1", "tail": "https://pc.tail1234.ts.net/v1",
+        "rented": "https://gpu.example.com/v1", "literal": "https://8.8.8.8/v1", "private": "https://10.0.0.5/v1",
+        "gone": "https://nowhere.invalid/v1"}.items()}
+    providers["cloud"] = {"base_url": "https://api.example.com/v1", "api_key_env": "CLOUD_KEY"}  # not local: not asked
+    lines = local_scope_lines(cfg(providers=providers), resolve=resolve)
+    assert [ln.split(" is marked")[0] for ln in lines] == ["rented", "literal"]
+    assert "gpu.example.com is a public address (93.184.216.34)" in lines[0]
+    assert "api.example.com" not in asked and "localhost" not in asked  # cloud and known local names: no lookup

@@ -27,7 +27,7 @@ The file is read with a safe YAML loader. Keys are case-sensitive. `<name>` stan
 |---|---|---|---|
 | `providers.<name>.base_url` | stable | required | the OpenAI-style API root, such as `http://localhost:11434/v1`. `https` is required except for `localhost`, `127.0.0.1`, `::1` and `host.docker.internal`; a user or password in the URL is refused |
 | `providers.<name>.api_key_env` | stable | none | the name of the environment variable that holds the key. A provider that names one whose variable is empty is skipped. A literal `api_key` key is refused: keys never go in this file |
-| `providers.<name>.local` | stable | `false` | `true` means prompts sent here stay on your machine or network: sensitive prompts may go here, and no proxy is used |
+| `providers.<name>.local` | stable | `false` | `true` means prompts sent here stay on your machine or network: sensitive prompts may go here, and no proxy is used. `trioditis check` warns when the host is a public address (private ranges such as `10.0.0.0/8`, `192.168.0.0/16` and Tailscale's `100.64.0.0/10` count as your network) |
 | `providers.<name>.stream_usage` | stable | `true` | asks for the token usage at the end of a stream (`stream_options`); set `false` for a provider that rejects it (Trioditis also retries once without it when a 400 names it) |
 | `providers.<name>.admin_key_env` | experimental | none | an environment variable with an admin key, used only to read this provider's account spend for `/v1/accounts`; never sent with requests. A literal `admin_key` is refused |
 
