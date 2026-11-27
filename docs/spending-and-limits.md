@@ -8,11 +8,11 @@ How Trioditis keeps cloud spend bounded, what it records, and what each provider
 
 ## Spending caps and call history
 
-Every request is also stored in a small SQLite database, `~/.hlidskjalv/metrics.db` (owner-only, metadata only: route, model, tokens, cost, latency, the calling tool's name and a hash of the session id; never prompt text). `logs/decisions.jsonl` stays as it is.
+Every request is also stored in a small SQLite database, `~/.trioditis/metrics.db` (owner-only, metadata only: route, model, tokens, cost, latency, the calling tool's name and a hash of the session id; never prompt text). `logs/decisions.jsonl` stays as it is.
 
-The data folder is `~/.hlidskjalv` on every system. It keeps that name, the earlier name of [Lunete](https://github.com/alexb-joat/lunete), because renaming it would cut existing installs off from their data. Set `HLIDSKJALV_HOME` to put it somewhere else.
+The data folder is `~/.trioditis` on every system; set `TRIODITIS_HOME` to put it somewhere else. Versions up to 0.9.0 kept these files in `~/.hlidskjalv`, a folder shared with the dashboard now called [Lunete](https://github.com/alexb-joat/lunete): [Upgrading from 0.9.0 or earlier](deployment.md#upgrading-from-090-or-earlier) says how they move.
 
-Before any cloud call, Trioditis checks today's and this month's spend against your caps in `~/.hlidskjalv/budget.json` (defaults if the file is missing: $1/day, $15/month):
+Before any cloud call, Trioditis checks today's and this month's spend against your caps in `~/.trioditis/budget.json` (defaults if the file is missing: $1/day, $15/month):
 
 ```json
 {"daily_usd": 1.0, "monthly_usd": 15.0}
@@ -24,7 +24,7 @@ Before any cloud call, Trioditis checks today's and this month's spend against y
 
 Over a cap, cloud models are skipped and the route's local model answers instead, the same way it would if the cloud model were down. The skip is logged in `failed_attempts`, so [Lunete](https://github.com/alexb-joat/lunete) shows it. A route with no local model returns `429 budget_exceeded` instead of a bill. Edits to the file apply on the next request, no restart needed.
 
-Spend is calculated from `~/.hlidskjalv/prices.json`, the same file Lunete reads (USD per million tokens, keyed by model name in `config.yaml`):
+Spend is calculated from `~/.trioditis/prices.json`, the same file Lunete reads (USD per million tokens, keyed by model name in `config.yaml`):
 
 ```json
 {"claude-sonnet": {"input": 3.0, "output": 15.0}}
@@ -104,7 +104,7 @@ trioditis usage --plan --since 7d               # messages and tokens per model 
 
 Without arguments, `plan import` imports what the config's `plan:` section names (`claude_code: true`, `meter_file: PATH`, `person: LABEL`); the Linux daily timer runs it that way before `refit`. Every import can run again: rows are keyed by id, a repeat adds nothing, and a message seen half-written is completed with its final counts. Unchanged transcripts are skipped.
 
-**What is kept, and what never is.** From Claude Code's transcripts (`~/.claude/projects`, or `$CLAUDE_CONFIG_DIR`): each assistant message's token counts (uncached in, cache read, cache write, out), model, effort, speed, whether a subagent sent it, its time, its position and context size in its conversation, and salted hashes of the message and session ids. Message content, folder names, paths, branches, titles and URLs are never written. The salt is a random secret in `~/.hlidskjalv/plan-salt` (owner-only), made on the first import. Claude Code deletes old transcripts after a while, so the daily import is what keeps the history. Effort uses the API names: `low`, `medium`, `high`, `xhigh`, `max`.
+**What is kept, and what never is.** From Claude Code's transcripts (`~/.claude/projects`, or `$CLAUDE_CONFIG_DIR`): each assistant message's token counts (uncached in, cache read, cache write, out), model, effort, speed, whether a subagent sent it, its time, its position and context size in its conversation, and salted hashes of the message and session ids. Message content, folder names, paths, branches, titles and URLs are never written. The salt is a random secret in `~/.trioditis/plan-salt` (owner-only), made on the first import. Claude Code deletes old transcripts after a while, so the daily import is what keeps the history. Effort uses the API names: `low`, `medium`, `high`, `xhigh`, `max`.
 
 **`plan-usage.v1`**, one event per message sent, never any text:
 
@@ -137,7 +137,7 @@ python scripts/effort_trial.py blind --out ~/trial --prompts prompts.json
 
 ## What providers report about your account
 
-There is no universal API for balances and limits, so Trioditis collects what each one offers and writes it to `~/.hlidskjalv/accounts.json` every 5 minutes (also `GET /v1/accounts`), for Lunete to show:
+There is no universal API for balances and limits, so Trioditis collects what each one offers and writes it to `~/.trioditis/accounts.json` every 5 minutes (also `GET /v1/accounts`), for Lunete to show:
 
 | Provider (by host) | What you get | What it needs |
 |---|---|---|

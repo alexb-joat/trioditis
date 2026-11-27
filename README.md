@@ -237,7 +237,7 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 ## Documentation
 
 - [VS Code with Cline](https://github.com/alexb-joat/trioditis/blob/main/docs/vscode-cline.md) · [Spending caps and provider limits](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md) · [Hardware suggestions](https://github.com/alexb-joat/trioditis/blob/main/docs/hardware.md)
-- [Background service and Docker](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md) · [Security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md) · [`config.example.yaml`](https://github.com/alexb-joat/trioditis/blob/main/config.example.yaml) (providers, models, routes, privacy, limits, logging)
+- [Background service and Docker](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md) ([upgrading from 0.9.0 or earlier](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md#upgrading-from-090-or-earlier)) · [Security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md) · [`config.example.yaml`](https://github.com/alexb-joat/trioditis/blob/main/config.example.yaml) (providers, models, routes, privacy, limits, logging)
 - [Configuration reference](https://github.com/alexb-joat/trioditis/blob/main/docs/configuration.md) (every key, its default and label) · [Compatibility](https://github.com/alexb-joat/trioditis/blob/main/docs/compatibility.md) (commands, environment variables, HTTP API and files: what stays stable)
 
 **See every decision live:** [Lunete](https://github.com/alexb-joat/lunete) reads the decision log (route, model, tokens, never prompts) and shows it next to your files, commands and Git history.

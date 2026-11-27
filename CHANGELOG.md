@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+**Upgrading from 0.9.0 or earlier:** Trioditis's files move from `~/.hlidskjalv` to `~/.trioditis` the first time `serve` starts (or with `trioditis migrate`), and a link stays at each old path; rename `HLIDSKJALV_HOME` to `TRIODITIS_HOME`. Steps, Docker and Windows: [docs/deployment.md](docs/deployment.md#upgrading-from-090-or-earlier).
+
 **Added**
 - `docs/compatibility.md` lists every command and flag, environment variable, HTTP endpoint, header, error type, file, metrics-database column and decision-log field, each labelled stable, experimental or internal, with the deprecation rule and the tested Python versions and systems.
 - `docs/configuration.md` documents every `config.yaml` key with its default and label.
