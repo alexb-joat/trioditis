@@ -158,6 +158,27 @@ class PlanSettings:
     person: str | None = None      # a label put on imported events, e.g. a first name
 
 
+PLAN_KEYS = {"claude_code", "meter_file", "person"}
+
+# Every key the loader reads, by section ("<name>" = one entry of a named map). docs/configuration.md
+# documents each one with its default and label; tests/test_contract.py keeps the three in step.
+CONFIG_KEYS: dict[str, frozenset[str]] = {
+    "": frozenset({"providers", "models", "routes", "default_route", "embeddings", "route_picker", "reinforce",
+                   "privacy", "limits", "logging", "facts", "plan"}),
+    "providers.<name>": frozenset({"base_url", "api_key_env", "admin_key_env", "local", "stream_usage"}),
+    "models.<name>": frozenset({"provider", "id", "capabilities", "context_tokens"}),
+    "routes.<name>": frozenset({"description", "models", "keywords", "patterns", "examples", "local_only",
+                                "tool_keywords", "prefer"}),
+    "embeddings": frozenset({"provider", "model", "threshold"}),
+    "route_picker": frozenset(ROUTE_PICKER_KEYS),
+    "reinforce": frozenset(REINFORCE_KEYS),
+    "privacy": frozenset({"enabled", "builtin_detectors", "keywords", "patterns"}),
+    "limits": frozenset({"max_body_bytes", "upstream_timeout_s", "max_fallbacks", "session_ttl_s"}),
+    "logging": frozenset({"path", "log_prompts"}),
+    "plan": frozenset(PLAN_KEYS),
+}
+
+
 @dataclass(frozen=True)
 class Config:
     providers: dict[str, Provider]
@@ -392,7 +413,7 @@ def parse_plan(raw) -> PlanSettings:
         return PlanSettings()
     if not isinstance(raw, dict):
         raise ConfigError("plan must be a mapping with claude_code, meter_file and person")
-    unknown = set(raw) - {"claude_code", "meter_file", "person"}
+    unknown = set(raw) - PLAN_KEYS
     if unknown:
         raise ConfigError(f"plan: unknown key(s) {', '.join(sorted(unknown))}; use claude_code, meter_file, person")
     meter = raw.get("meter_file")

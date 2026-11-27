@@ -15,6 +15,11 @@ documented mitigation as soon as practical, and reporters are credited unless th
 
 Fixes land on `main` and ship in the next release. Please reproduce on the latest release or `main` first.
 
+| Version | Security fixes |
+|---|---|
+| 0.9.x | yes |
+| 0.8 and older | no: upgrade to the latest 0.9.x |
+
 ## In scope
 
 Anything that lets someone who is not the owner use the router or read what it holds: bypassing the API key, the

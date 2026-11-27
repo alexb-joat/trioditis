@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+**Added**
+- `docs/compatibility.md` lists every command and flag, environment variable, HTTP endpoint, header, error type, file, metrics-database column and decision-log field, each labelled stable, experimental or internal, with the deprecation rule and the tested Python versions and systems.
+- `docs/configuration.md` documents every `config.yaml` key with its default and label.
+- SECURITY.md has a table of supported versions (0.9.x).
+- A contract test reads these lists from the code: an undocumented flag, key, variable, endpoint, header, column or log field fails the test suite, and so does a documented one that is gone.
+
 ## 0.9.0 (2026-11-27)
 
 Fixes from a readiness check before Trioditis is announced: sensitive text in tool calls stays local, a refused cloud key falls back to the next model, broken streams and malformed requests get clear errors.

@@ -61,8 +61,8 @@ def missing_config(path: str) -> str:
             f"(or set TRIODITIS_CONFIG).")
 
 
-def main(argv: list[str] | None = None) -> None:
-    load_dotenv(env("ENV_FILE", ".env"))
+def build_parser() -> argparse.ArgumentParser:
+    """Every command and flag. docs/compatibility.md lists each one with its label (tests/test_contract.py)."""
     ap = argparse.ArgumentParser(prog="trioditis")
     ap.add_argument("--config", default=env("CONFIG", "config.yaml"))
     ap.add_argument("--version", action="version", version=f"trioditis {__version__}")
@@ -195,8 +195,12 @@ def main(argv: list[str] | None = None) -> None:
     rv = rn_sub.add_parser("revert", help="take back the last adopted value (works with the loop on or off)")
     rv.add_argument("--all", action="store_true", help="take back every adopted value: back to the config.yaml values")
     rv.add_argument("--dry-run", action="store_true", help="show what would be taken back, write nothing")
+    return ap
 
-    args = ap.parse_args(argv)
+
+def main(argv: list[str] | None = None) -> None:
+    load_dotenv(env("ENV_FILE", ".env"))  # before the parser: its defaults read TRIODITIS_* from .env too
+    args = build_parser().parse_args(argv)
     if args.cmd == "usage":  # reads the metrics database only: works without a config
         sys.exit(plan_report(args) if args.plan else usage_report(args))
     if args.cmd == "plan":  # reads only the config's plan: section, and only when it needs it
