@@ -186,7 +186,7 @@ Every cloud call is checked against your daily and monthly caps first (defaults:
 
 ## Staying current
 
-Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](https://github.com/alexb-joat/trioditis/blob/main/docs/staying-current.md). On a subscription, `trioditis plan import --claude-code` and `usage --plan` show tokens per model and effort next to how far the plan's meters rose, from counts only, never text ([Plan usage](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md#plan-usage)).
+Each call records why its answer ended, retries and cache use, so `trioditis usage --outcomes` shows each model's error, cut-off and retry rates with 95% intervals. A daily `trioditis refit` (experimental) adds latency and drift charts, and, given a model facts file, names configured models that are deprecated or about to retire and lists new ones worth testing. It changes nothing on its own: [docs/staying-current.md](https://github.com/alexb-joat/trioditis/blob/main/docs/staying-current.md). On a subscription, `trioditis plan import --claude-code` and `usage --plan` (experimental) show tokens per model and effort next to how far the plan's meters rose, from counts only, never text ([Plan usage](https://github.com/alexb-joat/trioditis/blob/main/docs/spending-and-limits.md#plan-usage)).
 
 ## Security at a glance
 
@@ -248,7 +248,7 @@ CI runs the unit tests and a real-server smoke test on all three, on Python 3.11
 - [x] Daily and monthly spending caps with local fallback
 - [x] Hardware detection and local-model suggestions
 - [x] Routes can prefer the cheapest or fastest model
-- [x] Outcome rates per model, a plan-usage ledger and a daily refit
+- [x] Outcome rates per model, a plan-usage ledger and a daily refit (the last two experimental)
 - [ ] A small local LLM as an optional classifier for ambiguous prompts
 - [ ] Learn from feedback: per-route model scores from thumbs up and down
 - [ ] Cost and latency budgets per route

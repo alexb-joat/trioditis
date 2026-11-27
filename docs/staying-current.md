@@ -15,6 +15,8 @@ Next to the model, tokens, cost and latency, every call stores:
 
 ## The daily refit
 
+*Experimental:* this works and is tested, but its commands, files and output may still change in a minor release; [compatibility.md](compatibility.md) says what that means.
+
 ```bash
 trioditis refit --dry-run     # see the result, write nothing
 trioditis refit               # write it
@@ -114,6 +116,8 @@ The method, the data and the results behind the accuracy numbers Trioditis publi
 **The one network call**: embedding the prompts and each route's `examples` with the configured local embeddings provider (for example Ollama), the same call the router makes. Nothing else leaves your machine, and each prompt is embedded once however many thresholds are tried.
 
 ## The reinforcement loop (opt-in; the gate and the undo are built, adopting is not yet)
+
+*Experimental:* this works and is tested, but its commands, files and output may still change in a minor release; [compatibility.md](compatibility.md) says what that means.
 
 The loop's aim is a router that corrects two of its own settings from evidence, inside limits that are fixed in the code:
 

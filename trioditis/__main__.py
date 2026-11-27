@@ -154,7 +154,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "each plan meter rose (fill it with `trioditis plan import`)")
     u.add_argument("--json", action="store_true", help="machine-readable output (always includes the rates)")
 
-    pl = sub.add_parser("plan", help="plan usage: what a subscription's chats and agents used (no config needed)")
+    pl = sub.add_parser("plan", help="experimental: plan usage: what a subscription's chats and agents used (no config needed)")
     pl_sub = pl.add_subparsers(dest="plan_cmd", required=True)
     pi = pl_sub.add_parser("import", help="import token counts and meter readings; with no arguments, what the "
                                           "config's plan: section names (the daily timer runs it that way)")
@@ -167,14 +167,14 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("--db", default=None, help="metrics database (default ~/.trioditis/metrics.db)")
     pi.add_argument("--dry-run", action="store_true", help="show what would be imported, write nothing")
 
-    pr = sub.add_parser("prices", help="manage ~/.trioditis/prices.json")
+    pr = sub.add_parser("prices", help="experimental: manage ~/.trioditis/prices.json")
     pr_sub = pr.add_subparsers(dest="prices_cmd", required=True)
     imp = pr_sub.add_parser("import", help="take cloud model prices from a provider-facts file, with their sources")
     imp.add_argument("facts", help="a provider-facts.v1 JSON file (for example Euboulia's src/catalog/provider-facts.json)")
     imp.add_argument("--prices", default=None, help="prices file to update (default ~/.trioditis/prices.json)")
     imp.add_argument("--dry-run", action="store_true", help="show the changes, write nothing")
 
-    rf = sub.add_parser("refit", help="refit rates, latency and drift charts from the call record, and check the "
+    rf = sub.add_parser("refit", help="experimental: refit rates, latency and drift charts from the call record, and check the "
                                       "model facts (changes nothing the router uses)")
     rf.add_argument("--days", type=int, default=28, help="window to fit, in days (default 28)")
     rf.add_argument("--db", default=None, help="metrics database (default ~/.trioditis/metrics.db)")
@@ -184,7 +184,7 @@ def build_parser() -> argparse.ArgumentParser:
     rf.add_argument("--json", action="store_true", help="print the fitted document")
     rf.add_argument("--dry-run", action="store_true", help="show the result, write nothing")
 
-    rn = sub.add_parser("reinforce", help="the reinforcement loop: gate a routing change on your labelled prompts, "
+    rn = sub.add_parser("reinforce", help="experimental: the reinforcement loop: gate a routing change on your labelled prompts, "
                                           "or take an adopted one back (off unless the config has `reinforce:`)",
                         description="Routing values the loop adopts live in ~/.trioditis/trioditis-adopted.json, never "
                                     "in config.yaml, and only two can move: embeddings.threshold (inside 0.35 to 0.55, "

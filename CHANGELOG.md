@@ -8,6 +8,7 @@
 - `limits.total_timeout_s` (default 240) caps how long one request waits for an answer to start, fallbacks included. Before, a provider that never answered cost the full `upstream_timeout_s` (120 s) for each of up to four models, about 8 minutes before the 502. Now the model still silent at the deadline is given up and the rest are not tried; `failed_attempts` and the 502 name them as `total_timeout`. A stream that has started is not cut. The Claude Code passthrough (`/v1/messages`) is unchanged.
 
 **Changed**
+- `--help`, the README and the docs now mark `plan`, `prices`, `refit` and `reinforce` as experimental, as `docs/compatibility.md` already did: they work and are tested, but may still change in a minor release.
 - A request whose models all stay silent now fails after 240 s instead of up to about 8 minutes. If your models are slow to start and you relied on the longer wait, raise `limits.total_timeout_s`.
 
 **Fixed**

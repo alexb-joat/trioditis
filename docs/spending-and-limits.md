@@ -30,7 +30,7 @@ Spend is calculated from `~/.trioditis/prices.json`, the same file Lunete reads 
 {"claude-sonnet": {"input": 3.0, "output": 15.0}}
 ```
 
-Rather than typing prices, import them from a provider-facts file, which lists each model's price with the documentation page it came from (for example Euboulia's [`provider-facts.json`](https://github.com/alexb-joat/euboulia/blob/main/src/catalog/provider-facts.json)). Models are matched by the `id` in `config.yaml`; prices of models it does not list are left as they are, and each imported entry keeps its `_source` and `_fetched` date:
+Rather than typing prices, import them (*experimental*, like `plan`, `refit` and `reinforce`: see [compatibility.md](compatibility.md)) from a provider-facts file, which lists each model's price with the documentation page it came from (for example Euboulia's [`provider-facts.json`](https://github.com/alexb-joat/euboulia/blob/main/src/catalog/provider-facts.json)). Models are matched by the `id` in `config.yaml`; prices of models it does not list are left as they are, and each imported entry keeps its `_source` and `_fetched` date:
 
 ```bash
 trioditis prices import provider-facts.json --dry-run   # show old -> new
@@ -91,6 +91,8 @@ claude-sonnet     21   5% (1%-23%)              -            -          -
 `-` means no data, never zero. `--json` always includes these rates, with the counts behind them.
 
 ## Plan usage
+
+*Experimental:* this works and is tested, but its commands, files and output may still change in a minor release; [compatibility.md](compatibility.md) says what that means.
 
 A subscription (Claude, ChatGPT) has usage meters instead of a bill. To learn how heavy each model and effort really is on those meters, Trioditis can keep a ledger of plan use beside its API calls: `plan_usage` (one row per message) and `plan_meter` (meter readings over time), in the same metrics database. Spend, caps and `trioditis usage` without `--plan` never read them.
 

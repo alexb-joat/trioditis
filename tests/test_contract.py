@@ -236,3 +236,14 @@ def test_the_example_config_uses_only_known_keys():
 def test_the_contract_pages_are_linked():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "docs/compatibility.md" in readme and "docs/configuration.md" in readme
+
+
+def test_help_marks_exactly_the_commands_compatibility_md_calls_experimental():
+    """A person reads `trioditis --help`, not the table: the label must be in both, and agree."""
+    rows = section(COMPAT, "Commands and flags")
+    sub = next(a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+    helps = {c.dest: (c.help or "") for c in sub._choices_actions}
+    marked = {name for name, text in helps.items() if text.startswith("experimental:")}
+    labelled = {name for name in helps if rows.get(f"trioditis {name}") == "experimental"}
+    assert marked == labelled
+    assert {"plan", "prices", "refit", "reinforce"} <= marked
