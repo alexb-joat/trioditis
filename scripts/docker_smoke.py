@@ -71,7 +71,7 @@ def main() -> int:
     work = Path(tempfile.mkdtemp(prefix="trioditis-docker-"))
     try:
         shutil.copy(ROOT / "config.example.yaml", work / "config.yaml")
-        old = work / "logs" / "hlidskjalv"
+        old = work / "logs/hlidskjalv"
         old.mkdir(parents=True)
         (old / "budget.json").write_text(json.dumps({"daily_usd": 1.0}), encoding="utf-8")
         # As docs/deployment.md says for Linux: the container runs as the host user, so it can write logs/.
