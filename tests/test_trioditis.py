@@ -120,6 +120,22 @@ async def test_sensitive_forces_local():
     assert d.local_only and d.candidates == ["coder"]
 
 
+@pytest.mark.parametrize("earlier", [
+    # an agent's earlier tool call carries the card number; no text part does
+    {"role": "assistant", "content": None, "tool_calls": [{"id": "c1", "type": "function", "function": {
+        "name": "save", "arguments": '{"note": "card 4111 1111 1111 1111"}'}}]},
+    {"role": "assistant", "content": None, "function_call": {
+        "name": "save", "arguments": '{"note": "card 4111 1111 1111 1111"}'}},
+    # a text part with an unfamiliar type, or none, is still text the model reads
+    {"role": "user", "content": [{"type": "output_text", "text": "card 4111 1111 1111 1111"}]},
+    {"role": "user", "content": [{"text": "card 4111 1111 1111 1111"}]},
+])
+async def test_sensitive_text_outside_text_parts_forces_local(earlier):
+    b = {"model": "auto", "messages": [earlier, {"role": "user", "content": "python bug, what next?"}]}
+    d = await decide(cfg(), b)
+    assert d.local_only and d.candidates == ["coder"]
+
+
 async def test_sensitive_without_local_is_rejected():
     c = cfg(routes={"code": {"models": ["big"]}}, default_route="code",
             models={"big": BASE["models"]["big"]})

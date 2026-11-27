@@ -44,7 +44,7 @@ Commands:
 | Router exposed to the network | Binds `127.0.0.1` by default; refuses any other bind without a ≥32-char API key |
 | A web page in your browser reaching the router | Without a key, requests with a foreign `Host` (DNS rebinding) or `Origin` (cross-site POST) get 403 and a line in `logs/security.jsonl`; POST bodies must be `application/json` |
 | Key leakage | Keys only in env vars (config loader rejects inline keys); client's router key is never forwarded upstream; local models get no key |
-| Sensitive data sent to the cloud by accident | Privacy detectors force local-only routing or reject (not on the Anthropic passthrough, which relays Claude Code's requests unread) |
+| Sensitive data sent to the cloud by accident | Privacy detectors read every text part and the arguments of earlier tool calls, and force local-only routing or reject. They cannot read images, files or audio, and they don't run on the Anthropic passthrough, which relays Claude Code's requests unread |
 | Open proxy / SSRF | Upstream URLs only from config, and one fixed host for the Anthropic passthrough; plain `http` only for local hosts; redirects not followed |
 | Prompt content in logs | Logs hold route, model, latency, detector names and a hash — not prompt text (opt-in only) |
 | Abuse / DoS | Body size cap, upstream timeouts, bounded fallbacks and session cache |

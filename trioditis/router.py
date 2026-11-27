@@ -74,6 +74,26 @@ def all_text(messages: list) -> str:
     return "\n".join(out)
 
 
+def scan_text(messages: list) -> str:
+    """Every piece of text a model would read, for the privacy detectors: text parts of any
+    type, plus the arguments of earlier tool and function calls, which are text too.
+    Images, files and audio are not text, and the detectors cannot read them."""
+    out = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        for p in _parts(m.get("content")):
+            if isinstance(p.get("text"), str):
+                out.append(p["text"])
+        calls = m.get("tool_calls") if isinstance(m.get("tool_calls"), list) else []
+        legacy = [{"function": m["function_call"]}] if isinstance(m.get("function_call"), dict) else []
+        for c in calls + legacy:
+            fn = c.get("function") if isinstance(c, dict) else None
+            if isinstance(fn, dict) and isinstance(fn.get("arguments"), str):
+                out.append(fn["arguments"])
+    return "\n".join(out)
+
+
 def last_user_text(messages: list) -> str:
     for m in reversed(messages):
         if m.get("role") == "user":
@@ -414,7 +434,7 @@ async def decide(
     tokens = estimate_tokens(body)
     reasons: list[str] = []
 
-    sensitive = detect_sensitive(all_text(messages), cfg.privacy)
+    sensitive = detect_sensitive(scan_text(messages), cfg.privacy)
     local_only = bool(sensitive)
     if sensitive:
         reasons.append(f"sensitive content ({', '.join(sensitive)}) -> local models only")
