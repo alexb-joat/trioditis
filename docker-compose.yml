@@ -4,6 +4,9 @@ services:
     ports:
       - "127.0.0.1:8787:8787"     # reachable from this machine only
     env_file: .env                 # TRIODITIS_API_KEY + provider keys; never committed
+    # The image's own user by default. Docker on Linux: set TRIODITIS_UID/TRIODITIS_GID in .env to your
+    # `id -u`/`id -g`, so the container can write ./logs and you can read it (docs/deployment.md).
+    user: "${TRIODITIS_UID:-10001}:${TRIODITIS_GID:-10001}"
     volumes:
       - ./config.yaml:/config/config.yaml:ro
       - ./logs:/app/logs

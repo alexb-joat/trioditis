@@ -362,8 +362,15 @@ def main(argv: list[str] | None = None) -> None:
 
     from .app import create_app
 
+    try:
+        app = create_app(cfg)
+    except PermissionError as e:  # typically a Docker bind mount the image's user (10001) can't write
+        uid = f" (user id {os.getuid()})" if hasattr(os, "getuid") else ""
+        raise SystemExit(f"error: Trioditis can't write {e.filename}: permission denied.\n"
+                         f"  Make that folder writable for the user Trioditis runs as{uid}. In Docker on Linux, "
+                         "set TRIODITIS_UID and TRIODITIS_GID in .env: docs/deployment.md#docker-optional") from None
     uvicorn.run(
-        create_app(cfg),
+        app,
         host=host,
         port=port,
         server_header=False,

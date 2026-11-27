@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import httpx
 import pytest
@@ -275,3 +276,25 @@ def test_check_warns_when_a_local_provider_has_a_public_address():
     assert [ln.split(" is marked")[0] for ln in lines] == ["rented", "literal"]
     assert "gpu.example.com is a public address (93.184.216.34)" in lines[0]
     assert "api.example.com" not in asked and "localhost" not in asked  # cloud and known local names: no lookup
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid") or os.getuid() == 0, reason="needs POSIX permissions and a non-root user")
+def test_serve_with_an_unwritable_log_folder_says_what_to_fix_instead_of_a_traceback(tmp_path, monkeypatch):
+    # Docker on Linux: the image's user 10001 can't write a ./logs the host user owns (found 27 Nov).
+    from trioditis import migrate
+    from trioditis.__main__ import init_folder, main
+    monkeypatch.setattr(migrate, "at_start", lambda: None)
+    monkeypatch.setattr("uvicorn.run", lambda *a, **k: pytest.fail("the server must not start"))
+    monkeypatch.chdir(tmp_path)
+    assert init_folder(tmp_path) == 0
+    logs = tmp_path / "logs"
+    logs.mkdir(exist_ok=True)
+    logs.chmod(0o500)
+    try:
+        with pytest.raises(SystemExit) as e:
+            main(["--config", str(tmp_path / "config.yaml"), "serve"])
+    finally:
+        logs.chmod(0o700)
+    msg = str(e.value.code)
+    assert "can't write logs/decisions.jsonl: permission denied" in msg
+    assert f"user id {os.getuid()}" in msg and "TRIODITIS_UID" in msg and "docs/deployment.md#docker-optional" in msg

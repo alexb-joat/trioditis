@@ -23,12 +23,14 @@ Running natively is simpler and keeps Ollama on localhost. If you want the conta
 ```bash
 cp config.example.yaml config.yaml   # set the ollama base_url to http://host.docker.internal:11434/v1
 cp .env.example .env                 # TRIODITIS_API_KEY is required inside a container
+mkdir -p logs                        # otherwise Docker creates it, owned by root
 docker compose up -d --build
 ```
 
 - **Data:** `metrics.db`, `budget.json`, `prices.json` and the rest are in `logs/trioditis/` (`TRIODITIS_HOME=/app/logs/trioditis` in the image). A volume from an image before 0.9.1 has them in `logs/hlidskjalv/`: the first start moves them and leaves a relative link at each old path, which also works from the host.
 - **macOS / Windows (Docker Desktop):** `host.docker.internal` reaches Ollama on the host; nothing else to change.
-- **Linux:** the container can only reach Ollama if Ollama also listens on the Docker bridge. Use `OLLAMA_HOST=172.17.0.1:11434`, **not** `0.0.0.0`, which would expose your models to the whole network.
+- **Linux:** set `TRIODITIS_UID` and `TRIODITIS_GID` in `.env` to the numbers `id -u` and `id -g` print. The container then writes `logs/` as you, and you can read everything in it from the host. Without them it runs as the image's user 10001, which can't write a folder you own, and the start stops with `can't write logs/decisions.jsonl: permission denied`.
+- **Linux, Ollama:** the container can only reach Ollama if Ollama also listens on the Docker bridge. Use `OLLAMA_HOST=172.17.0.1:11434`, **not** `0.0.0.0`, which would expose your models to the whole network.
 
 The container runs as a non-root user on a read-only filesystem with all capabilities dropped, and is published on `127.0.0.1` only.
 
