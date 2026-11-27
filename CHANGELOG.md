@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2026-11-27)
 
 **Added**
 - `trioditis results` measures the route picker and the router on your machine: the picker on the 315 held-out prompts (now shipped with the package), the router at the shipped settings on the same prompts, and the picker's waiting time at 100 to 2,000 characters. It uses the shipped config, not yours, so results from different machines measure the same thing; you choose the picker model (`--model`, default `qwen2.5-coder:7b`). With `--own-labels FILE` it also runs both on your labelled prompts and reports counts only. Everything goes to the local server at `--base-url`; an address not on this machine is refused.
