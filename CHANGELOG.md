@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+**Docs**
+- The README's first screen says who Trioditis is for, shows real `trioditis explain` output for a coding question and for a prompt with a card number, and points at `trioditis results`. A test checks that every line of that output is what `explain` prints.
+- "Why Trioditis" is a list instead of a four-column table, so it reads on a phone.
+
 ## 0.8.0 (2026-11-27)
 
 **Added**

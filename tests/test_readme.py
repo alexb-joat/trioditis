@@ -101,8 +101,47 @@ def test_the_help_measure_block_keeps_the_promises_the_program_keeps():
     assert "only to the local server" in block and "never holds prompt text" in block
     assert block.count("```") == 2, "one command, no pictures, no tables of figures"
     assert not re.search(r"\d+(\.\d+)?\s*%|\bpassed\b|\b\d+/\d+\b", block), "no figures from model runs in this block"
-    assert README.count("Help measure") == 1
+    assert README.count("## Help measure") == 1, "one block; the first screen only points at it"
 
 
 def test_no_sponsor_button_is_promised_without_a_funding_file():
     assert (REPO / ".github" / "FUNDING.yml").exists() or "Sponsor" not in README
+
+
+def first_screen() -> str:
+    return README.split("\n## Quick start", 1)[0]
+
+
+def test_the_first_screen_points_at_the_one_help_measure_block():
+    top = first_screen()
+    assert re.search(r"(?m)^trioditis results$", top), "the one command, on its own line"
+    assert "(#help-measure)" in top and "default is No" in top
+    assert not re.search(r"\d+(\.\d+)?\s*%|\b\d+/\d+\b", top.split("## See it decide", 1)[1].split("<picture>", 1)[0]), \
+        "no figures from model runs next to the demo"
+
+
+def test_the_demo_shows_lines_that_explain_really_prints(tmp_path, capsys, monkeypatch):
+    """Every line of "See it decide" is the real output of `explain` on the example config with only an
+    Anthropic key set, except the lines marked as left out."""
+    from trioditis.__main__ import main
+    block = first_screen().split("## See it decide", 1)[1]
+    demo = re.search(r"```text\n(.*?)```", block, re.S).group(1)
+    runs = re.split(r"(?m)^\$ trioditis explain ", demo)[1:]
+    assert len(runs) == 2
+    folder = tmp_path / "router"
+    with pytest.raises(SystemExit):
+        main(["init", "--dir", str(folder)])
+    monkeypatch.chdir(folder)
+    for var in ("OPENAI_API_KEY", "OPENROUTER_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "placeholder")
+    for run in runs:
+        prompt_line, *shown = run.rstrip("\n").split("\n")
+        capsys.readouterr()
+        main(["--config", str(folder / "config.yaml"), "explain", prompt_line.strip('"')])
+        printed = capsys.readouterr().out.split("\n")
+        kept = [line for line in shown if line.strip() != "…"]
+        missing = [line for line in kept if line not in printed]
+        assert missing == [], f"the README shows lines explain does not print: {missing}"
+        order = [printed.index(line) for line in kept]
+        assert order == sorted(order), "the README keeps the printed order"

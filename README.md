@@ -7,19 +7,55 @@
 
 **A security-first router for LLMs.** One OpenAI-compatible endpoint that picks a route and a model for each prompt, whether local (Ollama), cloud (Claude, GPT, OpenRouter) or legacy, and keeps a prompt in which its detectors find an email, card number, key or password away from cloud models.
 
+For developers who run models in Ollama, with or without cloud keys, and want their editor, chat app and scripts to share one local address.
+
 [![ci](https://github.com/alexb-joat/trioditis/actions/workflows/ci.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/ci.yml)
 [![codeql](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml/badge.svg)](https://github.com/alexb-joat/trioditis/actions/workflows/codeql.yml)
 ![python](https://img.shields.io/badge/python-3.11%2B-3776AB)
 ![platforms](https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-555)
 [![license](https://img.shields.io/badge/license-AGPL--3.0-blue)](https://github.com/alexb-joat/trioditis/blob/main/LICENSE)
 
-[Quick start](#quick-start) &nbsp;·&nbsp; [How it routes](#how-a-request-is-routed) &nbsp;·&nbsp; [Connect your tools](#connect-your-tools) &nbsp;·&nbsp; [Security](#security-at-a-glance) &nbsp;·&nbsp; [Docs](#documentation)
+[Quick start](#quick-start) &nbsp;·&nbsp; [Help measure](#help-measure) &nbsp;·&nbsp; [How it routes](#how-a-request-is-routed) &nbsp;·&nbsp; [Connect your tools](#connect-your-tools) &nbsp;·&nbsp; [Security](#security-at-a-glance) &nbsp;·&nbsp; [Docs](#documentation)
 
 <sub><i>Trioditis: Hecate of the three ways, who stands where the road splits and decides who goes where.<br>Every prompt reaches the same crossroads here: a local model, a cloud model, or no further.</i></sub>
 
 </div>
 
-<br>
+## See it decide
+
+With an Anthropic key in `.env`, `trioditis explain` shows where a prompt would go and why, without calling any model. Here the coding question goes to Claude Sonnet, with a local model as fallback, and the prompt with a card number stays on a local model. Real output from the example config, with some fields left out (`…`):
+
+```text
+$ trioditis explain "Why does my python function raise KeyError?"
+{
+  "route": "code",
+  "model": "claude-sonnet",
+  "fallbacks": [
+    "local-coder"
+  ],
+  "reasons": [
+    "keywords matched route code (score 2)",
+  …
+}
+$ trioditis explain "My card is 4111 1111 1111 1111, why was it declined?"
+{
+  "route": "quick",
+  "model": "local-general",
+  …
+  "reasons": [
+    "sensitive content (card_number) -> local models only",
+    "no strong signal -> default route quick",
+    "skip claude-haiku: cloud model blocked (local-only)"
+  ],
+  …
+}
+```
+
+**You can measure it too.** After the [quick start](#quick-start), one command runs the route picker and the router on the labelled test prompts that ship with Trioditis, against your local Ollama, and writes the numbers to a file. It asks before sharing anything, and the default is No ([what it runs and what the file holds](#help-measure)):
+
+```bash
+trioditis results
+```
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/alexb-joat/trioditis/main/docs/img/routing-dark.svg">
@@ -28,9 +64,10 @@
 
 ## Why Trioditis
 
-| Private by default | Cost-aware | Small and auditable | Explains itself |
-|---|---|---|---|
-| A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread. | Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend. | About 8,200 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry. | Routed answers name their route and model in response headers; Trioditis's own error replies and the Claude Code passthrough don't. A log records the reasons, with no prompt text. |
+- **Private by default.** A prompt in which the detectors find an email, card number, key or password goes to a local model or is rejected. Detectors are patterns and miss some; Claude Code's passthrough is relayed unread.
+- **Cost-aware.** Daily and monthly caps with automatic local fallback, plus per-provider limits and live spend.
+- **Small and auditable.** About 8,200 lines of Python. Four direct dependencies, 18 packages in the lockfile, each pinned by hash. No LiteLLM, no LangChain, no telemetry.
+- **Explains itself.** Routed answers name their route and model in response headers; Trioditis's own error replies and the Claude Code passthrough don't. A log records the reasons, with no prompt text.
 
 ## Quick start
 
