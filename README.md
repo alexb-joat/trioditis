@@ -236,7 +236,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 - On Windows, Trioditis does not warn about a `.env` that other users can read, and it does not set the mode of the metrics database. Keep the folder in your user profile ([security model](https://github.com/alexb-joat/trioditis/blob/main/docs/security-model.md)).
 - `config.yaml` and `.env` are read when `serve` starts. Restart it after changing them.
 - Only the Linux installer sets up the daily `refit` and `plan import`. On macOS and Windows, run them by hand.
-- CI does not build the Docker image.
+- CI builds the Docker image and runs it on Linux only ([`scripts/docker_smoke.py`](https://github.com/alexb-joat/trioditis/blob/main/scripts/docker_smoke.py)). Docker Desktop on macOS and Windows is not tested.
 - The router picks the right route about two times in three. On 315 held-out prompts it chose the labelled route for 205 (65.1%, 95% interval 59.7–70.1%) on the example config with local embeddings on, and for 116 (36.8%) with keywords alone. Most misses (65 of 110) go to `quick`, the default route, and a miss still gets an answer. The prompts are synthetic and in English; measured 13 November 2026 ([method, data and limits](https://github.com/alexb-joat/trioditis/blob/main/docs/route-accuracy.md)). Your own routes give a different number: `trioditis eval-routes` measures it.
 - The route picker was measured on one machine, one set of labels and one model at temperature 0, on prompts of at most 206 characters with no tool lists, so longer prompts skip it unless you raise `max_chars` or set `long_prompts: cut`. With `cut` the picker reads only their first `max_chars` characters, and its accuracy on prompts cut that way is not measured. Its calls also slow down with length: on that laptop, in ordinary use, 2 of 20 calls passed `timeout_ms` at 200 characters, 7 of 20 at 250 and 12 of 20 at 300. To measure your machine, run [`scripts/picker_timing.py`](https://github.com/alexb-joat/trioditis/blob/main/scripts/picker_timing.py) from a clone of the repository. `eval-routes` does not measure it yet; the decision log's `route` and `router_route` show how often it overrules the router on your traffic.
 
@@ -246,7 +246,7 @@ Report a vulnerability privately via [SECURITY.md](https://github.com/alexb-joat
 |---|---|---|
 | Python 3.11+, CI | Python 3.11+, CI | Python 3.11+, CI |
 
-CI runs the unit tests and a real-server smoke test on all three, on Python 3.11, 3.12 and 3.13. To run in the background or in a hardened container, see [docs/deployment.md](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md).
+CI runs the unit tests and a real-server smoke test on all three, on Python 3.11, 3.12 and 3.13, and builds and runs the Docker image on Linux. To run in the background or in a hardened container, see [docs/deployment.md](https://github.com/alexb-joat/trioditis/blob/main/docs/deployment.md).
 
 ## Documentation
 

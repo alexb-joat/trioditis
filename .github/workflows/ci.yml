@@ -46,6 +46,18 @@ jobs:
       - name: Config sanity
         run: python -m trioditis --config config.example.yaml check
 
+  docker:
+    # Builds the image and runs it the way docker-compose.yml does: read-only, no capabilities, as the host user,
+    # with a pre-0.9.1 volume to move. Needs only Docker and the runner's own Python (scripts/docker_smoke.py).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Build the image and smoke-test it
+        run: python3 scripts/docker_smoke.py
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
