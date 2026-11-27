@@ -20,6 +20,8 @@ Before any cloud call, Trioditis checks today's and this month's spend against y
 
 **Each call is checked before it starts, including its own estimated cost.** Trioditis estimates the call from the prompt size (about four characters per token) and the request's `max_tokens` (or `assume_output_tokens` from `budget.json`, default 1024), and holds that amount against the caps until the real cost is recorded. A burst of parallel requests therefore cannot all slip under a cap that only the first of them fits: a call whose estimate would cross a cap is refused the same way as one over it, with a reason such as `daily cap would be crossed ($0.9700 spent + $0.0200 pending + $0.0300 this call > $1.00)`. A hold that never reports back (a stream the client dropped before it began) expires after 15 minutes.
 
+**The Claude Code passthrough is metered, not capped.** Claude Code's requests to Anthropic are relayed unread; with an API key their cost is recorded after each answer and counts toward the caps for routed calls, but the passthrough itself is never refused, because Claude Code would only stall. With a claude.ai login the calls go to plan usage and never count toward the caps ([Claude Code](claude-code.md)).
+
 Over a cap, cloud models are skipped and the route's local model answers instead, the same way it would if the cloud model were down. The skip is logged in `failed_attempts`, so [Lunete](https://github.com/alexb-joat/lunete) shows it. A route with no local model returns `429 budget_exceeded` instead of a bill. Edits to the file apply on the next request, no restart needed.
 
 Spend is calculated from `~/.hlidskjalv/prices.json`, the same file Lunete reads (USD per million tokens, keyed by model name in `config.yaml`):

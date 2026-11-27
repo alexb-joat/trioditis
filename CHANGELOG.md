@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+**Fixed**
+- The privacy detectors now also read the arguments of earlier tool and function calls, and text parts of any type. Before, a card number that appeared only in an agent's earlier tool call could reach a cloud model. Images, files and audio are still not read; the README's Known limits says so.
+- A cloud provider that refuses its key (401, 403) or wants payment (402) no longer ends the request: the next model answers, as for an outage, so a mistyped key doesn't stop the local fallback. When nothing answers, the error names the key's variable to check (never its value).
+- A priced cloud answer that comes back without token usage is charged its estimate instead of $0, and its log line says `usage_missing`. A cloud answer with neither usage nor a price is counted as unpriced.
+- A streamed answer that breaks halfway now ends with an error event and `[DONE]`, and is logged as a failed call (502, `stream_broken`) instead of with the upstream's 200.
+- A malformed request (a message that isn't an object, content that isn't text or a list, a `max_tokens` that isn't a number, `tools` that isn't a list) gets a 400 that names the field, not a 500.
+
+**Changed**
+- `check`, `serve` and `explain` without a config now print where they looked and how to fix it (`trioditis init --dir`, `cd`, or `--config`).
+- `check` shows the embeddings model's state and the `ollama pull` command when it's missing. Without it the router picks routes from keywords alone (116 of 315 held-out prompts instead of 205).
+
+**Docs**
+- The spending page says the Claude Code passthrough is metered but never refused by the caps. The README says `serve` reads `config.yaml` and `.env` once, at start.
+
 ## 0.8.1 (2026-11-27)
 
 Trioditis itself is unchanged apart from the version number. PyPI shows the README as it was at the latest release, so this release brings the new first screen there.
