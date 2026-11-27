@@ -16,6 +16,8 @@ from trioditis_metrics import home
 from trioditis_metrics.db import MetricsDB
 
 LINUX_PROC = Path("/proc/self/fdinfo").is_dir()
+# Nothing moves on Windows yet (links there need extra rights): test_windows_keeps_the_old_folder covers it.
+MOVES = pytest.mark.skipif(sys.platform == "win32", reason="nothing moves on Windows yet")
 
 
 @pytest.fixture
@@ -52,6 +54,7 @@ def _snapshot(folder: Path) -> dict:
             for p in sorted(folder.rglob("*"))}
 
 
+@MOVES
 def test_dry_run_lists_the_move_and_writes_nothing(machine, capsys):
     before = _snapshot(machine)
     assert _run(dry_run=True) == 0
@@ -62,6 +65,7 @@ def test_dry_run_lists_the_move_and_writes_nothing(machine, capsys):
     assert _snapshot(machine) == before
 
 
+@MOVES
 def test_move_leaves_links_and_lunete_files(machine, capsys):
     shared, new = machine / ".lunete", machine / ".trioditis"
     inode = (shared / "metrics.db").stat().st_ino
@@ -86,6 +90,7 @@ def test_move_leaves_links_and_lunete_files(machine, capsys):
     assert not list(machine.glob(".*.migrating"))
 
 
+@MOVES
 def test_running_again_does_nothing(machine, capsys):
     assert _run() == 0
     after = _snapshot(machine)
@@ -95,6 +100,7 @@ def test_running_again_does_nothing(machine, capsys):
     assert _snapshot(machine) == after
 
 
+@MOVES
 def test_both_folders_with_different_files_merge_nothing(machine, capsys):
     new = machine / ".trioditis"
     new.mkdir()
@@ -108,6 +114,7 @@ def test_both_folders_with_different_files_merge_nothing(machine, capsys):
     assert migrate.check_lines() and "nothing is merged" in migrate.check_lines()[0]
 
 
+@MOVES
 def test_an_old_file_saved_over_its_link_is_reported(machine, capsys):
     assert _run() == 0
     shared = machine / ".lunete"
@@ -117,6 +124,7 @@ def test_an_old_file_saved_over_its_link_is_reported(machine, capsys):
     assert len(lines) == 1 and "budget.json" in lines[0] and "nothing is merged" in lines[0]
 
 
+@MOVES
 def test_an_interrupted_move_finishes(machine):
     """Killed after the new folder appeared but before the old paths became links: same files in both."""
     shared, new = machine / ".lunete", machine / ".trioditis"
@@ -130,6 +138,7 @@ def test_an_interrupted_move_finishes(machine):
         assert (shared / n).is_symlink() and (shared / n).resolve() == new / n
 
 
+@MOVES
 def test_a_stale_staging_folder_is_cleared(machine):
     stage = machine / "..trioditis.migrating"
     stage.mkdir()
@@ -151,6 +160,7 @@ def test_one_variable_alone_moves_nothing(machine, monkeypatch, env, note):
     assert migrate.check_lines() == []
 
 
+@MOVES
 def test_both_variables_move_between_them(machine, monkeypatch):
     """The Docker image's case: the old variable names the old folder in the volume."""
     monkeypatch.setenv("HLIDSKJALV_HOME", str(machine / ".lunete"))
@@ -159,6 +169,7 @@ def test_both_variables_move_between_them(machine, monkeypatch):
     assert (machine / ".lunete" / "metrics.db").resolve() == machine / "volume" / "trioditis" / "metrics.db"
 
 
+@MOVES
 def test_links_still_work_when_the_volume_is_seen_from_another_root(machine, monkeypatch):
     """The image's volume is /app/logs inside and ./logs on the host: absolute links would dangle there."""
     volume = machine / "app" / "logs"
@@ -232,6 +243,7 @@ def test_a_reader_does_not_stop_the_move(machine):
         holder.wait()
 
 
+@MOVES
 def test_a_crashed_writers_journal_is_rolled_back_before_the_move(machine):
     db = machine / ".lunete" / "metrics.db"
     writer = subprocess.Popen([sys.executable, "-c",
@@ -252,6 +264,7 @@ def test_a_crashed_writers_journal_is_rolled_back_before_the_move(machine):
     assert not Path(str(db) + "-journal").exists()
 
 
+@MOVES
 def test_writers_write_through_an_old_path_link(machine):
     """`prices import --prices ~/.hlidskjalv/prices.json` after the move updates the file, keeps the link."""
     from trioditis.pricefacts import write_prices
