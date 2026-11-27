@@ -343,9 +343,14 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
         caps = budget.caps  # read once per request: the same caps for every candidate
         tokens_in = _sent_tokens(all_text(body.get("messages") or []), body)
         tokens_out = _max_output(body) or caps.assume_output_tokens
+        deadline = started + cfg.limits.total_timeout_s  # the whole wait, fallbacks included
         for model in d.candidates:
             m = cfg.models[model]
             prov = cfg.providers[m.provider]
+            left = deadline - time.monotonic()
+            if left <= 0:  # the rest are not tried: the client has waited long enough
+                attempts.append({"model": model, "error": "total_timeout"})
+                continue
             held = None  # this call's reservation against the caps, released once its cost is recorded
             estimate = None  # this call's estimated cost: charged if the provider reports no usage
             if not prov.local:
@@ -372,7 +377,10 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                 upstream = local_client if prov.local else client
                 try:
                     req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
-                    resp = await upstream.send(req, stream=stream)
+                    resp = await _within(upstream.send(req, stream=stream), deadline)
+                except TotalTimeout:
+                    attempts.append({"model": model, "error": "total_timeout"})
+                    continue
                 except httpx.HTTPError as e:
                     attempts.append({"model": model, "error": type(e).__name__})
                     continue
@@ -383,7 +391,10 @@ def create_app(cfg: Config, transport: httpx.AsyncBaseTransport | None = None,
                         upstream_body.pop("stream_options", None)
                         try:
                             req = upstream.build_request("POST", url, json=upstream_body, headers=headers)
-                            resp = await upstream.send(req, stream=stream)
+                            resp = await _within(upstream.send(req, stream=stream), deadline)
+                        except TotalTimeout:
+                            attempts.append({"model": model, "error": "total_timeout"})
+                            continue
                         except httpx.HTTPError as e:
                             attempts.append({"model": model, "error": type(e).__name__})
                             continue
@@ -671,6 +682,19 @@ def _max_output(body: dict) -> int | None:
         if isinstance(v, int) and not isinstance(v, bool) and v > 0:
             return v
     return None
+
+
+class TotalTimeout(Exception):
+    """The request's whole wait (limits.total_timeout_s) ran out while a provider was being asked."""
+
+
+async def _within(call, deadline: float):
+    """Await a provider call until the request's deadline. For a stream that is the wait for its headers:
+    once it has started, only the per-read upstream_timeout_s applies, so a started answer is never cut."""
+    try:
+        return await asyncio.wait_for(call, timeout=max(deadline - time.monotonic(), 0.001))
+    except TimeoutError as e:
+        raise TotalTimeout from e
 
 
 def _prompt_cut(text: str, body: dict, usage: dict | None) -> str | None:

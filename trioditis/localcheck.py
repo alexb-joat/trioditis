@@ -157,6 +157,8 @@ def attempts_text(attempts: list[dict]) -> str:
             why = f"HTTP {a['status']}"
         elif a.get("error") == "budget_blocked":
             why = f"budget_blocked ({a['reason']})" if a.get("reason") else "budget_blocked"
+        elif a.get("error") == "total_timeout":
+            why = "limits.total_timeout_s used up"
         else:
             why = str(a.get("error") or "failed")
         out.append(f"{a.get('model')}: {why}")

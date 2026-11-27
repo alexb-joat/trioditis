@@ -262,7 +262,7 @@ The data folder is `$TRIODITIS_HOME`, default `~/.trioditis`. An install from be
 | `route` | stable | the route used (`explicit` for a named model) |
 | `model` | stable | the model that answered, or null |
 | `status` | stable | the HTTP status returned to the client |
-| `failed_attempts` | stable | one object per candidate that failed: `model`, plus `status` or `error` |
+| `failed_attempts` | stable | one object per candidate that failed: `model`, plus `status` or `error` (`total_timeout` for a candidate given up or not tried because `limits.total_timeout_s` ran out) |
 | `latency_ms` | stable | the whole request |
 | `reasons` | stable | why this route and model, as text (the wording may change) |
 | `sensitive` | stable | the detectors that fired, or an empty list |

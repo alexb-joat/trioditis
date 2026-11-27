@@ -142,6 +142,7 @@ class Limits:
     max_body_bytes: int = 20 * 1024 * 1024
     upstream_timeout_s: float = 120.0
     max_fallbacks: int = 3
+    total_timeout_s: float = 240.0  # one request's whole wait across its fallbacks; later models get what is left
     session_ttl_s: int = 1800
 
 
@@ -174,7 +175,8 @@ CONFIG_KEYS: dict[str, frozenset[str]] = {
     "route_picker": frozenset(ROUTE_PICKER_KEYS),
     "reinforce": frozenset(REINFORCE_KEYS),
     "privacy": frozenset({"enabled", "builtin_detectors", "keywords", "patterns"}),
-    "limits": frozenset({"max_body_bytes", "upstream_timeout_s", "max_fallbacks", "session_ttl_s"}),
+    "limits": frozenset({"max_body_bytes", "upstream_timeout_s", "max_fallbacks", "session_ttl_s",
+                         "total_timeout_s"}),
     "logging": frozenset({"path", "log_prompts"}),
     "plan": frozenset(PLAN_KEYS),
 }
@@ -362,7 +364,10 @@ def parse_config(raw: dict) -> Config:
         upstream_timeout_s=float(lm.get("upstream_timeout_s", Limits.upstream_timeout_s)),
         max_fallbacks=int(lm.get("max_fallbacks", Limits.max_fallbacks)),
         session_ttl_s=int(lm.get("session_ttl_s", Limits.session_ttl_s)),
+        total_timeout_s=float(lm.get("total_timeout_s", Limits.total_timeout_s)),
     )
+    if not limits.total_timeout_s > 0:
+        raise ConfigError(f"limits.total_timeout_s must be a number of seconds above 0 (got {limits.total_timeout_s})")
     lg = raw.get("logging") or {}
     logging = Logging(path=lg.get("path", Logging.path), log_prompts=bool(lg.get("log_prompts", False)))
 

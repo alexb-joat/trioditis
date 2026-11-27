@@ -1513,3 +1513,46 @@ def test_check_and_serve_print_unknown_key_warnings(tmp_path, capsys, monkeypatc
     from trioditis.app import app_from_env
     app_from_env()
     assert "warning: unknown key logging.paht" in capsys.readouterr().err
+
+
+def test_total_timeout_gives_up_and_skips_the_rest_instead_of_waiting_per_model():
+    import asyncio
+    import time
+    seen = []
+
+    async def handler(req: httpx.Request):
+        seen.append(json.loads(req.content)["model"])
+        await asyncio.sleep(5)  # a provider that never answers in time
+        return ok("big-1")
+
+    c = cfg(limits={"total_timeout_s": 0.3})
+    t0 = time.monotonic()
+    r = make_client(handler, config=c).post("/v1/chat/completions", json=body("fix this python bug"))
+    assert time.monotonic() - t0 < 3  # not 5 s per model
+    assert r.status_code == 502
+    assert seen == ["big-1"]  # the second candidate was never asked
+    msg = r.json()["error"]["message"]
+    assert "big: limits.total_timeout_s used up, coder: limits.total_timeout_s used up" in msg
+
+
+def test_total_timeout_never_cuts_a_stream_that_has_started():
+    import asyncio
+
+    async def slow_events():
+        for word in ("one", "two"):
+            await asyncio.sleep(0.3)  # together past total_timeout_s, each read well inside upstream_timeout_s
+            yield f'data: {{"choices":[{{"delta":{{"content":"{word}"}}}}]}}\n\n'.encode()
+        yield b"data: [DONE]\n\n"
+
+    def handler(req: httpx.Request):
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=slow_events())
+
+    c = cfg(limits={"total_timeout_s": 0.2})
+    r = make_client(handler, config=c).post("/v1/chat/completions", json=body("hello", stream=True))
+    assert r.status_code == 200
+    assert "two" in r.text and "[DONE]" in r.text
+
+
+def test_total_timeout_must_be_above_zero():
+    with pytest.raises(ConfigError, match="total_timeout_s"):
+        cfg(limits={"total_timeout_s": 0})

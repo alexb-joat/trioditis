@@ -89,6 +89,7 @@ The file is read with a safe YAML loader. Keys are case-sensitive. `<name>` stan
 | `limits.max_body_bytes` | stable | `20971520` (20 MiB) | larger request bodies are refused with 413 |
 | `limits.upstream_timeout_s` | stable | `120` | seconds to wait for a provider before trying the next model |
 | `limits.max_fallbacks` | stable | `3` | how many more models to try after the first fails |
+| `limits.total_timeout_s` | stable | `240` | seconds one request may wait for an answer to start, fallbacks included: a model still silent when it runs out is given up, the remaining models are not tried, and the 502 lists them as `total_timeout`. Each model also keeps its own `upstream_timeout_s`. A stream that has started is not cut. Applies to `/v1/chat/completions`; the Claude Code passthrough (`/v1/messages`) keeps its own timeouts |
 | `limits.session_ttl_s` | stable | `1800` | how long a conversation stays on the route its first turn got |
 
 ## logging
