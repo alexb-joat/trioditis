@@ -9,6 +9,9 @@
 **Changed**
 - A request whose models all stay silent now fails after 240 s instead of up to about 8 minutes. If your models are slow to start and you relied on the longer wait, raise `limits.total_timeout_s`.
 
+**Fixed**
+- A decision-log line that can't be written (a full disk, a folder without write permission) no longer turns an answer the provider already gave, often a paid one, into a 500, or breaks the end of a stream. The answer goes out, metrics.db still records the call, and the server prints one warning until the log can be written again.
+
 ## 0.9.1 (2026-11-27)
 
 Trioditis gets its own data folder, `~/.trioditis`, and `docs/compatibility.md` writes down what 1.0 will keep stable.

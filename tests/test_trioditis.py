@@ -1556,3 +1556,34 @@ def test_total_timeout_never_cuts_a_stream_that_has_started():
 def test_total_timeout_must_be_above_zero():
     with pytest.raises(ConfigError, match="total_timeout_s"):
         cfg(limits={"total_timeout_s": 0})
+
+
+
+def test_a_failed_decision_log_write_never_turns_a_paid_answer_into_an_error(tmp_path, monkeypatch, capsys):
+    import sqlite3
+
+    import trioditis.app as app_module
+
+    def full_disk(*a, **kw):
+        raise OSError(28, "No space left on device")
+
+    def handler(req: httpx.Request):
+        if json.loads(req.content).get("stream"):
+            return httpx.Response(200, headers={"content-type": "text/event-stream"},
+                                  content=b'data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n')
+        return ok("big-1")
+
+    monkeypatch.setattr(app_module, "_append_private", full_disk)
+    c = cfg(logging={"path": str(tmp_path / "decisions.jsonl")})
+    client = make_client(handler, config=c, metrics=MetricsDB(tmp_path / "metrics.db"))
+    for _ in range(2):
+        r = client.post("/v1/chat/completions", json=body("fix this python bug"))
+        assert r.status_code == 200 and r.json()["choices"][0]["message"]["content"] == "hi"
+    r = client.post("/v1/chat/completions", json=body("fix this python bug", stream=True))
+    assert r.status_code == 200 and r.text.rstrip().endswith("data: [DONE]")
+    assert "stream_broken" not in r.text
+    err = capsys.readouterr().err
+    assert err.count("could not write the decision log") == 1  # once, not once per request
+    assert "No space left on device" in err
+    with sqlite3.connect(tmp_path / "metrics.db") as db:
+        assert db.execute("select count(*) from calls").fetchone()[0] == 3  # metrics still record each call

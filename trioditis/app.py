@@ -98,15 +98,30 @@ class DecisionLog:
         self.path = Path(path) if path else None
         self.log_prompts = log_prompts
         self.max_bytes = max_bytes
+        self.failing = False  # the last write failed: warned once, quiet until it works again
         if self.path:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             if not self.path.exists():
                 self.path.touch(mode=0o600)
 
-    def write(self, record: dict) -> None:
+    def write(self, record: dict) -> bool:
+        """False when the line could not be written. Never raises: the answer, often a paid one, still goes
+        out, and metrics.db still records the call."""
         if not self.path:
-            return
-        _append_private(self.path, json.dumps(record, ensure_ascii=False), self.max_bytes)
+            return True
+        try:
+            _append_private(self.path, json.dumps(record, ensure_ascii=False), self.max_bytes)
+        except (OSError, TypeError, ValueError) as err:
+            if not self.failing:
+                print(f"warning: could not write the decision log {self.path} ({type(err).__name__}: {err}); "
+                      f"answers still go out and metrics.db still records them. Free disk space or fix the "
+                      f"folder's permissions", file=sys.stderr)
+            self.failing = True
+            return False
+        if self.failing:
+            print(f"the decision log {self.path} is written again", file=sys.stderr)
+        self.failing = False
+        return True
 
 
 class SecurityLog:
