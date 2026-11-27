@@ -11,6 +11,7 @@
 **Changed**
 - The PyPI page lists the Python versions and systems CI tests (3.11–3.13; Linux, macOS, Windows), "Development Status :: 4 - Beta" while on 0.9.x, and links to the docs and this changelog.
 - `--help`, the README and the docs now mark `plan`, `prices`, `refit` and `reinforce` as experimental, as `docs/compatibility.md` already did: they work and are tested, but may still change in a minor release.
+- The example config and `trioditis hardware` suggestions give local models `context_tokens: 16384` (was 32000), the `OLLAMA_CONTEXT_LENGTH` the docs tell Ollama to serve. With 32000, a prompt longer than the window Ollama actually serves was routed there and cut without an error; now Trioditis skips that model with a reason. If you raised `OLLAMA_CONTEXT_LENGTH`, raise `context_tokens` with it. The docs no longer say Ollama's default window is always 4,096: Ollama 0.40 picks 4k, 32k or 256k by GPU memory, and `ollama ps` shows it.
 - A request whose models all stay silent now fails after 240 s instead of up to about 8 minutes. If your models are slow to start and you relied on the longer wait, raise `limits.total_timeout_s`.
 
 **Fixed**

@@ -343,3 +343,24 @@ def test_hardware_report_is_published_for_dashboards(tmp_path, monkeypatch):
     assert rep["hardware"]["cpu"] == "test" and "suggestions" in rep and rep["generated_at"] > 0
     if _os.name == "posix":
         assert out.stat().st_mode & 0o777 == 0o600
+
+
+def test_suggested_and_example_context_never_exceeds_what_the_docs_tell_ollama_to_serve():
+    """context_tokens above the served window means long prompts are cut without an error."""
+    import re
+    from pathlib import Path
+
+    import yaml
+
+    from trioditis import hardware
+
+    repo = Path(__file__).resolve().parent.parent
+    served = int(re.search(r"OLLAMA_CONTEXT_LENGTH=(\d+)", (repo / "docs/vscode-cline.md").read_text(encoding="utf-8")).group(1))
+    assert hardware.SERVED_CONTEXT == served
+    for path in ("config.example.yaml", "trioditis/templates/config.example.yaml"):
+        cfg = yaml.safe_load((repo / path).read_text(encoding="utf-8"))
+        local = {p for p, v in cfg["providers"].items() if v.get("local")}
+        assert local, path
+        too_big = {n: m["context_tokens"] for n, m in cfg["models"].items()
+                   if m["provider"] in local and m.get("context_tokens", 8192) > served}
+        assert too_big == {}, f"{path}: above OLLAMA_CONTEXT_LENGTH={served}: {too_big}"

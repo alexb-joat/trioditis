@@ -35,6 +35,7 @@ OVERHEAD = 1.2  # loaded model ~ file size +20% (KV cache at default context, bu
 RAM_FRACTION = 0.7  # shared memory: share of RAM a model may use...
 RAM_RESERVE = 4 * GB  # ...while always leaving this much for the OS and apps
 VRAM_FRACTION = 0.9  # dedicated VRAM minus ~10% for context / driver
+SERVED_CONTEXT = 16384  # context_tokens cap in suggestions: the OLLAMA_CONTEXT_LENGTH docs/vscode-cline.md sets
 INTERACTIVE_GB = 6.0  # shared memory: speed is RAM-bandwidth bound; prefer <= ~7-8B models
 GB_PER_B_PARAMS = 0.62  # rough Q4_K_M file size per billion parameters
 
@@ -518,7 +519,9 @@ def _snippet(cfg: Config, route: Route, local_name: str, tag: str | None, drop: 
         lines += ["models:", f"  {local_name}:", f"    provider: {prov}", f"    id: {tag}"]
         if c and c.capabilities:
             lines.append(f"    capabilities: [{', '.join(c.capabilities)}]")
-        lines.append(f"    context_tokens: {min(c.context if c else 8192, 32000)}")
+        # What Ollama serves, not the model's maximum: too high and long prompts are cut
+        # without an error; too low only skips the model. 16384 = the docs' OLLAMA_CONTEXT_LENGTH.
+        lines.append(f"    context_tokens: {min(c.context if c else 8192, SERVED_CONTEXT)}")
     order = [local_name] + [m for m in route.models if m not in (local_name, drop)]
     note = "local first = $0; cloud stays as fallback" if cloud_first else "local model first"
     lines += ["routes:", f"  {route.name}:", f"    models: [{', '.join(order)}]   # {note}"]

@@ -38,7 +38,7 @@ The file is read with a safe YAML loader. Keys are case-sensitive. `<name>` stan
 | `models.<name>.provider` | stable | required | the provider that serves it. The names `auto` and `route/…` are reserved |
 | `models.<name>.id` | stable | the model's name | the model id sent to the provider |
 | `models.<name>.capabilities` | stable | none | a list; `vision` is needed for requests with images and `tools` for requests with tools |
-| `models.<name>.context_tokens` | stable | `8192` | the model's context window; a longer request skips this model |
+| `models.<name>.context_tokens` | stable | `8192` | the context window the model is served with; a longer request skips this model. For Ollama that is `OLLAMA_CONTEXT_LENGTH` or Ollama's own default, not the model's maximum; `ollama ps` shows it |
 
 ## routes
 

@@ -19,20 +19,22 @@ providers:
 # name -> where it lives. Pull local models first: `ollama pull <id>`.
 # Cloud model ids change; check your provider's model list before relying on one.
 models:
+  # context_tokens is the window Ollama serves, not the model's maximum: 16384 matches
+  # OLLAMA_CONTEXT_LENGTH=16384 (docs/vscode-cline.md). `ollama ps` shows it (CONTEXT).
   local-general:
     provider: ollama
     id: llama3.2:3b
     capabilities: [tools]
-    context_tokens: 32000
+    context_tokens: 16384
   local-coder:
     provider: ollama
     id: qwen2.5-coder:7b
     capabilities: [tools]
-    context_tokens: 32000
+    context_tokens: 16384
   local-reasoner:
     provider: ollama
     id: deepseek-r1:8b
-    context_tokens: 32000
+    context_tokens: 16384
   local-vision:
     provider: ollama
     id: llava:7b
