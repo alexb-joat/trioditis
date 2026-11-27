@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.9.1 (2026-11-27)
+
+Trioditis gets its own data folder, `~/.trioditis`, and `docs/compatibility.md` writes down what 1.0 will keep stable.
 
 **Upgrading from 0.9.0 or earlier:** Trioditis's files move from `~/.hlidskjalv` to `~/.trioditis` the first time `serve` starts (or with `trioditis migrate`), and a link stays at each old path; rename `HLIDSKJALV_HOME` to `TRIODITIS_HOME`. Steps, Docker and Windows: [docs/deployment.md](docs/deployment.md#upgrading-from-090-or-earlier).
 
