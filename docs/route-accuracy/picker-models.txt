@@ -1,0 +1,56 @@
+Which small picker model: the comparison fixed in docs/route-accuracy.md before any run (24 November 2026)
+18 runs of .github/workflows/bench.yml on commit b75da063ab8e, 26 November 2026, GitHub shared runners (4 cores, no GPU), Ollama 0.40.0
+labels trioditis/data/routes-heldout.csv (de0497cedc0f5b8c), config d524abdb6e5a3d08, picker instruction 383685c2bbca6681, threshold 0.45, n = 315
+Workflow run ids, run 1: 7B 45901351692, llama3.2:3b 45901360220, qwen2.5:3b 45901368546, qwen2.5-coder:3b 45901377107, gemma3:4b 45901386624, phi4-mini:3.8b 45901395543, granite4:3b 45901403403, ministral-3:3b 45901412290, smollm2:1.7b 45901420267
+Workflow run ids, run 2: 7B 45901452705, llama3.2:3b 45901461831, qwen2.5:3b 45901469453, qwen2.5-coder:3b 45901476930, gemma3:4b 45901484145, phi4-mini:3.8b 45901493101, granite4:3b 45901501051, ministral-3:3b 45901508127, smollm2:1.7b 45901517495
+
+== The test: run 1 of each against the 7B's run 1 ==
+Baseline qwen2.5-coder:7b (results-qwen2.5-coder-7b-run1.answers.json): 231/315 right = 73.3% (Wilson 95% interval 68.2% to 77.9%)
+8 candidate(s) against it, same 315 prompts; Holm over 8 comparison(s), alpha 0.05
+llama3.2:3b (results-llama3.2-3b-run1.answers.json): 202/315 right = 64.1% (95% interval 58.7% to 69.2%)
+  only the baseline right 56, only this one right 27; exact sign test p = 0.00193, Holm-adjusted p = 0.00773: behind and significant
+qwen2.5:3b (results-qwen2.5-3b-run1.answers.json): 185/315 right = 58.7% (95% interval 53.2% to 64.0%)
+  only the baseline right 59, only this one right 13; exact sign test p = 3.81e-08, Holm-adjusted p = 2.29e-07: behind and significant
+qwen2.5-coder:3b (results-qwen2.5-coder-3b-run1.answers.json): 191/315 right = 60.6% (95% interval 55.1% to 65.9%)
+  only the baseline right 50, only this one right 10; exact sign test p = 1.62e-07, Holm-adjusted p = 8.08e-07: behind and significant
+gemma3:4b (results-gemma3-4b-run1.answers.json): 227/315 right = 72.1% (95% interval 66.9% to 76.7%)
+  only the baseline right 46, only this one right 42; exact sign test p = 0.749, Holm-adjusted p = 1: not shown to differ
+phi4-mini:3.8b (results-phi4-mini-3.8b-run1.answers.json): 120/315 right = 38.1% (95% interval 32.9% to 43.6%)
+  only the baseline right 129, only this one right 18; exact sign test p = 7.05e-22, Holm-adjusted p = 4.93e-21: behind and significant
+granite4:3b (results-granite4-3b-run1.answers.json): 210/315 right = 66.7% (95% interval 61.3% to 71.6%)
+  only the baseline right 44, only this one right 23; exact sign test p = 0.0139, Holm-adjusted p = 0.0418: behind and significant
+ministral-3:3b (results-ministral-3-3b-run1.answers.json): 226/315 right = 71.7% (95% interval 66.5% to 76.4%)
+  only the baseline right 53, only this one right 48; exact sign test p = 0.691, Holm-adjusted p = 1: not shown to differ
+smollm2:1.7b (results-smollm2-1.7b-run1.answers.json): 89/315 right = 28.3% (95% interval 23.6% to 33.5%)
+  only the baseline right 156, only this one right 14; exact sign test p = 1.63e-31, Holm-adjusted p = 1.31e-30: behind and significant
+
+== Answers changed between run 1 and run 2 ==
+qwen2.5-coder:7b (results-qwen2.5-coder-7b-run1.answers.json) and qwen2.5-coder:7b (results-qwen2.5-coder-7b-run2.answers.json): 4 of 315 prompts got a different route (1.3%); of those, right only in the first 1, right only in the second 1
+llama3.2:3b (results-llama3.2-3b-run1.answers.json) and llama3.2:3b (results-llama3.2-3b-run2.answers.json): 13 of 315 prompts got a different route (4.1%); of those, right only in the first 8, right only in the second 3
+qwen2.5:3b (results-qwen2.5-3b-run1.answers.json) and qwen2.5:3b (results-qwen2.5-3b-run2.answers.json): 11 of 315 prompts got a different route (3.5%); of those, right only in the first 1, right only in the second 4
+qwen2.5-coder:3b (results-qwen2.5-coder-3b-run1.answers.json) and qwen2.5-coder:3b (results-qwen2.5-coder-3b-run2.answers.json): 0 of 315 prompts got a different route (0.0%); of those, right only in the first 0, right only in the second 0
+gemma3:4b (results-gemma3-4b-run1.answers.json) and gemma3:4b (results-gemma3-4b-run2.answers.json): 1 of 315 prompts got a different route (0.3%); of those, right only in the first 1, right only in the second 0
+phi4-mini:3.8b (results-phi4-mini-3.8b-run1.answers.json) and phi4-mini:3.8b (results-phi4-mini-3.8b-run2.answers.json): 5 of 315 prompts got a different route (1.6%); of those, right only in the first 1, right only in the second 3
+granite4:3b (results-granite4-3b-run1.answers.json) and granite4:3b (results-granite4-3b-run2.answers.json): 20 of 315 prompts got a different route (6.3%); of those, right only in the first 9, right only in the second 8
+ministral-3:3b (results-ministral-3-3b-run1.answers.json) and ministral-3:3b (results-ministral-3-3b-run2.answers.json): 9 of 315 prompts got a different route (2.9%); of those, right only in the first 1, right only in the second 6
+smollm2:1.7b (results-smollm2-1.7b-run1.answers.json) and smollm2:1.7b (results-smollm2-1.7b-run2.answers.json): 0 of 315 prompts got a different route (0.0%); of those, right only in the first 0, right only in the second 0
+
+== The same test on run 2 (would it reverse a conclusion?) ==
+Baseline qwen2.5-coder:7b (results-qwen2.5-coder-7b-run2.answers.json): 231/315 right = 73.3% (Wilson 95% interval 68.2% to 77.9%)
+8 candidate(s) against it, same 315 prompts; Holm over 8 comparison(s), alpha 0.05
+llama3.2:3b (results-llama3.2-3b-run2.answers.json): 197/315 right = 62.5% (95% interval 57.1% to 67.7%)
+  only the baseline right 63, only this one right 29; exact sign test p = 0.000509, Holm-adjusted p = 0.00204: behind and significant
+qwen2.5:3b (results-qwen2.5-3b-run2.answers.json): 188/315 right = 59.7% (95% interval 54.2% to 65.0%)
+  only the baseline right 57, only this one right 14; exact sign test p = 2.67e-07, Holm-adjusted p = 1.33e-06: behind and significant
+qwen2.5-coder:3b (results-qwen2.5-coder-3b-run2.answers.json): 191/315 right = 60.6% (95% interval 55.1% to 65.9%)
+  only the baseline right 50, only this one right 10; exact sign test p = 1.62e-07, Holm-adjusted p = 9.7e-07: behind and significant
+gemma3:4b (results-gemma3-4b-run2.answers.json): 226/315 right = 71.7% (95% interval 66.5% to 76.4%)
+  only the baseline right 46, only this one right 41; exact sign test p = 0.668, Holm-adjusted p = 1: not shown to differ
+phi4-mini:3.8b (results-phi4-mini-3.8b-run2.answers.json): 122/315 right = 38.7% (95% interval 33.5% to 44.2%)
+  only the baseline right 129, only this one right 20; exact sign test p = 1.04e-20, Holm-adjusted p = 7.28e-20: behind and significant
+granite4:3b (results-granite4-3b-run2.answers.json): 209/315 right = 66.3% (95% interval 61.0% to 71.3%)
+  only the baseline right 39, only this one right 17; exact sign test p = 0.00456, Holm-adjusted p = 0.0137: behind and significant
+ministral-3:3b (results-ministral-3-3b-run2.answers.json): 231/315 right = 73.3% (95% interval 68.2% to 77.9%)
+  only the baseline right 50, only this one right 50; exact sign test p = 1, Holm-adjusted p = 1: not shown to differ
+smollm2:1.7b (results-smollm2-1.7b-run2.answers.json): 89/315 right = 28.3% (95% interval 23.6% to 33.5%)
+  only the baseline right 155, only this one right 13; exact sign test p = 4.94e-32, Holm-adjusted p = 3.95e-31: behind and significant

@@ -1,0 +1,272 @@
+{
+  "schema": "trioditis-results.v1",
+  "trioditis": "0.7.0",
+  "date": "2026-11-26",
+  "settings": {
+    "config_sha256_16": "d524abdb6e5a3d08",
+    "heldout_sha256_16": "de0497cedc0f5b8c",
+    "instruction_sha256_16": "383685c2bbca6681",
+    "embeddings_threshold": 0.45,
+    "routes": [
+      "code",
+      "reasoning",
+      "writing",
+      "quick"
+    ]
+  },
+  "models": {
+    "server": "ollama",
+    "server_version": "0.40.0",
+    "picker": "qwen2.5-coder:7b",
+    "picker_digest": "dae161e27b0e90dd1856c8bb3209201fd6736d8eb66298e75ed87571486f4364",
+    "embeddings": "nomic-embed-text",
+    "embeddings_digest": "0a109f422b47e3a30ba2b10eca18548e944e8a23073ee3f3e947efcf3c45e59f"
+  },
+  "machine": {
+    "os": "Linux",
+    "arch": "x86_64",
+    "python": "3.12.16",
+    "cpu": "AMD EPYC 7763 64-Core Processor",
+    "cores": 4,
+    "ram_gb": 16.8,
+    "unified_memory": false,
+    "gpus": [
+      {
+        "name": "UNKNOWN GPU [0x6]",
+        "vendor": "unknown",
+        "shared": false,
+        "vram_gb": null
+      }
+    ]
+  },
+  "timing": {
+    "repeats": 3,
+    "failed": 0,
+    "by_chars": [
+      {
+        "chars": 100,
+        "n": 3,
+        "median": 3.26,
+        "p90": 3.48,
+        "min": 2.91,
+        "max": 3.48
+      },
+      {
+        "chars": 200,
+        "n": 3,
+        "median": 5.09,
+        "p90": 6.94,
+        "min": 5.01,
+        "max": 6.94
+      },
+      {
+        "chars": 500,
+        "n": 3,
+        "median": 10.04,
+        "p90": 10.3,
+        "min": 9.26,
+        "max": 10.3
+      },
+      {
+        "chars": 1000,
+        "n": 3,
+        "median": 19.95,
+        "p90": 21.78,
+        "min": 19.79,
+        "max": 21.78
+      },
+      {
+        "chars": 2000,
+        "n": 3,
+        "median": 36.08,
+        "p90": 37.21,
+        "min": 33.96,
+        "max": 37.21
+      }
+    ]
+  },
+  "heldout": {
+    "n": 315,
+    "picker": {
+      "right": 231,
+      "n": 315,
+      "low95": 0.6819,
+      "high95": 0.7791,
+      "per_route": {
+        "code": {
+          "right": 48,
+          "n": 76,
+          "low95": 0.5193,
+          "high95": 0.7312
+        },
+        "reasoning": {
+          "right": 77,
+          "n": 78,
+          "low95": 0.9309,
+          "high95": 0.9977
+        },
+        "writing": {
+          "right": 80,
+          "n": 83,
+          "low95": 0.899,
+          "high95": 0.9876
+        },
+        "quick": {
+          "right": 26,
+          "n": 78,
+          "low95": 0.2387,
+          "high95": 0.4436
+        }
+      },
+      "confusion": {
+        "code": {
+          "code": 48,
+          "reasoning": 17,
+          "writing": 9,
+          "quick": 2
+        },
+        "reasoning": {
+          "reasoning": 77,
+          "writing": 1
+        },
+        "writing": {
+          "writing": 80,
+          "quick": 3
+        },
+        "quick": {
+          "reasoning": 33,
+          "writing": 19,
+          "quick": 26
+        }
+      },
+      "no_route": 0,
+      "failed_after_retry": 0,
+      "seconds_per_call": {
+        "n": 315,
+        "median": 2.63,
+        "p90": 3.72,
+        "min": 1.49,
+        "max": 5.46
+      }
+    },
+    "router_keywords": {
+      "right": 116,
+      "n": 315,
+      "low95": 0.3169,
+      "high95": 0.4228,
+      "per_route": {
+        "code": {
+          "right": 18,
+          "n": 76,
+          "low95": 0.1554,
+          "high95": 0.3436
+        },
+        "reasoning": {
+          "right": 7,
+          "n": 78,
+          "low95": 0.0442,
+          "high95": 0.1738
+        },
+        "writing": {
+          "right": 13,
+          "n": 83,
+          "low95": 0.0939,
+          "high95": 0.2498
+        },
+        "quick": {
+          "right": 78,
+          "n": 78,
+          "low95": 0.9531,
+          "high95": 1.0
+        }
+      },
+      "confusion": {
+        "code": {
+          "code": 18,
+          "writing": 1,
+          "quick": 57
+        },
+        "reasoning": {
+          "code": 1,
+          "reasoning": 7,
+          "writing": 2,
+          "quick": 68
+        },
+        "writing": {
+          "code": 1,
+          "writing": 13,
+          "quick": 69
+        },
+        "quick": {
+          "quick": 78
+        }
+      }
+    },
+    "router": {
+      "right": 205,
+      "n": 315,
+      "low95": 0.5966,
+      "high95": 0.7013,
+      "per_route": {
+        "code": {
+          "right": 31,
+          "n": 76,
+          "low95": 0.3044,
+          "high95": 0.5202
+        },
+        "reasoning": {
+          "right": 45,
+          "n": 78,
+          "low95": 0.4662,
+          "high95": 0.6804
+        },
+        "writing": {
+          "right": 65,
+          "n": 83,
+          "low95": 0.683,
+          "high95": 0.8582
+        },
+        "quick": {
+          "right": 64,
+          "n": 78,
+          "low95": 0.721,
+          "high95": 0.89
+        }
+      },
+      "confusion": {
+        "code": {
+          "code": 31,
+          "reasoning": 7,
+          "writing": 6,
+          "quick": 32
+        },
+        "reasoning": {
+          "code": 5,
+          "reasoning": 45,
+          "writing": 7,
+          "quick": 21
+        },
+        "writing": {
+          "code": 4,
+          "reasoning": 2,
+          "writing": 65,
+          "quick": 12
+        },
+        "quick": {
+          "code": 1,
+          "reasoning": 6,
+          "writing": 7,
+          "quick": 64
+        }
+      }
+    },
+    "router_note": null,
+    "picker_vs_router": {
+      "only_first": 74,
+      "only_second": 48,
+      "sign_test_p": 0.023216,
+      "router": "router"
+    }
+  },
+  "own_labels": null
+}

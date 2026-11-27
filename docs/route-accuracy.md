@@ -479,3 +479,122 @@ prompts. `--own-labels` adds counts on a person's own labelled prompts, never th
   changes, and the runner's waiting times, labelled indicative only.
 - **Limits.** These prompts were written for the test. A ranking on them is a ranking on them, not on
   real use. One shared runner type, so the timings say little about other hardware.
+
+## Which small picker model: the result (26 November 2026)
+
+**No small model picked the route more often than `qwen2.5-coder:7b`.** Two, `gemma3:4b` and
+`ministral-3:3b`, were not shown to differ from it; the other six were behind, each significant after
+Holm's correction. Run 2 reverses no conclusion. The example config keeps `qwen2.5-coder:7b`: no model
+passed the test that would make it the better picker, and at this n "not shown to differ" is not
+evidence that a model is as good (see "What this n can show" in the plan above).
+
+**What ran.** 18 runs of `.github/workflows/bench.yml` on 26 November 2026, two per model, all on commit
+`b75da06` (the plan above was already public in it), Ollama 0.40.0, the shipped settings. The files say
+`trioditis: 0.7.0` because the version number changes only at release; the code that ran is that commit.
+Every run answered all 315 prompts with no failed call. The router, which doesn't depend on the picker,
+picked the labelled route for 205 of 315 in all 18 runs, its committed result. The 7B's run 1 named the
+same route as the laptop run of 19 November on all 315 prompts, and run 2 on 311.
+Every file is in [route-accuracy/picker-models/](route-accuracy/picker-models/) (the results and answers
+file of each run), and the test's full output, with every workflow run id, in
+[picker-models.txt](route-accuracy/picker-models.txt).
+
+**The test, on run 1.** Each small model against the 7B on the prompts where exactly one of the two was
+right: exact two-sided sign test, Holm's correction over the eight tests at 0.05.
+
+| Picker | Right of 315 (95% interval) | Only the 7B right | Only this one right | Holm-adjusted p | Reading |
+|---|---|---|---|---|---|
+| `qwen2.5-coder:7b` | 231, 73.3% (68.2–77.9%) | | | | baseline |
+| `gemma3:4b` | 227, 72.1% (66.9–76.7%) | 46 | 42 | 1 | not shown to differ |
+| `ministral-3:3b` | 226, 71.7% (66.5–76.4%) | 53 | 48 | 1 | not shown to differ |
+| `granite4:3b` | 210, 66.7% (61.3–71.6%) | 44 | 23 | 0.042 | behind |
+| `llama3.2:3b` | 202, 64.1% (58.7–69.2%) | 56 | 27 | 0.0077 | behind |
+| `qwen2.5-coder:3b` | 191, 60.6% (55.1–65.9%) | 50 | 10 | < 0.001 | behind |
+| `qwen2.5:3b` | 185, 58.7% (53.2–64.0%) | 59 | 13 | < 0.001 | behind |
+| `phi4-mini:3.8b` | 120, 38.1% (32.9–43.6%) | 129 | 18 | < 0.001 | behind |
+| `smollm2:1.7b` | 89, 28.3% (23.6–33.5%) | 156 | 14 | < 0.001 | behind |
+
+Intervals are Wilson's. A reply that names no route counts as wrong: `smollm2:1.7b` gave 10 such replies,
+`phi4-mini:3.8b` 5, `qwen2.5-coder:3b` 3, `granite4:3b` 2, the rest none.
+
+**Run 2.** Same settings, run again. At temperature 0 a model can still change its answer; how many
+changed, and the same test on run 2:
+
+| Picker | Answers changed from run 1 | Of those, right only in run 1 / only in run 2 | Run 2 right | Holm-adjusted p, run 2 |
+|---|---|---|---|---|
+| `qwen2.5-coder:7b` | 4 | 1 / 1 | 231 | baseline |
+| `gemma3:4b` | 1 | 1 / 0 | 226 | 1 |
+| `ministral-3:3b` | 9 | 1 / 6 | 231 | 1 |
+| `granite4:3b` | 20 | 9 / 8 | 209 | 0.014 |
+| `llama3.2:3b` | 13 | 8 / 3 | 197 | 0.0020 |
+| `qwen2.5-coder:3b` | 0 | 0 / 0 | 191 | < 0.001 |
+| `qwen2.5:3b` | 11 | 1 / 4 | 188 | < 0.001 |
+| `phi4-mini:3.8b` | 5 | 1 / 3 | 122 | < 0.001 |
+| `smollm2:1.7b` | 0 | 0 / 0 | 89 | < 0.001 |
+
+`ministral-3:3b` tied the 7B in run 2 (231 each; 50 prompts right only for one, 50 only for the other).
+Every reading in the first table holds in run 2.
+
+**Per route, run 1** (right of the prompts labelled with that route; each route's 95% interval is in the
+results files):
+
+| Picker | code (76) | reasoning (78) | writing (83) | quick (78) |
+|---|---|---|---|---|
+| router (keywords + embeddings) | 31 | 45 | 65 | 64 |
+| `qwen2.5-coder:7b` | 48 | 77 | 80 | 26 |
+| `gemma3:4b` | 8 | 76 | 75 | 68 |
+| `ministral-3:3b` | 14 | 73 | 66 | 73 |
+| `granite4:3b` | 62 | 59 | 81 | 8 |
+| `llama3.2:3b` | 58 | 56 | 66 | 22 |
+| `qwen2.5-coder:3b` | 16 | 74 | 81 | 20 |
+| `qwen2.5:3b` | 1 | 78 | 82 | 24 |
+| `phi4-mini:3.8b` | 0 | 1 | 79 | 40 |
+| `smollm2:1.7b` | 0 | 1 | 66 | 22 |
+
+The two models closest to the 7B get there on different prompts. The 7B misses on quick prompts and
+sends them to routes that usually cost more (33 of 78 to `reasoning`, 19 to `writing`). `ministral-3:3b`
+misses the other way, like the router: 65 of its 89 misses went to `quick`, the default route, 43 of them
+code prompts. `gemma3:4b` sent 36 code prompts to `reasoning` and 27 to `quick`. `phi4-mini:3.8b` and
+`smollm2:1.7b` named `writing` for most prompts (257 and 240 of 315). The full table of labelled against
+picked routes is under `heldout.picker.confusion` in each results file.
+
+**Waiting times, indicative only.** Each run landed on whatever machine GitHub assigned: 4 cores and
+16.5–16.8 GB of memory every time, but six different processor models across the 18 runs, and no model's
+two runs landed on the same one. So these numbers mix the model with the machine. The same model's median
+at 200 characters changed by up to 2.6 times between its two runs (`ministral-3:3b`: 0.94 s, then
+2.41 s). Model loaded; "per call" is the median over the 315 held-out prompts (median length 78
+characters), "200 characters" the median of three calls at the example config's `max_chars`.
+
+| Picker | Run 1 processor | Per call | 200 characters | Run 2 processor | Per call | 200 characters |
+|---|---|---|---|---|---|---|
+| `qwen2.5-coder:7b` | AMD EPYC 7763 | 2.63 s | 5.09 s | AMD EPYC 9V74 | 1.70 s | 2.93 s |
+| `gemma3:4b` | AMD EPYC 9V45 | 1.59 s | 2.07 s | AMD EPYC 9V74 | 2.63 s | 2.26 s |
+| `ministral-3:3b` | AMD EPYC 9V45 | 0.49 s | 0.94 s | AMD EPYC 7763 | 1.24 s | 2.41 s |
+| `granite4:3b` | Intel Xeon Platinum 8370C | 1.18 s | 2.25 s | AMD EPYC 7763 | 1.35 s | 2.64 s |
+| `llama3.2:3b` | Intel Xeon 6975P-C | 0.53 s | 0.99 s | AMD EPYC 9V74 | 0.76 s | 1.32 s |
+| `qwen2.5-coder:3b` | Intel Xeon Platinum 8573C | 0.93 s | 1.49 s | AMD EPYC 9V74 | 0.76 s | 1.40 s |
+| `qwen2.5:3b` | Intel Xeon 6975P-C | 0.56 s | 0.93 s | AMD EPYC 9V74 | 0.80 s | 1.46 s |
+| `phi4-mini:3.8b` | AMD EPYC 7763 | 1.25 s | 2.25 s | AMD EPYC 9V74 | 0.76 s | 1.33 s |
+| `smollm2:1.7b` | Intel Xeon 6975P-C | 0.38 s | 0.65 s | Intel Xeon Platinum 8573C | 0.41 s | 0.72 s |
+
+On both of its runners the 7B's median at 200 characters was over the example config's 2.5 s
+`timeout_ms`; on the laptop of 20 November it was 2.04 s. On the held-out prompts its median was 2.63 s
+on the first runner, also over, and 1.70 s on the second. A request whose picker call passes the timeout
+gets the router's route. The other lengths (100, 500, 1,000 and 2,000 characters) are under `timing` in
+each results file.
+
+**Limits.** These prompts were written for the test, so this ranking is a ranking on them, not on real
+use. Two runs per model, each on one machine. Accuracy is the part that carries over between machines
+(the 7B's first runner run named the laptop's route on all 315 prompts); the timings above do not. The plan
+called the runners "one shared runner type"; they were one runner label with six processor models behind
+it.
+
+**To reproduce the test** from the committed answers files:
+
+```bash
+d=docs/route-accuracy/picker-models
+python scripts/compare_results.py compare --baseline $d/results-qwen2.5-coder-7b-run1.answers.json \
+  $d/results-{llama3.2-3b,qwen2.5-3b,qwen2.5-coder-3b,gemma3-4b,phi4-mini-3.8b,granite4-3b,ministral-3-3b,smollm2-1.7b}-run1.answers.json
+python scripts/compare_results.py changed $d/results-granite4-3b-run1.answers.json $d/results-granite4-3b-run2.answers.json
+```
+
+To measure a model again on GitHub's machines: `gh workflow run bench.yml -f model=ministral-3:3b -f repeat=1`.
