@@ -3,6 +3,7 @@
 ## Unreleased
 
 **Added**
+- A test runs every command the README and docs show that works offline (16 commands and one bash block) and checks it exits 0. Each command that needs the network, a model, Docker or a file of your own is listed with that reason, so a new or renamed command in the docs fails the test until it is sorted.
 - An unknown key in `config.yaml` (a typo such as `upstream_timeout` for `upstream_timeout_s`) is still ignored, but `trioditis check` and the server's start now print a warning that names it and the nearest known key.
 - `trioditis check` warns when a provider marked `local: true` has a public address. Sensitive prompts may go to local providers, so the flag must be true; private ranges (`10.0.0.0/8`, `192.168.0.0/16`, Tailscale's `100.64.0.0/10` and the like) count as your network. Only the host name is resolved; nothing is sent to the provider for this.
 - The README has upgrade and uninstall steps: what to run for pipx, a clone and Docker, and the four places Trioditis writes to, so an uninstall leaves nothing behind.
