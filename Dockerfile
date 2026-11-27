@@ -6,7 +6,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    # metrics.db, budget.json, prices.json: the app user has no home, so keep them in the logs volume
+    # metrics.db, budget.json, prices.json: the app user has no home, so keep them in the logs volume.
+    TRIODITIS_HOME=/app/logs/trioditis \
+    # Where images before 0.9.1 kept them. With both set, `serve` moves the files from here into
+    # TRIODITIS_HOME when it starts (a link stays at each old path); on a new volume it does nothing.
     HLIDSKJALV_HOME=/app/logs/hlidskjalv
 
 RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin app

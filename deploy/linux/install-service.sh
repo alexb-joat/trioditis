@@ -40,7 +40,7 @@ WantedBy=default.target
 UNIT
 cat > "$UNITS/trioditis-refit.service" <<UNIT
 [Unit]
-Description=Trioditis daily refit (reads the call record and model facts; writes ~/.hlidskjalv/trioditis-fitted.json)
+Description=Trioditis daily refit (reads the call record and model facts; writes trioditis-fitted.json in the data folder, ~/.trioditis by default)
 
 [Service]
 Type=oneshot

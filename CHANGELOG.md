@@ -13,6 +13,7 @@
 **Changed**
 - After the move, edit `budget.json` and `prices.json` in `~/.trioditis`: an editor that saves by replacing the file would cut the link at the old path (`check` then reports both copies). Trioditis's own writers follow the link.
 - A folder that holds only the dashboard's files is no longer taken for Trioditis's data folder: a fresh install next to it starts `~/.trioditis`.
+- The Docker image keeps the data folder in `/app/logs/trioditis` (`TRIODITIS_HOME`). On a volume from an earlier image, the first start moves the files from `/app/logs/hlidskjalv` and leaves relative links there, so they also resolve from the host's `./logs`. A new volume gets only `trioditis/`.
 
 **Deprecated**
 - `HLIDSKJALV_HOME`: still read when `TRIODITIS_HOME` is unset, with a one-line warning. Rename it to `TRIODITIS_HOME` (same value).

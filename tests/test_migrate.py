@@ -159,6 +159,25 @@ def test_both_variables_move_between_them(machine, monkeypatch):
     assert (machine / ".lunete" / "metrics.db").resolve() == machine / "volume" / "trioditis" / "metrics.db"
 
 
+def test_links_still_work_when_the_volume_is_seen_from_another_root(machine, monkeypatch):
+    """The image's volume is /app/logs inside and ./logs on the host: absolute links would dangle there."""
+    volume = machine / "app" / "logs"
+    (volume / "hlidskjalv").mkdir(parents=True)
+    for n in ("metrics.db", "budget.json", "trials"):
+        os.rename(machine / ".lunete" / n, volume / "hlidskjalv" / n)
+    monkeypatch.setenv("HLIDSKJALV_HOME", str(volume / "hlidskjalv"))
+    monkeypatch.setenv("TRIODITIS_HOME", str(volume / "trioditis"))
+    assert _run() == 0
+    assert os.readlink(volume / "hlidskjalv" / "metrics.db") == os.path.join("..", "trioditis", "metrics.db")
+    host = machine / "host-logs"
+    os.rename(volume, host)  # the same folder under another path, as the host sees it
+    db = sqlite3.connect(f"file:{host / 'hlidskjalv' / 'metrics.db'}?mode=ro", uri=True)
+    assert db.execute("select count(*) from calls").fetchone() == (1,)
+    db.close()
+    assert (host / "hlidskjalv" / "budget.json").read_text() == '{"daily_usd": 2}'
+    assert (host / "hlidskjalv" / "trials" / "2026-11-09" / "run.jsonl").is_file()
+
+
 def test_windows_keeps_the_old_folder(machine, monkeypatch, capsys):
     monkeypatch.setattr(migrate, "_windows", lambda: True)
     before = _snapshot(machine)

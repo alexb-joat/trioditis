@@ -194,7 +194,7 @@ def apply(p: Plan, log) -> list[str]:
             tmp = src / f".{n}.trioditis-link"
             if tmp.is_symlink() or tmp.exists():
                 tmp.unlink()
-            os.symlink(dst / n, tmp)
+            os.symlink(_link_to(dst / n, src), tmp)
             os.replace(tmp, src / n)  # the old path turns into a link in one step
             how = "copied (other disk)" if n in copied else "moved"
             log(f"{how} {src / n} -> {dst / n}; the old path is now a link")
@@ -208,13 +208,22 @@ def apply(p: Plan, log) -> list[str]:
                 shutil.copytree(src / n, dst / n, symlinks=True)
                 shutil.rmtree(src / n)
                 how = "copied (other disk)"
-            os.symlink(dst / n, src / n, target_is_directory=True)
+            os.symlink(_link_to(dst / n, src), src / n, target_is_directory=True)
             log(f"{how} {src / n}/ -> {dst / n}/; the old path is now a link")
     finally:
         if lock is not None:
             lock.execute("ROLLBACK")
             lock.close()
     return p.move + p.finish
+
+
+def _link_to(target: Path, folder: Path) -> str:
+    """The link text for `target`, relative to `folder` (for example ../.trioditis/metrics.db), so the
+    link also works where the two folders sit under another root: a Docker volume seen from the host."""
+    try:
+        return os.path.relpath(target, folder)
+    except ValueError:  # another drive on Windows: no relative path exists
+        return str(target)
 
 
 def _logger(p: Plan, out):
