@@ -128,7 +128,7 @@ def test_every_command_in_the_docs_is_run_here_or_listed_with_a_reason():
 
 def _env(home: Path) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith(("TRIODITIS_", "HLIDSKJALV_", "ANTHROPIC_", "OPENAI_", "OPENROUTER_", "CLAUDE_"))}
+           if k != "HLIDSKJALV_HOME" and not k.startswith(("TRIODITIS_", "ANTHROPIC_", "OPENAI_", "OPENROUTER_", "CLAUDE_"))}
     env.update(HOME=str(home), USERPROFILE=str(home), PYTHONPATH=str(REPO), PYTHONIOENCODING="utf-8",
                PATH=os.pathsep.join([str(Path(sys.executable).parent), env.get("PATH", "")]))
     return env
