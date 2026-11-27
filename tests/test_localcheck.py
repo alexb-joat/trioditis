@@ -214,3 +214,42 @@ def test_the_readme_shows_what_check_really_prints(capsys, monkeypatch):
     out = capsys.readouterr().out.strip()
     assert out.startswith("config OK") and out in (repo / "README.md").read_text(encoding="utf-8")
 
+
+
+@pytest.mark.parametrize("cmd", ["check", "serve", "explain"])
+def test_a_missing_config_says_how_to_set_one_up(tmp_path, monkeypatch, cmd):
+    # The first thing a new user may run: `serve` outside the folder `init` made.
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TRIODITIS_CONFIG", raising=False)
+    from trioditis.__main__ import main
+    argv = [cmd, "hello"] if cmd == "explain" else [cmd]
+    with pytest.raises(SystemExit) as e:
+        main(argv)
+    msg = str(e.value.code)
+    assert f"no config at {tmp_path / 'config.yaml'}" in msg
+    assert "trioditis init --dir" in msg and "--config" in msg
+
+
+@pytest.mark.parametrize("listed,expect", [
+    (["llama3.2:3b", "nomic-embed-text:latest"], "embeddings: nomic-embed-text on local: ready"),
+    (["llama3.2:3b"], "not on this server: ollama pull nomic-embed-text; until then, routes use keywords"),
+])
+def test_check_reports_the_embeddings_model(tmp_path, capsys, monkeypatch, listed, expect):
+    # A missing embeddings model only showed in each decision's reasons; `check` now says it, and what it costs.
+    from trioditis.__main__ import main
+    asked = _fake_network(monkeypatch, lambda r: httpx.Response(200, json={"data": [{"id": i} for i in listed]}))
+    f = tmp_path / "config.yaml"
+    f.write_text(json.dumps({**BASE, "embeddings": {"provider": "local", "model": "nomic-embed-text"}}),
+                 encoding="utf-8")
+    main(["--config", str(f), "check"])
+    out = " ".join(capsys.readouterr().out.split())  # textwrap may break the long line
+    assert expect in out
+    assert all(u.startswith("http://localhost:11434/") for u in asked)  # local only, never the cloud
+    if "ready" not in expect:
+        assert "116 of 315" in out
+
+
+def test_check_says_when_embeddings_are_off(tmp_path, capsys, monkeypatch):
+    _fake_network(monkeypatch, lambda r: httpx.Response(200, json={"data": [{"id": "llama3.2:3b"}]}))
+    out = " ".join(_run_check(tmp_path, capsys).split())
+    assert "embeddings: off; routes use keywords and patterns alone" in out

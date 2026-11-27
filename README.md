@@ -131,6 +131,7 @@ config OK: 9 models, 4 routes
   claude-opus              cloud  missing $ANTHROPIC_API_KEY
   gpt                      cloud  missing $OPENAI_API_KEY
 2 of 9 models confirmed ready; cloud providers are never contacted
+embeddings: nomic-embed-text on ollama: ready
 ```
 
 **4.** Try it:

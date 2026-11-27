@@ -94,6 +94,29 @@ def local_states(cfg: Config, transport: httpx.BaseTransport | None = None) -> t
     return states, notes
 
 
+KEYWORDS_ONLY = ("routes use keywords and patterns alone, which chose the labelled route for 116 of 315 "
+                 "held-out prompts instead of 205 (docs/route-accuracy.md)")
+
+
+def embeddings_lines(cfg: Config, transport: httpx.BaseTransport | None = None) -> list[str]:
+    """`check`'s line for `embeddings:`. Without the model the router still answers, but picks routes
+    far less well, and nothing else says so: a missing model showed only in each decision's reasons."""
+    e = cfg.embeddings
+    if e is None:
+        return [f"embeddings: off; {KEYWORDS_ONLY}"]
+    p = cfg.providers[e.provider]
+    head = f"embeddings: {e.model} on {p.name}"
+    listing = probe(p, transport=transport)
+    if not listing.answered:
+        return [f"{head}: not answering at {p.base_url} ({listing.error}); {KEYWORDS_ONLY}"]
+    if listing.ids is None:
+        return [f"{head}: server answers; model not checked"]
+    if has_model(p, listing, e.model):
+        return [f"{head}: ready"]
+    fix = f"ollama pull {e.model}" if looks_like_ollama(p) else "load the model on that server"
+    return [f"{head}: not on this server: {fix}; until then, {KEYWORDS_ONLY}"]
+
+
 def connection_hint(cfg: Config, attempts: list[dict]) -> str:
     """One sentence for the 502 when a local provider could not be reached; '' otherwise."""
     seen: dict[str, Provider] = {}

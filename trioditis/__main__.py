@@ -51,6 +51,16 @@ def load_dotenv(path: str | Path = ".env") -> list[str]:
     return loaded
 
 
+def missing_config(path: str) -> str:
+    """The first error a new user may see (`serve` outside the folder `init` made): say what to do."""
+    where = Path(path).resolve()
+    return (f"no config at {where}\n"
+            f"  Trioditis reads config.yaml and .env from the current folder.\n"
+            f"  First time? Run `trioditis init --dir ~/trioditis`, then `cd ~/trioditis`.\n"
+            f"  Already set up? `cd` to that folder, or pass `--config /path/to/config.yaml` "
+            f"(or set TRIODITIS_CONFIG).")
+
+
 def main(argv: list[str] | None = None) -> None:
     load_dotenv(env("ENV_FILE", ".env"))
     ap = argparse.ArgumentParser(prog="trioditis")
@@ -204,8 +214,10 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(results_run(args))
     try:
         cfg = load_config(args.config)
+    except FileNotFoundError:
+        sys.exit(missing_config(args.config))
     except (OSError, ConfigError) as err:
-        sys.exit(f"config error: {err}")
+        sys.exit(f"config error in {args.config}: {err}")
 
     if args.cmd == "check":
         print(f"config OK: {len(cfg.models)} models, {len(cfg.routes)} routes")
@@ -229,6 +241,10 @@ def main(argv: list[str] | None = None) -> None:
             print(textwrap.fill(note, width=98, initial_indent="  ", subsequent_indent="    ",
                                 break_long_words=False, break_on_hyphens=False))
         print(f"{confirmed} of {len(cfg.models)} models confirmed ready; cloud providers are never contacted")
+        from .localcheck import embeddings_lines
+        for line in embeddings_lines(cfg):
+            print(textwrap.fill(line, width=98, subsequent_indent="    ", break_long_words=False,
+                                break_on_hyphens=False))
         from .localcheck import picker_lines
         for line in picker_lines(cfg):  # [] unless route_picker: is configured
             print(line)
