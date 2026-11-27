@@ -162,3 +162,9 @@ def test_a_raised_bound_without_a_new_minimum_lockfile_fails():
     assert min_pin_problems(raised, read(MIN), read(DEV)) == [
         f"httpx: pyproject.toml says >=99.0, the minimum lockfile has {entries(read(MIN))['httpx'][0]}"]
     assert min_pin_problems({**bounds, "httpx": ""}, read(MIN), read(DEV)) == ["httpx: no lower bound in pyproject.toml"]
+
+
+def test_the_newest_deps_pip_lockfile_names_its_command_and_is_hashed():
+    path = ".github/newest-deps/pip.txt"
+    assert header_and_hash_problems(read(REPO / path), path, ".github/newest-deps/pip.in") == []
+    assert "pip" in entries(read(REPO / path))

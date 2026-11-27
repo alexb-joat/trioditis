@@ -1,0 +1,41 @@
+name: newest-deps
+
+# `pipx install trioditis` takes the newest release of every dependency, not the lockfile. Once a week this
+# job installs the same way and runs the tests, so a dependency release that breaks Trioditis shows up here
+# before a user hits it. Releases younger than a week are left out, the hold Dependabot uses
+# (.github/dependabot.yml), so a hijacked release pulled within days never runs here.
+# This is the one job that installs without hashes (tests/test_workflows.py, ALLOWED_NEWEST). It holds no
+# secret, can only read the repository, and never runs on a pull request.
+on:
+  schedule:
+    - cron: "23 5 * * 1"  # Mondays 05:23 UTC
+  workflow_dispatch:      # gh workflow run newest-deps.yml
+
+permissions:
+  contents: read
+
+jobs:
+  newest:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: pip 26.3 or later, for --uploaded-prior-to (hash-verified)
+        run: python -m pip install --require-hashes --no-deps -r .github/newest-deps/pip.txt
+      - name: Install Trioditis with the newest dependencies at least a week old
+        run: python -m pip install --uploaded-prior-to P7D . pytest hypothesis
+      - name: What was installed
+        run: python -m pip list
+      - name: Tests
+        run: python -m pytest -q
+      - name: Smoke test (real server, real sockets)
+        run: python scripts/smoke.py

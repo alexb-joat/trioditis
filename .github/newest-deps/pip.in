@@ -1,0 +1,3 @@
+# pip for the weekly newest-deps job (.github/workflows/newest-deps.yml): 26.3 or later has --uploaded-prior-to.
+#   uv pip compile .github/newest-deps/pip.in --universal --generate-hashes --python-version 3.11 --exclude-newer <a week ago> -o .github/newest-deps/pip.txt
+pip>=26.3

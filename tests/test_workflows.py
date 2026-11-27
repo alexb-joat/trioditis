@@ -20,6 +20,11 @@ ALLOWED_JOB_WRITES = {
     ("release.yml", "github-release"): {"contents"},     # attaches the files to the GitHub release
 }
 
+# The one job that installs without hashes, on purpose: the weekly run of what `pipx install` gets. Only with the
+# week's hold (--uploaded-prior-to P7D), and test_the_unpinned_job_* holds it to schedule, no secrets, read-only.
+ALLOWED_NEWEST = {("newest-deps.yml", "newest")}
+NEWEST_HOLD = "--uploaded-prior-to P7D"
+
 PINNED = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(/[A-Za-z0-9_./-]+)?@[0-9a-f]{40}")
 EXPRESSION = re.compile(r"\$\{\{(.*?)\}\}", re.S)
 UNTRUSTED = re.compile(r"(?<![\w.])(github\.event\.|inputs\.)")
@@ -89,7 +94,7 @@ def injectable_runs(wf: dict) -> list[str]:
     return out
 
 
-def unpinned_tools(wf: dict) -> list[str]:
+def unpinned_tools(wf: dict, name: str = "") -> list[str]:
     """A `run:` line that fetches a tool at whatever version is newest that day (`pipx run`, `uvx`, `npx`), or a
     `pip install` that neither checks hashes nor is a local file installed with `--no-deps`. One hijacked release
     of such a tool would run in CI with the checkout in reach."""
@@ -100,7 +105,8 @@ def unpinned_tools(wf: dict) -> list[str]:
                 out.append(f"{job_id}: `{found.group(0)}` fetches the newest release: {line.strip()}")
             for args in PIP_INSTALL.findall(line):
                 local_only = "--no-deps" in args and all(a.startswith("-") or "/" in a for a in args.split())
-                if "--require-hashes" not in args and not local_only:
+                newest = (name, job_id) in ALLOWED_NEWEST and NEWEST_HOLD in args
+                if "--require-hashes" not in args and not local_only and not newest:
                     out.append(f"{job_id}: pip install without --require-hashes: {line.strip()}")
     return out
 
@@ -147,7 +153,16 @@ def test_no_run_line_holds_an_event_or_input_expression(name):
 
 @pytest.mark.parametrize("name", DOCS)
 def test_every_tool_a_run_line_installs_is_hash_pinned(name):
-    assert unpinned_tools(DOCS[name]) == []
+    assert unpinned_tools(DOCS[name], name) == []
+
+
+def test_the_unpinned_job_runs_only_on_schedule_or_by_hand_with_no_secret_and_read_only():
+    for name, job_id in ALLOWED_NEWEST:
+        wf = DOCS[name]
+        assert set(wf.get("on", wf.get(True))) <= {"schedule", "workflow_dispatch"}, name
+        assert wf["permissions"] == {"contents": "read"} and "permissions" not in jobs(wf)[job_id], name
+        assert "secrets." not in (WORKFLOWS / name).read_text(encoding="utf-8"), name
+        assert any(NEWEST_HOLD in str(s.get("run", "")) for _, s in steps(wf)), name
 
 
 @pytest.mark.parametrize("name", DOCS)
@@ -258,6 +273,16 @@ def test_a_tool_fetched_at_its_newest_release_fails_but_a_hash_checked_or_local_
         wf = edited("ci.yml")
         first_step_with(wf, "run")["run"] = run
         assert unpinned_tools(wf) == [], run
+    # The weekly newest-deps job may install unpinned with the week's hold; nowhere else, and not without it.
+    held = f"python -m pip install {NEWEST_HOLD} . pytest"
+    wf = edited("ci.yml")
+    first_step_with(wf, "run")["run"] = held
+    assert unpinned_tools(wf, "ci.yml"), "the exception is for the newest-deps job only"
+    wf = edited("newest-deps.yml")
+    assert unpinned_tools(wf, "newest-deps.yml") == []
+    for step in (s for _, s in steps(wf) if NEWEST_HOLD in str(s.get("run", ""))):
+        step["run"] = "python -m pip install . pytest"
+    assert unpinned_tools(wf, "newest-deps.yml"), "without the hold, the newest-deps job fails too"
 
 
 def test_an_image_without_a_digest_fails_in_services_and_container():
